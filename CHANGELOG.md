@@ -2,7 +2,7 @@
 **Added:** Android debug APK build workflow for private GitHub Actions artifacts; fixed-host HTTPS Android shell for `edgepilot.belenoscreations.biz`; custom launcher icon; `APK_TESTING.md` with Android-only installation instructions.
 **Changed:** Android wrapper targets the production HTTPS origin only, supports existing v0.19.11 session cookies and theme localStorage, and blocks off-origin navigation, mixed content, third-party cookies, local files, and certificate errors. Android app version synchronized with 0.19.12; backend remains v0.19.11.
 **Fixed:** Removed arbitrary-server entry flow, which could send credentials to an unintended origin; enabled DOM storage for saved theme preference.
-**Tests:** Source inspection and XML/Java static checks completed. Android SDK action upgraded to v4 after legacy SDK tools package failure. Debug APK compilation and Android device installation require GitHub Actions and manual device validation; record CI outcome after execution.
+**Tests:** 98 Python unit/HTTP tests passed in GitHub Actions; the Android Gradle debug APK build passed on GitHub Actions after upgrading SDK setup to v4. ZIP/APK contents and Android signing-block presence were checked. Android installation and login still require on-device validation.
 **Known limitations:** APK is a debug-signed WebView prototype, not an independently audited native app or production-signed release. Debug signature may change across runs. No background trading or notifications. No Public credentials should be configured. The live Render backend remains v0.19.11.
 
 ## v0.19.11 — 2026-11-08
