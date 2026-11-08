@@ -138,3 +138,14 @@ To test: `cd backend && python -m unittest discover -s tests -v`. The OpenAI net
 
 ## v0.19.9 — Walk-forward research validation
 Under **Markets → Walk-Forward Validation**, select Public daily history or pasted CSV. The expanding-window backtest selects one momentum lookback using past data, evaluates it on later non-overlapping windows, and reports out-of-sample results, win rate, compounded modeled returns, and maximum drawdown. It flags small sample sizes and inconsistent returns rather than implying safety or profitability. Endpoint: `POST /api/predictive/walk-forward`. This module is read-only and cannot enable trading.
+
+
+## v0.19.11 secure session migration (not yet deployed)
+
+- Existing `EDGE_APP_TOKEN` is used once to sign in; it is not an API authorization header after this release.
+- API data is available only after an 8-hour host-only secure session cookie is established. Mutations require a same-origin request and CSRF token. Sessions persist across reloads, but a refresh rotates the anti-CSRF token. Sign out revokes the session immediately.
+- Opening a page at one hostname and entering another backend hostname is blocked intentionally. Use the Render hostname until the custom domain has an active HTTPS certificate; then sign in directly at the custom HTTPS domain.
+- Render secrets and database contents must never be committed. Reuse the existing `EDGE_APP_TOKEN` environment variable; no new secret is required for this migration.
+- The login screen and API header contract change. v0.19.10 clients cannot authenticate against the new backend; refresh or reinstall the new PWA after deployment.
+- The web UI remains accessible to anonymous visitors, but all financial endpoints remain authenticated. Additional private access controls and MFA are not yet deployed; do not connect Public brokerage credentials.
+- Production builds still disallow all broker order submissions. To apply this source to Render, merge the reviewed PR to `main` only after CI and release checks succeed. Render currently has branch auto-deploy enabled; merging may deploy immediately.

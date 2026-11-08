@@ -9,9 +9,10 @@ from urllib.parse import quote
 import requests
 from flask import Flask, jsonify, request, send_from_directory
 from dotenv import load_dotenv
-from engine import ledger, reconcile, order_audit, connection_check
+from engine import ledger, reconcile, order_audit, connection_check, session_auth
 ROOT=Path(__file__).parent; load_dotenv(ROOT/'.env'); DB=Path(os.getenv('EDGE_DB_PATH',str(ROOT/'edgepilot.db'))); DB.parent.mkdir(parents=True,exist_ok=True)
 app=Flask(__name__,static_folder='static',static_url_path='')
+app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # CSV/history research limit
 BASE='https://api.public.com'; lock=threading.RLock(); cached_token=None; expires=0
 FEE=Decimal('.02')
 DEFAULT={'spend_cap':'100.00','protected_pct':'50','per_trade_cap':'5.00','daily_loss_cap':'5.00','autonomous':'0','live_armed':'0','account_id':'','interval_seconds':'60','holdings_scope':'allocated_only','balance_source':'public','independent_balance':'100.00','profile_label':'My EdgePilot','micro_enabled':'0','micro_stock_min_edge_pct':'0.50','micro_prediction_min_edge_pct':'3.00','micro_min_net_dollars':'0.05','micro_max_trades_day':'5','ai_enabled':'0','ai_monthly_budget_usd':'2.00','chatgpt_connector_enabled':'0'}
@@ -35,6 +36,8 @@ init()
 ledger.setup(str(DB))
 reconcile.setup(str(DB))
 order_audit.setup(str(DB))
+sessions=session_auth.SessionStore(str(DB))
+sessions.setup()
 def settings():
     with database() as c: return {r['k']:r['v'] for r in c.execute('SELECT * FROM settings')}
 def put(k,v):
@@ -42,18 +45,91 @@ def put(k,v):
 def log(msg):
     with database() as c: c.execute('INSERT INTO activity(ts,message) VALUES (?,?)',(datetime.now(timezone.utc).isoformat(),str(msg)[:500]))
 def fail(msg,code=400): return jsonify({'error':str(msg)}),code
+def valid_app_token(provided):
+    expected=os.getenv('EDGE_APP_TOKEN','')
+    return len(expected)>=32 and isinstance(provided,str) and hmac.compare_digest(expected,provided)
+
+
+def same_origin_request():
+    # Explicit same-origin browser API; do not permit cross-origin token exchange
+    # or state changes. This service is designed for HTTPS, never HTTP hosting.
+    origin=request.headers.get('Origin','')
+    return (origin == 'https://' + request.host and
+            request.headers.get('Sec-Fetch-Site','same-origin') not in ('cross-site','same-site'))
+
+
 @app.before_request
 def authenticate():
-    if request.path in ('/','/manifest.webmanifest','/service-worker.js','/favicon.ico') or request.path.startswith('/assets/'): return
-    if request.path.startswith('/api/'):
-        secret=os.getenv('EDGE_APP_TOKEN','')
-        if len(secret)<32: return fail('Configure EDGE_APP_TOKEN (minimum 32 characters) in backend .env',503)
-        supplied=request.headers.get('X-Edge-Token','')
-        if not hmac.compare_digest(secret,supplied): return fail('Unauthorized',401)
+    if not request.path.startswith('/api/'):
+        return
+    # All state-changing endpoints, including login, require same-origin browser calls.
+    if request.method in ('POST','PUT','PATCH','DELETE') and not same_origin_request():
+        return fail('Same-origin request required',403)
+    if request.path=='/api/login':
+        return
+    session=request.cookies.get(session_auth.COOKIE_NAME,'')
+    if not sessions.validate(session):
+        return fail('Not authenticated',401)
+    if request.method in ('POST','PUT','PATCH','DELETE'):
+        if not sessions.validate(session,csrf=request.headers.get('X-Edge-CSRF','')):
+            return fail('Invalid request verification token',403)
+
+
 @app.after_request
 def headers(r):
-    r.headers['Cache-Control']='no-store';r.headers['X-Content-Type-Options']='nosniff';r.headers['Referrer-Policy']='no-referrer';r.headers['X-Frame-Options']='DENY'
+    r.headers['Cache-Control']='no-store'
+    r.headers['X-Content-Type-Options']='nosniff'
+    r.headers['Referrer-Policy']='no-referrer'
+    r.headers['X-Frame-Options']='DENY'
+    r.headers['Permissions-Policy']='camera=(), microphone=(), geolocation=()'
+    r.headers['Content-Security-Policy']=(
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+        "connect-src 'self'; object-src 'none'; base-uri 'none'; "
+        "frame-ancestors 'none'; form-action 'self'")
+    if request.is_secure or request.headers.get('X-Forwarded-Proto')=='https':
+        r.headers['Strict-Transport-Security']='max-age=31536000'
     return r
+
+
+@app.post('/api/login')
+def login():
+    # EDGE_APP_TOKEN is a login secret only; never reused as an API header.
+    secret=os.getenv('EDGE_APP_TOKEN','')
+    if len(secret)<32:
+        return fail('EdgePilot login not configured on server',503)
+    source=request.remote_addr or 'unknown'
+    if sessions.blocked(source):
+        resp=fail('Too many attempts. Try again later.',429)
+        return resp
+    payload=request.get_json(silent=True) or {}
+    candidate=payload.get('accessToken') if isinstance(payload,dict) else None
+    if not isinstance(candidate,str) or len(candidate)>512 or not valid_app_token(candidate):
+        sessions.failed_login(source)
+        return fail('Invalid login',401)
+    sessions.successful_login(source)
+    session, csrf, expires=sessions.issue()
+    result=jsonify({'ok':True,'csrf':csrf,'expiresAt':datetime.fromtimestamp(expires,timezone.utc).isoformat()})
+    result.set_cookie(session_auth.COOKIE_NAME,session,max_age=session_auth.SESSION_SECONDS,
+                      secure=True,httponly=True,samesite='Strict',path='/')
+    return result
+
+
+@app.get('/api/session')
+def get_session():
+    session=request.cookies.get(session_auth.COOKIE_NAME,'')
+    csrf=sessions.renew_csrf(session)
+    if csrf is None:
+        return fail('Not authenticated',401)
+    return {'ok':True,'csrf':csrf}
+
+
+@app.post('/api/logout')
+def logout():
+    sessions.revoke(request.cookies.get(session_auth.COOKIE_NAME,''))
+    response=jsonify({'ok':True})
+    response.delete_cookie(session_auth.COOKIE_NAME,path='/',secure=True,httponly=True,samesite='Strict')
+    return response
 @app.get('/')
 def index(): return send_from_directory(ROOT/'static','index.html')
 @app.get('/icon-192.png')
@@ -69,7 +145,7 @@ def healthz():
     return {'ok':True}
 
 @app.get('/api/health')
-def health(): return {'ok':True,'version':'0.19.10-read-only-connection','time':datetime.now(timezone.utc).isoformat()}
+def health(): return {'ok':True,'version':'0.19.11-secure-sessions','time':datetime.now(timezone.utc).isoformat()}
 def token():
     global cached_token,expires
     if cached_token and time.time()<expires-120:return cached_token

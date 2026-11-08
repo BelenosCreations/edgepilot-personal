@@ -33,3 +33,13 @@
 
 ## Cautions
 The Public API secret itself can carry trading permissions; the *app* is read-only at this stage. Current authentication uses a single shared token and requires a trusted HTTPS/private access gateway for serious financial usage. Render's persistent disk supports one service instance; scale-out and automatic trading infrastructure are future tasks. Do not use this release for real-money execution. The source has not been authenticated with your brokerage account during development.
+
+
+## v0.19.11 migration checklist (after approval and successful CI)
+
+1. Keep the existing Render `EDGE_APP_TOKEN` configured. Do not change or share it during code rollout.
+2. Merge the v0.19.11 pull request only after review. Render auto-deploy of `main` may start immediately.
+3. Open the HTTPS onrender.com URL (or your verified custom domain once certificate issuance is finished), refresh the page, and sign in using your existing private app access token.
+4. After sign-in, the app token field clears. Reload: a valid session should reconnect without requesting the token. Settings > Sign out revokes the session.
+5. Validate invalid login, cross-origin mutation rejection, CSRF rejection, 8-hour session expiry, and a real `/api/connection/verify` report that reports `not_configured` while Public credentials are absent.
+6. Do **not** place the Public API secret in Render yet; investigate remaining app security gaps and custom-domain SSL first.

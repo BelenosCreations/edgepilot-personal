@@ -25,3 +25,12 @@ Public historical requests originate server-side, using the existing secure back
 `GET /api/connection/verify` requires the single-user EdgePilot access token. It performs only Public `GET` calls to account listing and (when selected) portfolio; it does not return API secrets, bearer tokens, complete account identifiers, balances or holdings. `/healthz` deliberately exposes only a minimal liveness signal. The PWA does not persist the app access token to browser storage, but it remains in memory while connected.
 
 **Do not treat the Public secret as scope-restricted/read-only:** It may have broader account permissions, even though EdgePilot intentionally provides a read-only diagnostic. Use a trusted private host and, before real trading is developed, add stronger app authentication and credential management. Never enable auto-trading on this release. Host access may incur charges even while only checking balances.
+
+
+## v0.19.11 secure sessions
+
+**Migration and scope:** `EDGE_APP_TOKEN` is now the one-time browser login secret; keep it in Render Environment and your password manager. Do not send it via `X-Edge-Token` after upgrading. API endpoints check an eight-hour randomly generated, host-only `__Host-` secure/HttpOnly/SameSite=Strict cookie stored as a SHA-256 digest on the existing persistent disk. The login secret is cleared from the UI on success and is never written to the browser storage. Logout revokes the cookie server-side.
+
+All API state changes require HTTPS same-origin `Origin` matching and an `X-Edge-CSRF` token held in JavaScript memory; a page reload rotates the CSRF token via authenticated GET. User-provided backend host overrides are blocked. Login failures are rate limited per remote network source for ten minutes. Basic HSTS, no-store, CSP, frame blocking and permissions policy headers are applied.
+
+**Important remaining risks:** The page itself is internet-visible and the single bearer login token is not multi-factor authentication. Rate limiting does not eliminate online brute-force or denial-of-service risks. SQLite session state and AI histories reside on a persistent disk without application-layer encryption. The existing UI uses inline event handlers, so CSP allows `unsafe-inline`; this is not a full XSS defense or independent security audit. Because of these limitations, use an additional private access gateway and improve login before connecting a Public API secret. Public may grant trading permissions regardless of EdgePilot's own read-only behavior.
