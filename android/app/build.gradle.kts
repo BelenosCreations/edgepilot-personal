@@ -7,8 +7,8 @@ android {
         applicationId = "com.edgepilot.mobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1912
-        versionName = "0.19.12"
+        versionCode = 1915
+        versionName = "0.19.15"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

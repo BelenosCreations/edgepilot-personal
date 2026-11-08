@@ -3,7 +3,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <application
         android:label="EdgePilot"
-        android:icon="@drawable/edgepilot_icon"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
         android:theme="@android:style/Theme.Material.NoActionBar"
         android:usesCleartextTraffic="false"
         android:allowBackup="false"
