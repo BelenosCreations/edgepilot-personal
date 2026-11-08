@@ -136,6 +136,9 @@ def logout():
 def index(): return send_from_directory(ROOT/'static','index.html')
 @app.get('/icon-192.png')
 @app.get('/icon-512.png')
+@app.get('/icon-maskable-512.png')
+@app.get('/favicon.png')
+@app.get('/apple-touch-icon.png')
 def icon_file(): return send_from_directory(ROOT/'static',request.path.lstrip('/'))
 @app.get('/manifest.webmanifest')
 def manifest(): return send_from_directory(ROOT/'static','manifest.webmanifest')
@@ -147,7 +150,7 @@ def healthz():
     return {'ok':True}
 
 @app.get('/api/health')
-def health(): return {'ok':True,'version':'0.19.14-fifteen-minute-research','time':datetime.now(timezone.utc).isoformat()}
+def health(): return {'ok':True,'version':'0.19.15-brand-assets','time':datetime.now(timezone.utc).isoformat()}
 def token():
     global cached_token,expires
     with lock:

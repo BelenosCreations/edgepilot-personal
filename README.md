@@ -161,3 +161,7 @@ Once `EDGE_CREDENTIAL_KEY` is configured as a private Render environment variabl
 ## v0.19.14 — 15-Minute Markets read-only discovery
 
 After securing a Public connection, open Markets → 15-Minute Markets and tap Refresh. EdgePilot queries Public's documented `FIFTEEN_MINUTES` event-summary filter (max two pages) and verifies up to eight open event-detail snapshots per click. Results include targets, YES/NO bid/ask, spread, and a captured-at close countdown; 0.001 price precision is preserved. It refuses expired, halted, mismatched and incomplete events rather than inventing data. The illustrative $0.02 fee is not actual broker preflight; no directional edge or strategy qualification is calculated. No trades, no scheduled refresh, and no paper settlement/ledger in this release. The existing APK uses the hosted UI and needs no reinstall.
+
+
+## v0.19.15 — Official artwork
+The approved full EdgePilot logo is shown intact in the hosted website header. The approved symbol-only icon is used for PWA, browser tab, and APK launcher. The existing APK shell receives web artwork automatically, but new Android launcher resources require a freshly built APK; debug signing may require uninstalling the previous debug APK before installing the updated one. Never remove backend data to change an icon.
