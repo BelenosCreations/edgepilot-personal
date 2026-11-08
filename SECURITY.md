@@ -34,3 +34,7 @@ Public historical requests originate server-side, using the existing secure back
 All API state changes require HTTPS same-origin `Origin` matching and an `X-Edge-CSRF` token held in JavaScript memory; a page reload rotates the CSRF token via authenticated GET. User-provided backend host overrides are blocked. Login failures are rate limited per remote network source for ten minutes. Basic HSTS, no-store, CSP, frame blocking and permissions policy headers are applied.
 
 **Important remaining risks:** The page itself is internet-visible and the single bearer login token is not multi-factor authentication. Rate limiting does not eliminate online brute-force or denial-of-service risks. SQLite session state and AI histories reside on a persistent disk without application-layer encryption. The existing UI uses inline event handlers, so CSP allows `unsafe-inline`; this is not a full XSS defense or independent security audit. Because of these limitations, use an additional private access gateway and improve login before connecting a Public API secret. Public may grant trading permissions regardless of EdgePilot's own read-only behavior.
+
+
+## v0.19.12 Android test wrapper
+Android WebView loads only `https://edgepilot.belenoscreations.biz/`; SSL bypasses, untrusted origins, mixed content, third-party cookies and local file access are blocked. First-party secure session cookies remain server-side authenticated. The debug APK is non-production and not independently audited; no Public API secret belongs in the application package.
