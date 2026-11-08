@@ -38,3 +38,7 @@ All API state changes require HTTPS same-origin `Origin` matching and an `X-Edge
 
 ## v0.19.12 Android test wrapper
 Android WebView loads only `https://edgepilot.belenoscreations.biz/`; SSL bypasses, untrusted origins, mixed content, third-party cookies and local file access are blocked. First-party secure session cookies remain server-side authenticated. The debug APK is non-production and not independently audited; no Public API secret belongs in the application package.
+
+
+## v0.19.13 — User-managed Public API credentials
+Under Settings, the Public API secret is sent once over the HTTPS same-origin authenticated, CSRF-protected API, encrypted by Fernet, and stored as ciphertext in the persistent SQLite database. The *separate* `EDGE_CREDENTIAL_KEY` must be a stable Fernet key configured privately in Render; never put it in Git, the APK, a user message, or the database. It must be backed up securely because losing or rotating it without re-encryption makes saved credentials inaccessible. Never return credential bytes, ciphertext, or key fragments to clients. The key can be replaced or disconnected in-app; disconnect tombstones any legacy environment secret. Browser form values are cleared after save. Server logs must not include request bodies. This is not a replacement for an external authenticated gateway/MFA, and Public secrets may still have trade privileges at the broker.

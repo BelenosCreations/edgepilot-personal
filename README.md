@@ -153,3 +153,7 @@ Under **Markets → Walk-Forward Validation**, select Public daily history or pa
 
 ## v0.19.12 Android test APK (review branch)
 Android test build instructions are in `APK_TESTING.md`. A GitHub Actions workflow produces a private debug APK as a downloadable workflow artifact; the code is not merged to production automatically. The backend remains v0.19.11, and orders remain disabled.
+
+
+## v0.19.13 — Public API connection via Settings (development)
+Once `EDGE_CREDENTIAL_KEY` is configured as a private Render environment variable (Fernet URL-safe 32-byte key), open **Settings → Public Brokerage Connection**. Paste the personal Public API secret into the masked entry and tap **Save API key**. It is encrypted server-side and never returned. Tap **Test connection** to check actual read access. The source still disables real orders. **Disconnect** invalidates current broker auth and clears the account association. Do not configure the encryption key in GitHub or the mobile app. The live server is still v0.19.11 until this update is reviewed, tested, and explicitly deployed.

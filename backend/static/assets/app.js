@@ -1,7 +1,7 @@
 let base='',csrf='',authenticated=false,snap=null; const $=id=>document.getElementById(id);
 const money=x=>Number.isFinite(Number(x))?'$'+Number(x).toFixed(2):'—';
 function esc(v){return String(v??'').replace(/[&<>"']/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]))}
-function tab(id){if(id==='markets'&&base&&authenticated)loadScannerConfig();document.querySelectorAll('.section').forEach(n=>n.classList.toggle('active',n.id===id));document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active-nav',(b.getAttribute('onclick')||'').includes("'"+id+"'")));}
+function tab(id){if(id!=='settings'&&$('publicApiSecret'))$('publicApiSecret').value='';if(id==='settings'&&authenticated)loadPublicKeyStatus();if(id==='markets'&&base&&authenticated)loadScannerConfig();document.querySelectorAll('.section').forEach(n=>n.classList.toggle('active',n.id===id));document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active-nav',(b.getAttribute('onclick')||'').includes("'"+id+"'")));}
 async function api(path,method='GET',data){
  if(!authenticated||!base)throw Error('Sign in to EdgePilot first');
  let r=await fetch(base+'/api/'+path,{method,credentials:'same-origin',cache:'no-store',
@@ -17,7 +17,7 @@ async function api(path,method='GET',data){
  return j;
 }
 function alertError(e){alert(e.message||String(e));}
-function clearLogin(){authenticated=false;csrf='';snap=null;$('auth').value='';$('setup').classList.remove('hidden');$('mode').textContent='DISCONNECTED';}
+function clearLogin(){authenticated=false;csrf='';snap=null;$('auth').value='';if($('publicApiSecret'))$('publicApiSecret').value='';$('setup').classList.remove('hidden');$('mode').textContent='DISCONNECTED';}
 function signedIn(csrfToken){base=location.origin;csrf=csrfToken;authenticated=true;$('auth').value='';$('setup').classList.add('hidden');$('mode').textContent='SECURE SESSION';}
 async function connect(){
  const requested=$('url').value.replace(/\/$/,'');
@@ -48,8 +48,46 @@ $('livestate').textContent=s.live_armed==='1'?'ARMED':'DISARMED';$('livestate').
 $('balanceSource').value=s.balance_source||'public';$('independentBalance').value=s.independent_balance||'10.00';balanceSourceChanged();$('holdingsScope').value=s.holdings_scope||'allocated_only';$('cap').value=s.spend_cap;$('pct').value=s.protected_pct;$('single').value=s.per_trade_cap;$('daily').value=s.daily_loss_cap;$('autonomy').checked=s.autonomous==='1';$('microEnabled').checked=s.micro_enabled==='1';$('stockEdge').value=s.micro_stock_min_edge_pct||'0.50';$('predEdge').value=s.micro_prediction_min_edge_pct||'3.00';$('microNet').value=s.micro_min_net_dollars||'0.05';$('microTrades').value=s.micro_max_trades_day||'5';
 $('activity').innerHTML=(snap.activity||[]).map(x=>`<div class="log">${esc(x.ts.slice(0,16))} · ${esc(x.message)}</div>`).join('')||'No activity yet';$('orders').innerHTML=(snap.orders||[]).map(x=>`<div class="log">${esc(x.side)} ${esc(x.symbol)} ×${x.qty} @ ${esc(x.limit_price)}<br><span class="muted">${esc(x.state)} · ${esc(x.created.slice(0,16))}</span></div>`).join('')||'No orders yet';
 await loadPerformance();$('watchList').innerHTML=(snap.watch||[]).map(w=>`<div class="rule">${esc(w.symbol)} · buy ≤ ${esc(w.buy_below)} / sell ≥ ${esc(w.sell_above)} <button onclick="toggleRule('${esc(w.id)}')">${w.enabled?'Disable':'Enable'}</button></div>`).join('');
-if(s.account_id){$('account').innerHTML=`<option value="${esc(s.account_id)}">${esc(s.account_id)}</option>`}
+if(s.account_id){$('account').innerHTML=`<option value="${esc(s.account_id)}">${esc(s.account_id)}</option>`}else{$('account').innerHTML='<option value="">Choose account</option>'}
 }catch(e){$('brokerError').textContent=e.message;}}
+
+// Public API secret is entered transiently, never included in dashboard JSON or browser storage.
+async function loadPublicKeyStatus(){
+ const el=$('publicCredentialStatus');if(!el || !authenticated)return;
+ try{
+   const r=await api('broker/credentials/status');
+   el.textContent=(r.configured?'Public key configured ('+r.source+').':'Public key not configured.')+
+     (r.encryptionReady?' Encryption enabled.':' Server encryption key not ready.')+
+     (r.usable?' Ready for a read-only connection test.':'');
+ }catch(e){el.textContent='Unable to check Public connection: '+e.message;}
+}
+async function savePublicKey(){
+ const field=$('publicApiSecret'), el=$('publicCredentialStatus');
+ const secret=field.value.trim();
+ if(secret.length<20){el.textContent='Enter the Public API secret (not your app sign-in token).';return;}
+ if(!confirm('Save this Public API credential to the encrypted EdgePilot server? It may authorize brokerage trading outside this app.'))return;
+ try{
+  await api('broker/credentials','POST',{secret});
+  el.textContent='Key saved. Next tap Test connection. Real trading remains disabled.';
+  await loadPublicKeyStatus();
+  await refresh();
+ }catch(e){el.textContent='Could not save key: '+e.message;}
+ finally{field.value='';}
+}
+async function testPublicKey(){
+ const el=$('publicCredentialStatus');el.textContent='Testing Public access (read-only)…';
+ try{
+  const r=await api('connection/verify');
+  el.textContent='Public connection test: '+JSON.stringify(r,null,2);
+ }catch(e){el.textContent='Public connection test failed: '+e.message;}
+}
+async function removePublicKey(){
+ if(!confirm('Disconnect Public and clear the saved API secret? Your selected brokerage account will be reset.'))return;
+ const el=$('publicCredentialStatus');
+ try{await api('broker/credentials','DELETE');$('publicApiSecret').value='';await loadPublicKeyStatus();await refresh();}
+ catch(e){el.textContent='Could not disconnect: '+e.message;}
+}
+
 async function loadAccounts(){try{let d=await api('accounts');$('account').innerHTML='<option value="">Choose account</option>'+d.accounts.map(x=>`<option value="${esc(x.accountId)}">${esc(x.accountType)} · ${esc(x.accountId)}</option>`).join('');}catch(e){alertError(e)}}
 async function saveSettings(){try{let body={spend_cap:$('cap').value,protected_pct:$('pct').value,per_trade_cap:$('single').value,daily_loss_cap:$('daily').value};if($('account').value&&$('account').value!==(snap?.settings.account_id||''))body.account_id=$('account').value;await api('settings','POST',body);$('saveResult').textContent='Saved. Live trading disarmed if allocation/account changed.';await refresh();}catch(e){alertError(e)}}
 async function changeAutonomy(){let on=$('autonomy').checked;try{if(on&&!confirm('Store fully autonomous preference? Automated execution is NOT active in this prototype.')){$('autonomy').checked=false;return;}await api('settings','POST',{autonomous:on?'1':'0',...(on?{confirmation:'ENABLE AUTONOMY'}:{})});await refresh();}catch(e){$('autonomy').checked=!on;alertError(e)}}

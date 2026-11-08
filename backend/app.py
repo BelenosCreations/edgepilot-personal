@@ -9,7 +9,7 @@ from urllib.parse import quote
 import requests
 from flask import Flask, jsonify, request, send_from_directory
 from dotenv import load_dotenv
-from engine import ledger, reconcile, order_audit, connection_check, session_auth
+from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials
 ROOT=Path(__file__).parent; load_dotenv(ROOT/'.env'); DB=Path(os.getenv('EDGE_DB_PATH',str(ROOT/'edgepilot.db'))); DB.parent.mkdir(parents=True,exist_ok=True)
 app=Flask(__name__,static_folder='static',static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # CSV/history research limit
@@ -38,6 +38,8 @@ reconcile.setup(str(DB))
 order_audit.setup(str(DB))
 sessions=session_auth.SessionStore(str(DB))
 sessions.setup()
+credential_vault=broker_credentials.BrokerCredentialStore(str(DB))
+credential_vault.setup()
 def settings():
     with database() as c: return {r['k']:r['v'] for r in c.execute('SELECT * FROM settings')}
 def put(k,v):
@@ -145,14 +147,14 @@ def healthz():
     return {'ok':True}
 
 @app.get('/api/health')
-def health(): return {'ok':True,'version':'0.19.11-secure-sessions','time':datetime.now(timezone.utc).isoformat()}
+def health(): return {'ok':True,'version':'0.19.13-broker-settings','time':datetime.now(timezone.utc).isoformat()}
 def token():
     global cached_token,expires
-    if cached_token and time.time()<expires-120:return cached_token
-    api_secret=os.getenv('PUBLIC_API_SECRET','')
-    if not api_secret: raise ValueError('Missing Public API secret on backend')
-    r=requests.post(BASE+'/userapiauthservice/personal/access-tokens',json={'secret':api_secret,'validityInMinutes':60},timeout=20);r.raise_for_status()
-    cached_token=r.json()['accessToken'];expires=time.time()+3600;return cached_token
+    with lock:
+        if cached_token and time.time()<expires-120:return cached_token
+        api_secret=credential_vault.secret_for_broker()
+        r=requests.post(BASE+'/userapiauthservice/personal/access-tokens',json={'secret':api_secret,'validityInMinutes':60},timeout=20);r.raise_for_status()
+        cached_token=r.json()['accessToken'];expires=time.time()+3600;return cached_token
 def pub(method,path,body=None):
     assert path.startswith('/userapigateway/');r=requests.request(method,BASE+path,json=body,headers={'Authorization':'Bearer '+token(),'Content-Type':'application/json'},timeout=20)
     if not r.ok:raise ValueError(f'Public HTTP {r.status_code}. Check your account permissions and API configuration.')
@@ -195,12 +197,48 @@ def broker_summary():
             'holdings':[{'symbol':str((v.get('instrument') or {}).get('symbol') or v.get('symbol') or 'Unknown')[:70],
                          'value':usd(v.get('currentValue') or '0'),
                          'quantity':str(v.get('quantity') or '0')} for v in p.get('positions',[])][:100]}
+@app.get('/api/broker/credentials/status')
+def broker_credential_status():
+    """Credential metadata only. Never serialize a secret or ciphertext."""
+    return jsonify(credential_vault.status())
+
+
+@app.post('/api/broker/credentials')
+def save_broker_credential():
+    body=request.get_json(silent=True)
+    if not isinstance(body,dict) or set(body) != {'secret'}:
+        return fail('Provide only the Public API secret',400)
+    try:
+        with lock:
+            credential_vault.save(body['secret'])
+            global cached_token, expires
+            cached_token=None; expires=0
+            # Changing identities invalidates existing account association and disarms trading.
+            put('account_id','')
+            put('live_armed','0')
+            log('Public connection credential updated in encrypted settings vault')
+        return {'ok':True,'configured':True,'message':'Saved securely. Use Test connection to verify access.'}
+    except broker_credentials.CredentialError as exc:
+        return fail(str(exc),503 if 'encryption' in str(exc).lower() else 400)
+
+
+@app.delete('/api/broker/credentials')
+def disconnect_broker_credential():
+    with lock:
+        credential_vault.clear()
+        global cached_token, expires
+        cached_token=None; expires=0
+        put('account_id','')
+        put('live_armed','0')
+        log('Public connection credential disconnected')
+    return {'ok':True,'configured':False,'message':'Public connection disconnected'}
+
+
 @app.get('/api/connection/verify')
 def verify_connection():
     """Authenticated read-only Public API connection check. Never leaks credentials."""
-    secret=os.getenv('PUBLIC_API_SECRET','').strip()
     check=connection_check.verify(
-        configured=bool(secret and secret!='PLACE_PUBLIC_SECRET_HERE'),
+        configured=credential_vault.status()['usable'],
         list_accounts=lambda:pub('GET','/userapigateway/trading/account'),
         selected_account=settings().get('account_id',''),
         load_portfolio=portfolio,
