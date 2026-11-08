@@ -1,3 +1,11 @@
+# v0.19.13: Public key entered from Settings (development release)
+
+The recommended process for v0.19.13 is to **configure one stable, separate `EDGE_CREDENTIAL_KEY` in Render's private environment** (Fernet URL-safe 32-byte key), then sign into EdgePilot and use **Settings → Public Brokerage Connection → Save API key → Test connection**. The Public API secret is encrypted in the server's persistent database and not stored in the APK or regular app settings. **Do not enter your Public key into the EdgePilot sign-in token field.**
+
+The older steps below describe v0.19.10, when `PUBLIC_API_SECRET` was supplied directly as a Render environment variable. That remains a legacy fallback only if no Settings key has ever been saved; it is no longer the default setup path. The vault encryption key is sensitive: never commit it to Git or paste it in chat. Back it up securely before storing a real brokerage credential. Do not add real Public credentials before security review, since the personal Public API secret may permit trading even when the EdgePilot beta disables orders.
+
+---
+
 # EdgePilot: setup from an Android phone (v0.19.10)
 
 ## Before you start
