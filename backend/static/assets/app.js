@@ -107,7 +107,7 @@ async function loadFifteenMinuteMarkets(){
   list.innerHTML=d.events.map(m=>{
    const secs=Math.max(0,Number(m.secondsRemainingAtCapture)||0);
    const left=`${Math.floor(secs/60)}m ${secs%60}s at capture`;
-   const side=(label,c)=>`<div class="stats" style="margin-top:8px"><div><b>${label}</b> · ${esc(c.symbol)}<br><small>Bid $${esc(c.bid)} · Ask $${esc(c.ask)} · Spread $${esc(c.spread)}<br>Illustrative break-even ${esc(c.illustrativeBreakEvenPct)}%</small></div></div>`;
+   const side=(label,c)=>`<div class="rule"><b>${label}</b><br><small>${esc(c.symbol)}<br>Bid ${esc(c.bid)} · Ask ${esc(c.ask)} · Spread ${esc(c.spread)}<br>Illustrative break-even ${esc(c.illustrativeBreakEvenPct)}%</small></div>`;
    return `<div class="market"><div class="row"><b>${esc(m.title||m.series)}</b><span class="pill">${esc(left)}</span></div><p class="muted">${esc(m.eventSymbol)}<br>${esc(m.target)}<br>Closes ${esc(new Date(m.closeTime).toLocaleTimeString())}</p>${side('UP / YES',m.yes)}${side('DOWN / NO',m.no)}${(m.warnings||[]).map(w=>`<p class="warn">${esc(w)}</p>`).join('')}</div>`;
   }).join('');
  }catch(e){status.textContent='15-minute scan unavailable: '+(e.message||String(e));list.textContent='';}
