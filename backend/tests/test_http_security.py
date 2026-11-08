@@ -49,7 +49,7 @@ class HttpSecurityTests(unittest.TestCase):
         self.assertNotIn('valid-test-token',login.get_data(as_text=True))
         health=self.client.get('/api/health',base_url=self.base_url)
         self.assertEqual(health.status_code,200)
-        self.assertIn('0.19.11',health.get_json()['version'])
+        self.assertIn('0.19.13',health.get_json()['version'])
         csrf=login.get_json()['csrf']
         no_csrf=self.client.post('/api/disarm',base_url=self.base_url,headers=self.origin,json={})
         self.assertEqual(no_csrf.status_code,403)
