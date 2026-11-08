@@ -9,7 +9,7 @@ from urllib.parse import quote
 import requests
 from flask import Flask, jsonify, request, send_from_directory
 from dotenv import load_dotenv
-from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials
+from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute
 ROOT=Path(__file__).parent; load_dotenv(ROOT/'.env'); DB=Path(os.getenv('EDGE_DB_PATH',str(ROOT/'edgepilot.db'))); DB.parent.mkdir(parents=True,exist_ok=True)
 app=Flask(__name__,static_folder='static',static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # CSV/history research limit
@@ -147,7 +147,7 @@ def healthz():
     return {'ok':True}
 
 @app.get('/api/health')
-def health(): return {'ok':True,'version':'0.19.13-broker-settings','time':datetime.now(timezone.utc).isoformat()}
+def health(): return {'ok':True,'version':'0.19.14-fifteen-minute-research','time':datetime.now(timezone.utc).isoformat()}
 def token():
     global cached_token,expires
     with lock:
@@ -407,6 +407,24 @@ def sync_acknowledge(alert_id):
         if not reconcile.dismiss(str(DB),selected_account(),alert_id):return fail('Alert not found',404)
         return {'ok':True,'note':'Alert acknowledged only; no order, repurchase, or attribution changes made.'}
     except Exception as exc:return fail(exc)
+
+@app.get('/api/markets/15-minute')
+def fifteen_minute_markets():
+    """One-shot, bounded, authenticated read-only Public 15-minute market scan."""
+    try:
+        limit = int(request.args.get('limit', '8'))
+        if not 1 <= limit <= fifteen_minute.MAX_EVENTS:
+            return fail('Limit must be 1 through 8', 400)
+        if not credential_vault.status()['usable']:
+            return {'connected': False, 'readOnly': True, 'executionEnabled': False,
+                    'events': [], 'note': 'Connect Public in Settings to retrieve active 15-minute windows.'}
+        return fifteen_minute.discover(pub, limit=limit)
+    except (ValueError, TypeError):
+        return fail('Invalid scanner parameters', 400)
+    except Exception:
+        # Do not serialize or log credential-bearing upstream error bodies.
+        app.logger.warning('Public 15-minute market scan unavailable')
+        return fail('15-minute market data unavailable; no trades placed.', 502)
 
 @app.get('/api/markets')
 def markets():
