@@ -128,5 +128,27 @@ class HttpSecurityTests(unittest.TestCase):
             self.assertEqual(self.appmod.settings()['account_id'],'')
 
 
+    def test_protected_balance_accepts_zero_and_ninety_nine_and_rejects_out_of_range(self):
+        sign_in=self.sign_in()
+        self.assertEqual(sign_in.status_code,200)
+        csrf=sign_in.get_json()['csrf']
+        headers={**self.origin,'X-Edge-CSRF':csrf}
+        for pct in ('0','99'):
+            with self.subTest(accepted=pct):
+                result=self.client.post('/api/settings',base_url=self.base_url,
+                    headers=headers,json={'protected_pct':pct})
+                self.assertEqual(result.status_code,200)
+                self.assertEqual(result.get_json()['settings']['protected_pct'],pct)
+                self.assertEqual(self.appmod.settings()['live_armed'],'0')
+        for pct in ('-1','100','101','NaN'):
+            with self.subTest(rejected=pct):
+                result=self.client.post('/api/settings',base_url=self.base_url,
+                    headers=headers,json={'protected_pct':pct})
+                self.assertEqual(result.status_code,400)
+                self.assertIn('0–99%',result.get_json()['error'])
+                self.assertEqual(self.appmod.settings()['protected_pct'],'99')
+
+
+
 if __name__=='__main__':
     unittest.main()
