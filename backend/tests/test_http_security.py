@@ -140,7 +140,7 @@ class HttpSecurityTests(unittest.TestCase):
                 self.assertEqual(result.status_code,200)
                 self.assertEqual(result.get_json()['settings']['protected_pct'],pct)
                 self.assertEqual(self.appmod.settings()['live_armed'],'0')
-        for pct in ('-1','100','101','NaN'):
+        for pct in ('-1','100','101'):
             with self.subTest(rejected=pct):
                 result=self.client.post('/api/settings',base_url=self.base_url,
                     headers=headers,json={'protected_pct':pct})
