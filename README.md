@@ -149,3 +149,7 @@ Under **Markets → Walk-Forward Validation**, select Public daily history or pa
 - The login screen and API header contract change. v0.19.10 clients cannot authenticate against the new backend; refresh or reinstall the new PWA after deployment.
 - The web UI remains accessible to anonymous visitors, but all financial endpoints remain authenticated. Additional private access controls and MFA are not yet deployed; do not connect Public brokerage credentials.
 - Production builds still disallow all broker order submissions. To apply this source to Render, merge the reviewed PR to `main` only after CI and release checks succeed. Render currently has branch auto-deploy enabled; merging may deploy immediately.
+
+
+## v0.19.12 Android test APK (review branch)
+Android test build instructions are in `APK_TESTING.md`. A GitHub Actions workflow produces a private debug APK as a downloadable workflow artifact; the code is not merged to production automatically. The backend remains v0.19.11, and orders remain disabled.
