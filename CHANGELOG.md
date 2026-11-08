@@ -1,3 +1,10 @@
+## v0.19.12 — 2026-11-08 — Android APK test foundation
+**Added:** Android debug APK build workflow for private GitHub Actions artifacts; fixed-host HTTPS Android shell for `edgepilot.belenoscreations.biz`; custom launcher icon; `APK_TESTING.md` with Android-only installation instructions.
+**Changed:** Android wrapper targets the production HTTPS origin only, supports existing v0.19.11 session cookies and theme localStorage, and blocks off-origin navigation, mixed content, third-party cookies, local files, and certificate errors. Android app version synchronized with 0.19.12; backend remains v0.19.11.
+**Fixed:** Removed arbitrary-server entry flow, which could send credentials to an unintended origin; enabled DOM storage for saved theme preference.
+**Tests:** Source inspection and XML/Java static checks completed. Debug APK compilation and Android device installation require GitHub Actions and manual device validation; record CI outcome after execution.
+**Known limitations:** APK is a debug-signed WebView prototype, not an independently audited native app or production-signed release. Debug signature may change across runs. No background trading or notifications. No Public credentials should be configured. The live Render backend remains v0.19.11.
+
 ## v0.19.11 — 2026-11-08
 **Added:** Server-side, short-lived, host-only HttpOnly/Secure/SameSite=Strict login sessions; login throttling; logout; same-origin checks for state changes; rotating CSRF tokens; authenticated session recovery on page reload; security headers; Flask HTTP regression tests and GitHub Actions CI.
 **Changed:** The existing `EDGE_APP_TOKEN` is now a login-only secret; the browser clears it after sign-in and uses the session cookie rather than sending it on every API call. API requests with the legacy `X-Edge-Token` header no longer authenticate. Sessions last eight hours. External backend URL entry is disabled; sign-in is restricted to the current HTTPS origin.
