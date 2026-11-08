@@ -150,7 +150,7 @@ def healthz():
     return {'ok':True}
 
 @app.get('/api/health')
-def health(): return {'ok':True,'version':'0.19.15.1-dashboard-polish','time':datetime.now(timezone.utc).isoformat()}
+def health(): return {'ok':True,'version':'0.19.15.2-protection-range','time':datetime.now(timezone.utc).isoformat()}
 def token():
     global cached_token,expires
     with lock:
@@ -293,7 +293,7 @@ def update_settings():
             original=settings()
             for k,v in body.items():
                 if k in ('spend_cap','per_trade_cap','daily_loss_cap') and not D('0')<D(v)<=D('100000'):raise ValueError(k+' must be positive')
-                if k=='protected_pct' and not D('1')<=D(v)<=D('100'):raise ValueError('Protection must be 1–100%')
+                if k=='protected_pct' and not D('0')<=D(v)<=D('99'):raise ValueError('Protection must be 0–99%')
                 if k=='account_id':
                     if not str(v).strip() or len(str(v))>100:raise ValueError('Invalid account')
                     # Confirm ownership before setting account

@@ -1,3 +1,11 @@
+## v0.19.15.2 — 2026-11-08 — Protected balance range correction
+**Added:** Regression tests covering 0% and 99% as valid protected percentages, while -1%, 100%, and 101% are rejected. UI assertion verifies the permitted numeric input range.
+**Changed:** Settings → Protected balance now accepts 0–99% inclusive (previously 1–100%). Default remains 50%, and no existing saved user setting is silently changed. A previously saved 100% must be manually adjusted to 99% or less before saving settings again.
+**Fixed:** Prevents setting a new 100% protected balance, which would reserve the entire selected balance and leave no funds available under the risk allocation model. 0% protects none of the selected balance but still respects separate spending, per-trade, and buying-power limits.
+**Tests:** All 133 GitHub Actions Python/Flask HTTP and source checks passed (run 42535126402), including 0%/99% acceptance, 100% rejection, and the UI numeric range assertion. Actual broker-connected usability remains to be checked on Android.
+**Known limitations:** Percentage validation controls configuration only. Existing brokerage data, security limitations, and trading safeguards are unchanged. Live order submission and autonomous execution remain disabled.
+**Next:** Verify GitHub CI and Render deployment; confirm the Settings field accepts 0 and 99 but rejects 100 without changing other saved controls.
+
 ## v0.19.15.1 — 2026-11-08 — Mobile header and broker-value clarity
 **Added:** Compact, two-field Public snapshot in Overview separating cash-only buying power from the aggregate market value of existing positions. Each successful dashboard fetch labels when the values were refreshed locally; an unavailable broker response shows a clear unavailable message.
 **Changed:** Removed the redundant PERSONAL TRADING INSTANCE subtitle next to the approved, uncropped EdgePilot logo. The logo and Secure Session badge now share a responsive, compact header. The primary account value still comes directly from Public's `totalAccountValue`, and buying power is never added to it.

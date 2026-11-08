@@ -43,10 +43,10 @@ class BrandAssetsTests(unittest.TestCase):
         self.assertNotIn('@drawable/edgepilot_icon',manifest)
 
     def test_release_version_and_unmodified_trading_guard(self):
-        self.assertEqual((BASE/'VERSION').read_text().strip(),'0.19.15.1')
+        self.assertEqual((BASE/'VERSION').read_text().strip(),'0.19.15.2')
         self.assertIn('versionCode = 1915',(BASE/'android/app/build.gradle.kts').read_text())
         app=(BASE/'backend/app.py').read_text()
-        self.assertIn('0.19.15.1-dashboard-polish',app)
+        self.assertIn('0.19.15.2-protection-range',app)
         self.assertIn("@app.post('/api/order/submit')",app)
         self.assertIn("def submit():",app)
 
