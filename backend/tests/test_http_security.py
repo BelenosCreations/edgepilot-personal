@@ -95,9 +95,6 @@ class HttpSecurityTests(unittest.TestCase):
         self.assertIn('max-age',response.headers['Strict-Transport-Security'])
 
 
-if __name__=='__main__':
-    unittest.main()
-
     def test_public_settings_encryption_is_required_and_route_is_protected(self):
         from cryptography.fernet import Fernet
         self.assertEqual(self.client.get('/api/broker/credentials/status',base_url=self.base_url).status_code,401)
@@ -129,3 +126,7 @@ if __name__=='__main__':
             self.assertEqual(resp.status_code,200)
             self.assertFalse(self.client.get('/api/broker/credentials/status',base_url=self.base_url).get_json()['configured'])
             self.assertEqual(self.appmod.settings()['account_id'],'')
+
+
+if __name__=='__main__':
+    unittest.main()
