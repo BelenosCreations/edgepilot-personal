@@ -41,10 +41,12 @@ class FifteenMinuteHTTPTests(unittest.TestCase):
         self.assertNotIn('sensitive',r.get_data(as_text=True))
     def test_request_only_broker_queries_and_never_orders(self):
         self.sign_in()
-        from test_fifteen_minute import summary,details
+        from datetime import datetime,timezone
+        from test_fifteen_minute import NOW,summary,details
+        offset=int((datetime.now(timezone.utc)-NOW).total_seconds())
         def fake_pub(method,path,body=None):
-            if 'summary' in path:return summary()
-            if 'details' in path:return details()
+            if 'summary' in path:return summary(close=600+offset)
+            if 'details' in path:return details(close=600+offset)
             raise AssertionError('Unexpected API route')
         with patch.dict(os.environ,{'PUBLIC_API_SECRET':'fake-legacy-test-secret'}),             patch.object(self.mod,'pub',side_effect=fake_pub) as call:
             r=self.client.get('/api/markets/15-minute',base_url=self.url)
