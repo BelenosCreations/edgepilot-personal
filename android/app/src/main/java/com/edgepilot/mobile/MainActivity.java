@@ -1,47 +1,140 @@
 package com.edgepilot.mobile;
 
 import android.app.Activity;
-import android.app.AlertDialog;
-import android.os.Bundle;
 import android.graphics.Color;
-import android.content.Context;
+import android.net.Uri;
+import android.os.Bundle;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.EditText;
-import android.widget.LinearLayout;
-import android.widget.Button;
+import android.webkit.CookieManager;
+import android.webkit.SslErrorHandler;
+import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
+import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.webkit.WebResourceRequest;
-import android.net.Uri;
+import android.net.http.SslError;
+import android.widget.Button;
+import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import java.io.ByteArrayInputStream;
 
-/** Minimal Android shell for self-hosted EdgePilot. Backend never runs on the phone. */
-public class MainActivity extends Activity {
-    private WebView browser;
-    private String site;
-    @Override public void onCreate(Bundle saved){ super.onCreate(saved); openApp(); }
-    private void openApp(){
-        site=getPreferences(Context.MODE_PRIVATE).getString("site","");
-        if (!site.startsWith("https://")){showSetup();return;}
-        LinearLayout container=new LinearLayout(this);container.setOrientation(LinearLayout.VERTICAL);container.setBackgroundColor(Color.rgb(12,20,35));
-        Button change=new Button(this);change.setText("EdgePilot · Change server"); change.setOnClickListener(v->showSetup());container.addView(change,new LinearLayout.LayoutParams(-1,-2));
-        browser=new WebView(this);browser.getSettings().setJavaScriptEnabled(true);browser.getSettings().setDomStorageEnabled(false);
-        browser.getSettings().setAllowFileAccess(false);browser.getSettings().setAllowContentAccess(false);
-        browser.getSettings().setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        browser.setWebViewClient(new WebViewClient(){@Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest req){
-            Uri uri=req.getUrl();return !(uri.getScheme().equals("https") && uri.getHost()!=null && uri.getHost().equals(Uri.parse(site).getHost()));
-        }});
-        container.addView(browser,new LinearLayout.LayoutParams(-1,0,1));setContentView(container);browser.loadUrl(site);
+/** Private EdgePilot Android test shell. The backend and all trading logic run in Render. */
+public final class MainActivity extends Activity {
+    private static final String SITE = "https://edgepilot.belenoscreations.biz/";
+    private static final String HOST = "edgepilot.belenoscreations.biz";
+    private WebView webView;
+    private View offlinePanel;
+    private boolean pageFailed;
+
+    private static boolean allowed(Uri uri) {
+        return uri != null && "https".equalsIgnoreCase(uri.getScheme())
+                && HOST.equalsIgnoreCase(uri.getHost())
+                && (uri.getPort() == -1 || uri.getPort() == 443)
+                && uri.getUserInfo() == null;
     }
-    private void showSetup(){
-        EditText input=new EditText(this);input.setSingleLine(true);input.setHint("https://your-private-edgepilot-server");
-        input.setText(getPreferences(Context.MODE_PRIVATE).getString("site",""));
-        new AlertDialog.Builder(this).setTitle("EdgePilot server").setMessage("Enter the HTTPS address of your own EdgePilot backend. Use a secure private tunnel and never expose the backend publicly.").setView(input).setCancelable(false)
-        .setPositiveButton("Connect",(d,w)->{String value=input.getText().toString().trim().replaceAll("/+$","");
-            if(!value.startsWith("https://")){showSetup();return;}
-            getPreferences(Context.MODE_PRIVATE).edit().putString("site",value).apply();openApp();})
-        .setNegativeButton("Exit",(d,w)->finish()).show();
+
+    @Override public void onCreate(Bundle state) {
+        super.onCreate(state);
+        getWindow().setStatusBarColor(Color.rgb(12,20,35));
+        getWindow().setNavigationBarColor(Color.rgb(12,20,35));
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(Color.rgb(12,20,35));
+        webView = new WebView(this);
+        webView.setBackgroundColor(Color.rgb(12,20,35));
+        WebView.setWebContentsDebuggingEnabled(false);
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(true); // Required by EdgePilot dashboard.
+        settings.setDomStorageEnabled(true); // Required for theme preference.
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(false);
+        settings.setAllowFileAccessFromFileURLs(false);
+        settings.setAllowUniversalAccessFromFileURLs(false);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        settings.setJavaScriptCanOpenWindowsAutomatically(false);
+        settings.setSupportMultipleWindows(false);
+        settings.setSaveFormData(false);
+        settings.setGeolocationEnabled(false);
+        CookieManager manager = CookieManager.getInstance();
+        manager.setAcceptCookie(true); // Required for v0.19.11 HttpOnly session cookie.
+        manager.setAcceptThirdPartyCookies(webView, false);
+        webView.setWebChromeClient(new WebChromeClient());
+        webView.setWebViewClient(new WebViewClient() {
+            @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                // Never navigate to another host or arbitrary URL scheme inside the authenticated WebView.
+                return !allowed(request.getUrl());
+            }
+            @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                if (allowed(request.getUrl())) return null;
+                return new WebResourceResponse("text/plain", "UTF-8", 403,
+                        "Blocked", java.util.Collections.emptyMap(),
+                        new ByteArrayInputStream(new byte[0]));
+            }
+            @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                pageFailed = false;
+            }
+            @Override public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
+                handler.cancel();
+                pageFailed = true;
+                showNetworkError("The HTTPS certificate is invalid. Connection blocked.");
+            }
+            @Override public void onReceivedError(WebView view, WebResourceRequest req, WebResourceError err) {
+                if (req.isForMainFrame()) {
+                    pageFailed = true;
+                    showNetworkError("Couldn't reach EdgePilot securely. Check your connection and retry.");
+                }
+            }
+            @Override public void onPageFinished(WebView view, String url) {
+                if (!pageFailed && allowed(Uri.parse(url))) offlinePanel.setVisibility(View.GONE);
+            }
+        });
+        root.addView(webView, new FrameLayout.LayoutParams(-1,-1));
+        LinearLayout error = new LinearLayout(this);
+        error.setOrientation(LinearLayout.VERTICAL);
+        error.setGravity(Gravity.CENTER);
+        error.setPadding(36,24,36,24);
+        error.setBackgroundColor(Color.rgb(12,20,35));
+        TextView errorText = new TextView(this);
+        errorText.setText("EdgePilot is unavailable.");
+        errorText.setTextSize(18);
+        errorText.setTextColor(Color.WHITE);
+        errorText.setGravity(Gravity.CENTER);
+        errorText.setTag("message");
+        error.addView(errorText, new LinearLayout.LayoutParams(-1,-2));
+        Button retry = new Button(this);
+        retry.setText("Retry securely");
+        retry.setOnClickListener(v -> loadHome());
+        error.addView(retry);
+        offlinePanel = error;
+        offlinePanel.setVisibility(View.GONE);
+        root.addView(offlinePanel,new FrameLayout.LayoutParams(-1,-1));
+        setContentView(root);
+        loadHome();
     }
-    @Override public void onBackPressed(){if(browser!=null&&browser.canGoBack())browser.goBack();else super.onBackPressed();}
-    @Override protected void onDestroy(){if(browser!=null){browser.destroy();browser=null;}super.onDestroy();}
+
+    private void showNetworkError(String message) {
+        runOnUiThread(() -> {
+            if (offlinePanel instanceof ViewGroup) {
+                View messageView = ((ViewGroup) offlinePanel).getChildAt(0);
+                if (messageView instanceof TextView) ((TextView) messageView).setText(message);
+            }
+            offlinePanel.setVisibility(View.VISIBLE);
+        });
+    }
+    private void loadHome() {
+        offlinePanel.setVisibility(View.GONE);
+        webView.loadUrl(SITE);
+    }
+    @Override public void onBackPressed() {
+        if (webView != null && webView.canGoBack()) webView.goBack();
+        else super.onBackPressed();
+    }
+    @Override protected void onDestroy() {
+        if (webView != null) { webView.destroy(); webView=null; }
+        super.onDestroy();
+    }
 }
