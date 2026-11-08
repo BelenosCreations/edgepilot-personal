@@ -93,6 +93,26 @@ async function saveSettings(){try{let body={spend_cap:$('cap').value,protected_p
 async function changeAutonomy(){let on=$('autonomy').checked;try{if(on&&!confirm('Store fully autonomous preference? Automated execution is NOT active in this prototype.')){$('autonomy').checked=false;return;}await api('settings','POST',{autonomous:on?'1':'0',...(on?{confirmation:'ENABLE AUTONOMY'}:{})});await refresh();}catch(e){$('autonomy').checked=!on;alertError(e)}}
 async function arm(){if(!confirm('Arm REAL-money manual trading? Loss of capital is possible.'))return;try{await api('settings','POST',{live_armed:'1',confirmation:'ARM LIVE TRADING'});await refresh();}catch(e){alertError(e)}}
 async function emergency(){try{await api('disarm','POST',{});await refresh();alert('Trading disarmed. Existing broker orders are NOT canceled.');}catch(e){alertError(e)}}
+// v0.19.14: manually refreshed 15-minute event-details snapshots (no trade path).
+async function loadFifteenMinuteMarkets(){
+ const status=$('fifteenStatus'), list=$('fifteenList');
+ status.textContent='Checking open Public 15-minute windows…';list.textContent='';
+ try{
+  const d=await api('markets/15-minute');
+  if(!d.connected){status.textContent=d.note||'Connect Public in Settings first.';return;}
+  const count=(d.events||[]).length;
+  const captured=new Date(d.capturedAt);
+  status.textContent=`${count} validated active windows at ${Number.isFinite(captured.getTime())?captured.toLocaleTimeString():'the scan time'}. Prices are captured snapshots, not live streaming quotes. ${d.coverage?.skippedInvalid||0} incomplete/closed entries omitted. No trades placed.`;
+  if(!count){list.textContent='No eligible open windows returned. Try Refresh later; the API may be empty or some quotes may be incomplete.';return;}
+  list.innerHTML=d.events.map(m=>{
+   const secs=Math.max(0,Number(m.secondsRemainingAtCapture)||0);
+   const left=`${Math.floor(secs/60)}m ${secs%60}s at capture`;
+   const side=(label,c)=>`<div class="rule"><b>${label}</b><br><small>${esc(c.symbol)}<br>Bid ${esc(c.bid)} · Ask ${esc(c.ask)} · Spread ${esc(c.spread)}<br>Illustrative break-even ${esc(c.illustrativeBreakEvenPct)}%</small></div>`;
+   return `<div class="market"><div class="row"><b>${esc(m.title||m.series)}</b><span class="pill">${esc(left)}</span></div><p class="muted">${esc(m.eventSymbol)}<br>${esc(m.target)}<br>Closes ${esc(new Date(m.closeTime).toLocaleTimeString())}</p>${side('UP / YES',m.yes)}${side('DOWN / NO',m.no)}${(m.warnings||[]).map(w=>`<p class="warn">${esc(w)}</p>`).join('')}</div>`;
+  }).join('');
+ }catch(e){status.textContent='15-minute scan unavailable: '+(e.message||String(e));list.textContent='';}
+}
+
 async function loadMarkets(){try{let d=await api('markets');$('marketList').innerHTML=(d.events||[]).map(m=>`<div class="market"><b>${esc(m.title)}</b><p class="muted">${esc(m.symbol)} · volume ${esc(m.volume)}</p><button onclick="pickEvent('${esc(m.symbol)}')">Explore</button></div>`).join('')}catch(e){alertError(e)}}
 function pickEvent(event){$('event').value=event;tab('markets');loadEvent()}
 async function loadEvent(){try{let d=await api('event/'+encodeURIComponent($('event').value));$('contractList').innerHTML=(d.outcomes||[]).flatMap(o=>(o.contracts||[]).map(c=>`<div class="rule">${esc(o.title||o.name||'Outcome')}<br><small>${esc(c.symbol)} · bid ${esc(c.bid)} / ask ${esc(c.ask)}</small><br><button onclick="pickContract('${esc(d.eventSymbol)}','${esc(c.symbol)}','${esc(c.ask)}')">Set order</button></div>`)).join('')||'No contracts returned.'}catch(e){alertError(e)}}

@@ -157,3 +157,7 @@ Android test build instructions are in `APK_TESTING.md`. A GitHub Actions workfl
 
 ## v0.19.13 — Public API connection via Settings (development)
 Once `EDGE_CREDENTIAL_KEY` is configured as a private Render environment variable (Fernet URL-safe 32-byte key), open **Settings → Public Brokerage Connection**. Paste the personal Public API secret into the masked entry and tap **Save API key**. It is encrypted server-side and never returned. Tap **Test connection** to check actual read access. The source still disables real orders. **Disconnect** invalidates current broker auth and clears the account association. Do not configure the encryption key in GitHub or the mobile app. The live server is still v0.19.11 until this update is reviewed, tested, and explicitly deployed.
+
+## v0.19.14 — 15-Minute Markets read-only discovery
+
+After securing a Public connection, open Markets → 15-Minute Markets and tap Refresh. EdgePilot queries Public's documented `FIFTEEN_MINUTES` event-summary filter (max two pages) and verifies up to eight open event-detail snapshots per click. Results include targets, YES/NO bid/ask, spread, and a captured-at close countdown; 0.001 price precision is preserved. It refuses expired, halted, mismatched and incomplete events rather than inventing data. The illustrative $0.02 fee is not actual broker preflight; no directional edge or strategy qualification is calculated. No trades, no scheduled refresh, and no paper settlement/ledger in this release. The existing APK uses the hosted UI and needs no reinstall.
