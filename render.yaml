@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: edgepilot-private
+    runtime: docker
+    rootDir: backend
+    plan: starter
+    region: ohio
+    healthCheckPath: /healthz
+    envVars:
+      - key: PUBLIC_API_SECRET
+        sync: false
+      - key: EDGE_APP_TOKEN
+        sync: false
+      - key: EDGE_DB_PATH
+        value: /data/edgepilot.db
+      - key: ENABLE_LIVE_ORDERS
+        value: "false"
+    disk:
+      name: edgepilot-data
+      mountPath: /data
+      sizeGB: 1
