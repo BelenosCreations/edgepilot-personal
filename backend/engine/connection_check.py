@@ -13,7 +13,7 @@ def verify(configured, list_accounts, selected_account, load_portfolio):
         'backend': 'ready', 'broker': 'not_configured',
         'portfolio': 'not_checked', 'accountCount': 0,
         'selectedAccount': 'none',
-        'nextStep': 'Configure PUBLIC_API_SECRET in private host environment.',
+        'nextStep': 'Add your Public API key in EdgePilot Settings → Public Brokerage Connection.',
     }
     if not configured:
         return result

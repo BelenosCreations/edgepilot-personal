@@ -49,7 +49,7 @@ class HttpSecurityTests(unittest.TestCase):
         self.assertNotIn('valid-test-token',login.get_data(as_text=True))
         health=self.client.get('/api/health',base_url=self.base_url)
         self.assertEqual(health.status_code,200)
-        self.assertIn('0.19.11',health.get_json()['version'])
+        self.assertIn('0.19.13',health.get_json()['version'])
         csrf=login.get_json()['csrf']
         no_csrf=self.client.post('/api/disarm',base_url=self.base_url,headers=self.origin,json={})
         self.assertEqual(no_csrf.status_code,403)
@@ -93,6 +93,39 @@ class HttpSecurityTests(unittest.TestCase):
         self.assertIn('frame-ancestors',response.headers['Content-Security-Policy'])
         self.assertEqual(response.headers['Cache-Control'],'no-store')
         self.assertIn('max-age',response.headers['Strict-Transport-Security'])
+
+
+    def test_public_settings_encryption_is_required_and_route_is_protected(self):
+        from cryptography.fernet import Fernet
+        self.assertEqual(self.client.get('/api/broker/credentials/status',base_url=self.base_url).status_code,401)
+        login=self.sign_in()
+        csrf=login.get_json()['csrf']
+        secret='Public-TEST-KEY-DO-NOT-USE-11112222333344'
+        with patch.dict(os.environ,{'EDGE_CREDENTIAL_KEY':''}):
+            resp=self.client.post('/api/broker/credentials',base_url=self.base_url,
+                headers={**self.origin,'X-Edge-CSRF':csrf},json={'secret':secret})
+            self.assertEqual(resp.status_code,503)
+        with patch.dict(os.environ,{'EDGE_CREDENTIAL_KEY':Fernet.generate_key().decode()}):
+            bad=self.client.post('/api/broker/credentials',base_url=self.base_url,
+                headers={'Origin':'https://evil.example','X-Edge-CSRF':csrf},json={'secret':secret})
+            self.assertEqual(bad.status_code,403)
+            resp=self.client.post('/api/broker/credentials',base_url=self.base_url,
+                headers={**self.origin,'X-Edge-CSRF':csrf},json={'secret':secret})
+            self.assertEqual(resp.status_code,200)
+            status=self.client.get('/api/broker/credentials/status',base_url=self.base_url)
+            self.assertTrue(status.get_json()['configured'])
+            self.assertTrue(status.get_json()['usable'])
+            self.assertNotIn(secret,status.get_data(as_text=True))
+            self.assertNotIn(secret,self.client.get('/api/dashboard',base_url=self.base_url).get_data(as_text=True))
+            import sqlite3
+            with sqlite3.connect(self.temp.name+'/test.db') as conn:
+                cipher=conn.execute('SELECT ciphertext FROM broker_credentials WHERE provider=?',('public',)).fetchone()[0]
+            self.assertNotIn(secret.encode(),cipher)
+            resp=self.client.delete('/api/broker/credentials',base_url=self.base_url,
+                headers={**self.origin,'X-Edge-CSRF':csrf})
+            self.assertEqual(resp.status_code,200)
+            self.assertFalse(self.client.get('/api/broker/credentials/status',base_url=self.base_url).get_json()['configured'])
+            self.assertEqual(self.appmod.settings()['account_id'],'')
 
 
 if __name__=='__main__':
