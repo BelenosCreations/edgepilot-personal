@@ -1,10 +1,45 @@
-let base='',key='',snap=null; const $=id=>document.getElementById(id);
+let base='',csrf='',authenticated=false,snap=null; const $=id=>document.getElementById(id);
 const money=x=>Number.isFinite(Number(x))?'$'+Number(x).toFixed(2):'—';
 function esc(v){return String(v??'').replace(/[&<>"']/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]))}
-function tab(id){if(id==='markets'&&base&&key)loadScannerConfig();document.querySelectorAll('.section').forEach(n=>n.classList.toggle('active',n.id===id));document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active-nav',(b.getAttribute('onclick')||'').includes("'"+id+"'")));}
-async function api(path,method='GET',data){if(!base||!key)throw Error('Connect to backend first');let r=await fetch(base+'/api/'+path,{method,headers:{'Content-Type':'application/json','X-Edge-Token':key},body:data?JSON.stringify(data):undefined});let j=await r.json();if(!r.ok)throw Error(j.error||'HTTP '+r.status);return j;}
+function tab(id){if(id==='markets'&&base&&authenticated)loadScannerConfig();document.querySelectorAll('.section').forEach(n=>n.classList.toggle('active',n.id===id));document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active-nav',(b.getAttribute('onclick')||'').includes("'"+id+"'")));}
+async function api(path,method='GET',data){
+ if(!authenticated||!base)throw Error('Sign in to EdgePilot first');
+ let r=await fetch(base+'/api/'+path,{method,credentials:'same-origin',cache:'no-store',
+  headers:{'Content-Type':'application/json','X-Edge-CSRF':csrf},
+  body:data?JSON.stringify(data):undefined});
+ let j=await r.json();
+ if(r.status===401){clearLogin();throw Error('Your secure session expired. Sign in again.');}
+ if(r.status===403&&j.error==='Invalid request verification token') {
+  const refresh=await fetch(base+'/api/session',{credentials:'same-origin',cache:'no-store'});
+  if(refresh.ok){csrf=(await refresh.json()).csrf;return api(path,method,data);}
+ }
+ if(!r.ok)throw Error(j.error||'HTTP '+r.status);
+ return j;
+}
 function alertError(e){alert(e.message||String(e));}
-async function connect(){base=$('url').value.replace(/\/$/,'');key=$('auth').value;try{await api('health');$('setup').classList.add('hidden');$('mode').textContent='BACKEND CONNECTED';await refresh()}catch(e){alertError(e)}}
+function clearLogin(){authenticated=false;csrf='';snap=null;$('auth').value='';$('setup').classList.remove('hidden');$('mode').textContent='DISCONNECTED';}
+function signedIn(csrfToken){base=location.origin;csrf=csrfToken;authenticated=true;$('auth').value='';$('setup').classList.add('hidden');$('mode').textContent='SECURE SESSION';}
+async function connect(){
+ const requested=$('url').value.replace(/\/$/,'');
+ if(requested!==location.origin){alert('For security, sign in through this page’s own HTTPS address, not another backend URL.');return;}
+ const credential=$('auth').value;
+ try{
+  const r=await fetch(location.origin+'/api/login',{method:'POST',credentials:'same-origin',cache:'no-store',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({accessToken:credential})});
+  const j=await r.json();
+  if(!r.ok)throw Error(j.error||'Login failed');
+  signedIn(j.csrf);
+  await refresh();
+ }catch(e){alertError(e);}finally{$('auth').value='';}
+}
+async function restoreSession(){
+ base=location.origin;
+ try{
+  const r=await fetch(base+'/api/session',{credentials:'same-origin',cache:'no-store'});
+  if(!r.ok){clearLogin();return;}
+  const j=await r.json();signedIn(j.csrf);await refresh();
+ }catch(e){clearLogin();}
+}
 async function refresh(){try{snap=await api('dashboard');let b=snap.broker,s=snap.settings;
 try {let l=await api('ledger');$('ledgerPnl').textContent=money(l.realizedPnl);$('realizedHome').textContent=money(l.realizedPnl);$('ledgerCost').textContent=money(l.openCostBasis);$('ledgerStatus').textContent=l.warning; $('salePrompts').textContent=(l.pendingDecisions||[]).length+' manual-sale decisions pending (workflow not yet active).';}catch(e){$('ledgerStatus').textContent='Ledger unavailable: '+e.message;}
 $('profileLabel').value=s.profile_label||'My EdgePilot';$('portfolioValue').textContent=b?money(b.balance):'—';$('holdingsCount').textContent=b?String(b.positionCount):'—';renderHoldings(b?.holdings||[]);$('balance').textContent=b?money(b.balance):'—';$('balanceMode').textContent=b?`Risk source: ${b.balanceSource==='independent'?'Assigned EdgePilot '+money(b.effectiveBalance):'Live Public '+money(b.effectiveBalance)}`:'Risk source: unavailable';$('balanceAlert').classList.toggle('hidden',!b?.requiresBalanceReset);$('balanceAlert').textContent=b?.balanceAlert||'';$('protected').textContent=b?money(b.protectedAmount):'—';$('riskbudget').textContent=b?money(b.riskBudget):'—';$('remaining').textContent=b?money(b.remainingToRisk):'—';$('power').textContent=b?money(b.cashBuyingPower):'—';$('brokerError').textContent=snap.brokerError||'';
@@ -37,7 +72,10 @@ function balanceSourceChanged(){ $('independentControls').classList.toggle('hidd
 async function saveBalanceSource(){try{const mode=$('balanceSource').value;const body={balance_source:mode};if(mode==='independent')body.independent_balance=$('independentBalance').value; if($('account').value&&$('account').value!==(snap?.settings.account_id||''))body.account_id=$('account').value;await api('settings','POST',body);$('balanceSaveResult').textContent='Saved. Live orders disarmed until explicitly reauthorized.';await refresh();}catch(e){alertError(e)}}
 
 async function saveProfile(){try{await api('settings','POST',{profile_label:$('profileLabel').value.trim()});$('profileResult').textContent='Personal profile saved.';await refresh()}catch(e){alertError(e)}}
-function disconnect(){base='';key='';snap=null;$('auth').value='';$('setup').classList.remove('hidden');$('mode').textContent='DISCONNECTED';window.scrollTo(0,0)}
+async function disconnect(){
+ if(authenticated){try{await fetch(location.origin+'/api/logout',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'X-Edge-CSRF':csrf}});}catch(e){}}
+ clearLogin();window.scrollTo(0,0);
+}
 
 async function saveMicro(){try{await api('settings','POST',{micro_enabled:$('microEnabled').checked?'1':'0',micro_stock_min_edge_pct:$('stockEdge').value,micro_prediction_min_edge_pct:$('predEdge').value,micro_min_net_dollars:$('microNet').value,micro_max_trades_day:$('microTrades').value});$('microSaveResult').textContent='Saved. Live trading remains disabled.';await refresh()}catch(e){alertError(e)}}
 async function evaluateMicro(){try{let r=await api('micro/evaluate','POST',{market:$('microMarket').value,quantity:$('microQty').value,entry_price:$('microEntry').value,win_exit_price:$('microWin').value,loss_exit_price:$('microLoss').value,success_probability_pct:$('microProb').value,total_fees:$('microFees').value,total_slippage:$('microSlip').value});$('microResult').innerHTML=`<b>Expected net result: ${money(r.expectedNetValue)}</b><br>Winning outcome: ${money(r.netWinningGain)} / Losing outcome: ${money(r.netLosingResult)}<br>Round-trip costs: ${money(r.roundTripCost)}<br>Passes modeled economic screen: ${r.passesEconomicScreen?'YES':'NO'}<br><small>${esc(r.warning)}</small>`}catch(e){alertError(e)}}
@@ -135,4 +173,4 @@ async function verifyBrokerConnection(){
  } catch(e) { el.textContent='Connection check unavailable: '+e.message; }
 }
 // A hosted PWA connects to its own secure origin. Credentials are never persisted by this script.
-if($('url') && (location.protocol==='https:' || location.hostname==='localhost'))$('url').value=location.origin;
+if($('url') && location.protocol==='https:'){$('url').value=location.origin;restoreSession();}
