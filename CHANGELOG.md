@@ -2,7 +2,7 @@
 **Added:** Regression tests covering 0% and 99% as valid protected percentages, while -1%, 100%, and 101% are rejected. UI assertion verifies the permitted numeric input range.
 **Changed:** Settings → Protected balance now accepts 0–99% inclusive (previously 1–100%). Default remains 50%, and no existing saved user setting is silently changed. A previously saved 100% must be manually adjusted to 99% or less before saving settings again.
 **Fixed:** Prevents setting a new 100% protected balance, which would reserve the entire selected balance and leave no funds available under the risk allocation model. 0% protects none of the selected balance but still respects separate spending, per-trade, and buying-power limits.
-**Tests:** GitHub Actions full Python/Flask HTTP suite and source checks required before deployment; actual broker-connected usability remains to be checked on Android.
+**Tests:** All 133 GitHub Actions Python/Flask HTTP and source checks passed (run 42535126402), including 0%/99% acceptance, 100% rejection, and the UI numeric range assertion. Actual broker-connected usability remains to be checked on Android.
 **Known limitations:** Percentage validation controls configuration only. Existing brokerage data, security limitations, and trading safeguards are unchanged. Live order submission and autonomous execution remain disabled.
 **Next:** Verify GitHub CI and Render deployment; confirm the Settings field accepts 0 and 99 but rejects 100 without changing other saved controls.
 
