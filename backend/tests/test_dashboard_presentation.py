@@ -29,6 +29,12 @@ class DashboardPresentationTests(unittest.TestCase):
         self.assertIn('money(b.positionsExposure)',js)
         self.assertIn("b?money(b.balance):'—'",js)
 
+    def test_protection_percentage_input_range(self):
+        html=HTML.read_text(encoding='utf-8')
+        self.assertIn('Protected balance (0–99%)',html)
+        self.assertIn('id="pct" type="number" min="0" max="99" step="1"',html)
+        self.assertNotIn('Protected balance (1–100%)',html)
+
     def test_no_new_order_execution_or_secret_fields(self):
         app=APP.read_text(encoding='utf-8')
         self.assertIn("'liveTradingAvailable':False",app)
