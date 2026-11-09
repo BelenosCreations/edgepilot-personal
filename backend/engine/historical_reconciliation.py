@@ -148,7 +148,7 @@ def reconcile(con,source_table_counts,selected_account,user_id,account_id):
                 else:
                     classification=PREMAPPED if name in ALREADY_SHADOW_MAPPED else EXPLICIT
             elif name in UNSCOPED:
-                classification=PREMAPPED if name in ALREADY_SHADOW_MAPPED else QUARANTINE
+                classification=QUARANTINE
             else:
                 classification=UNACCOUNTED
             verified=classification in (EXPLICIT, PREMAPPED)
