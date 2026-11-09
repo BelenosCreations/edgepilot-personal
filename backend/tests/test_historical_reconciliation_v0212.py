@@ -49,7 +49,7 @@ class Phase6HistoricalReconciliationTests(unittest.TestCase):
             c.execute("""INSERT INTO orders(id,account,symbol,state)
                 VALUES('order-1','TEST-BROKER-A','SPY','NEW')""")
             c.execute("""INSERT INTO orders(id,account,symbol,state)
-                VALUES('order-2',NULL,'QQQ')""")
+                VALUES('order-2',NULL,'QQQ','NEW')""")
             c.execute("INSERT INTO activity VALUES(1,?,'private audit comment')",(UTC,))
             c.execute("INSERT INTO watch(id,symbol) VALUES('w1','SPY')")
             c.execute("INSERT INTO ai_runs VALUES(1,?,'private question')",(UTC,))
