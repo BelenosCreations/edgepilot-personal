@@ -147,6 +147,7 @@ def _stage(conn,credential_key,source_report):
     source_account,ciphertext=_validate_account(conn,settings,credential_key)
     tenant_foundation.setup(conn.execute("PRAGMA database_list").fetchone()["file"])
     account_scope.setup(conn.execute("PRAGMA database_list").fetchone()["file"])
+    _install_shadow_tables(conn)
     # A new transaction contains all mapping writes. Never create working
     # sessions or activate the real account/worker.
     conn.execute("BEGIN IMMEDIATE")
@@ -166,7 +167,6 @@ def _stage(conn,credential_key,source_report):
     conn.execute("""INSERT INTO tenant_runtime_status
         (user_id,account_id,requested_mode,worker_enabled,paper_enabled,live_enabled)
         VALUES(?,?,'observe',0,0,0)""",(user_id,account_id))
-    _install_shadow_tables(conn)
     for k,v in settings.items():
         conn.execute("""INSERT INTO tenant_shadow_settings
             (user_id,account_id,source_key,source_value) VALUES(?,?,?,?)""",
