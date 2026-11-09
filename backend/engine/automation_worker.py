@@ -37,44 +37,53 @@ def one_cycle(appmod, worker_id):
     try:
         account=appmod.selected_account()
         from . import opportunity_scan, market_snapshot
-        with appmod.database() as con:
-            config=con.execute('SELECT symbols FROM scan_config WHERE id=1').fetchone()
-            discovery=con.execute('''SELECT mode,cursor,equity_per_scan FROM discovery_config WHERE id=1''').fetchone()
-            watch=opportunity_scan.stock_universe(config['symbols'] if config else '')
+        stock_engines=[engine for engine in ('auto','micro') if engine in engines]
+        positions=[p for p in state['paper']['openPositions'] if p['asset_class']=='stock']
+        # Always prioritize outstanding paper positions over new discovery.
+        required_symbols=list(dict.fromkeys(p['symbol'] for p in positions))
+        symbols=list(required_symbols)
         issues=[]
-        if discovery:
-            mode=discovery['mode']
-            count=min(5,max(1,discovery['equity_per_scan']))
-            cursor=discovery['cursor']
-        else:
-            mode,count,cursor='automatic',5,0
-        symbols,ignored,next_cursor,total=appmod.discovered_market_candidates(
-            account,mode,count,0,cursor,watch,issues)
-        if discovery and mode!='watchlist' and total:
+        if stock_engines:
             with appmod.database() as con:
-                con.execute('UPDATE discovery_config SET cursor=? WHERE id=1',(next_cursor,))
-        # Open paper positions must be quoted on every cycle even when discovery rotates.
-        for p in state['paper']['openPositions']:
-            if p['asset_class']=='stock' and p['symbol'] not in symbols:
-                symbols.insert(0,p['symbol'])
-        symbols=list(dict.fromkeys(symbols))[:15]
-        if not symbols:
-            raise ValueError('No eligible equity symbols; broker discovery/watchlist is unavailable')
+                config=con.execute('SELECT symbols FROM scan_config WHERE id=1').fetchone()
+                discovery=con.execute('''SELECT mode,cursor,equity_per_scan FROM discovery_config WHERE id=1''').fetchone()
+                watch=opportunity_scan.stock_universe(config['symbols'] if config else '')
+            if discovery:
+                mode=discovery['mode']
+                count=min(5,max(1,discovery['equity_per_scan']))
+                cursor=discovery['cursor']
+            else:
+                mode,count,cursor='automatic',5,0
+            discovered,ignored,next_cursor,total=appmod.discovered_market_candidates(
+                account,mode,count,0,cursor,watch,issues)
+            if discovery and mode!='watchlist' and total:
+                with appmod.database() as con:
+                    con.execute('UPDATE discovery_config SET cursor=? WHERE id=1',(next_cursor,))
+            symbols=list(dict.fromkeys(required_symbols+discovered[:5]))
+            if not symbols and m['mode']=='paper':
+                raise ValueError('No eligible equities; paper model must pause rather than invent quotes')
         scanned=0
+        seen_open=set()
         for symbol in symbols:
             try:
                 quote=market_snapshot.stock_snapshot(appmod.pub,account,symbol)
             except Exception as exc:
                 LOG.warning('Read-only quote unavailable for %s: %s',symbol,type(exc).__name__)
+                if symbol in required_symbols:
+                    raise ValueError('An open paper position lacks a fresh broker quote')
                 continue
-            for engine in ('auto','micro'):
-                if engine not in engines:
-                    continue
+            for engine in stock_engines:
                 try:
                     automation.process_quote(path,engine,quote)
                     scanned+=1
+                    if symbol in required_symbols:
+                        seen_open.add(symbol)
                 except ValueError as exc:
                     LOG.info('Skipped invalid paper quote for %s: %s',symbol,str(exc)[:150])
+                    if symbol in required_symbols:
+                        raise ValueError('An open paper position has an invalid broker quote')
+        if required_symbols and not set(required_symbols)<=seen_open:
+            raise ValueError('Open paper positions could not be marked safely')
         if 'fifteen' in engines and m['mode']=='observe':
             try:
                 from . import fifteen_minute
@@ -82,7 +91,7 @@ def one_cycle(appmod, worker_id):
                 automation.record_research(path,'fifteen','Validated open market windows: '+str(len(data['events'])))
             except Exception as exc:
                 automation.record_research(path,'fifteen','Market research unavailable: '+type(exc).__name__)
-        if not scanned and m['mode']=='paper':
+        if not scanned and m['mode']=='paper' and stock_engines:
             automation.fail_closed(path,'No usable fresh stock quotes from Public; manual resume required')
             return {'status':'PAUSED_NO_DATA','scanned':0}
         automation.heartbeat(path,worker_id)
