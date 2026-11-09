@@ -21,7 +21,7 @@ UTC="2026-11-09T08:00:00+00:00"
 
 class ShadowOwnerMigrationTests(unittest.TestCase):
     def setUp(self):
-        self.temp=tempfile.TemporaryDirectory()
+        self.temp=tempfile.TemporaryDirectory(dir="/dev/shm")
         self.path=Path(self.temp.name)/"restored-isolated.db"
         self.key=Fernet.generate_key().decode("ascii")
         self.badkey=Fernet.generate_key().decode("ascii")
@@ -235,6 +235,68 @@ class ShadowOwnerMigrationTests(unittest.TestCase):
         self.assertNotIn("TEST-PUBLIC-ONLY",result.stdout)
         self.assertNotIn(self.secret,result.stdout)
         self.assertNotIn(self.key,result.stdout)
+
+
+    def test_memory_only_source_gate_rejects_disk_and_symlink(self):
+        with tempfile.TemporaryDirectory() as outside:
+            disk=Path(outside)/"plaintext-disk.db"
+            with sqlite3.connect(self.path) as src,sqlite3.connect(disk) as dest:
+                src.backup(dest)
+            with self.assertRaisesRegex(shadow.ShadowMigrationError,"tmpfs"):
+                shadow.rehearse_owner_shadow(disk,credential_key=self.key,phrase=PHRASE)
+            linked=Path(self.temp.name)/"link.db"
+            linked.symlink_to(disk)
+            with self.assertRaisesRegex(shadow.ShadowMigrationError,"tmpfs"):
+                shadow.rehearse_owner_shadow(linked,credential_key=self.key,phrase=PHRASE)
+        self.assertTrue(self.path.exists())
+
+    def test_shadow_temp_directory_removed_after_rollback(self):
+        memory=Path("/dev/shm")
+        baseline={p.name for p in memory.glob("edgepilot-shadow-rehearsal-*")}
+        original=hashlib.sha256(self.path.read_bytes()).hexdigest()
+        with patch.object(
+                shadow.historical_reconciliation,"verify_shadow_index",
+                side_effect=shadow.historical_reconciliation.HistoryReconciliationError(
+                    "Historical row provenance mismatch")):
+            with self.assertRaisesRegex(shadow.ShadowMigrationError,"provenance mismatch"):
+                self.run_rehearsal()
+        self.assertEqual(baseline,{p.name for p in memory.glob(
+            "edgepilot-shadow-rehearsal-*")})
+        self.assertEqual(hashlib.sha256(self.path.read_bytes()).hexdigest(),original)
+
+    def test_same_count_mutation_detected_by_fingerprint(self):
+        from engine import migration_preflight
+        target=Path(self.temp.name)/"fingerprint-target.db"
+        with sqlite3.connect(self.path) as src,sqlite3.connect(target) as dest:
+            src.backup(dest)
+        inv=migration_preflight.inspect_database(target)
+        with shadow._conn(target) as c:
+            shadow._stage(c,self.key,inv)
+        with sqlite3.connect(target) as c:
+            c.execute("UPDATE activity SET message='altered in isolated target' WHERE id=1")
+        with shadow._conn(target,readonly=True) as c:
+            with self.assertRaisesRegex(
+                shadow.historical_reconciliation.HistoryReconciliationError,
+                "provenance mismatch"):
+                shadow.historical_reconciliation.verify_shadow_index(c,inv["tableCounts"])
+
+    def test_report_has_memory_and_content_and_quarantine_guarantees(self):
+        result=self.run_rehearsal()
+        for key in ("temporaryStorageVerifiedMemoryBacked",
+                    "disposableWorkingCopyRemoved",
+                    "sourceContentsUnchanged","sourceToCopyContentsMatched",
+                    "historicalRowFingerprintsVerified"):
+            self.assertTrue(result[key])
+        review=result["historicalReconciliation"]["quarantineReview"]
+        self.assertEqual(review["quarantinedRowsReviewed"],
+            result["historicalReconciliation"]["quarantinedRows"]+
+            result["historicalReconciliation"]["unexplainedRows"])
+        self.assertTrue(review["everyQuarantinedRowHasReviewPolicy"])
+        self.assertTrue(review["noAutomaticOwnerAssignments"])
+        self.assertFalse(review["readyForCutover"])
+        self.assertIn("unscoped_observations",review["groups"])
+        self.assertIn("configuration_and_watchlists",review["groups"])
+        self.assertNotIn("TEST-PUBLIC-ONLY",json.dumps(review))
 
 
 if __name__=="__main__":

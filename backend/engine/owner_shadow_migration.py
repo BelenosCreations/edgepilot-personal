@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
-from . import tenant_foundation, account_scope, migration_preflight, historical_reconciliation
+from . import tenant_foundation, account_scope, migration_preflight, historical_reconciliation, shadow_storage, quarantine_review
 
 ENABLE_FLAG="EDGE_OWNER_MIGRATION_REHEARSAL_ENABLED"
 APPROVAL_PHRASE="SHADOW REHEARSAL ONLY"
@@ -43,6 +43,7 @@ def _conn(path,*,readonly=False):
     db.row_factory=sqlite3.Row
     db.execute("PRAGMA foreign_keys=ON")
     db.execute("PRAGMA busy_timeout=30000")
+    db.execute("PRAGMA temp_store=MEMORY")
     return db
 
 
@@ -231,6 +232,8 @@ def _stage(conn,credential_key,source_report):
 
     history=historical_reconciliation.reconcile(
         conn,source_report["tableCounts"],source_account,user_id,account_id)
+    history["quarantineReview"]=quarantine_review.review(
+        conn,history["quarantinedRows"] + history["unexplainedRows"])
     digest=hashlib.sha256(source_account.encode("utf-8")).hexdigest()
     conn.execute("""INSERT INTO tenant_shadow_rehearsal_marker
         (id,source_schema_sha256,source_account_sha256,staging_state,created_at)
@@ -260,21 +263,22 @@ def _stage(conn,credential_key,source_report):
 
 
 def rehearse_owner_shadow(source_db, *, credential_key, phrase):
-    """Rehearse against an isolated restored DB; source never opened read-write."""
+    """Only a verified tmpfs plaintext source and a throwaway tmpfs copy.
+
+    Never use a default disk-backed TemporaryDirectory. Every legacy row
+    is fingerprinted pre/post, checked against its staged provenance index,
+    and disposed before a sanitized report can be returned.
+    """
     if os.getenv(ENABLE_FLAG,"false").lower()!="true" or phrase!=APPROVAL_PHRASE:
         raise ShadowMigrationError("Offline shadow rehearsal is disabled")
     try:
-        path=Path(source_db).expanduser().resolve(strict=True)
-    except (OSError,ValueError):
-        raise ShadowMigrationError("Isolated source file missing") from None
-    # Prevent accidentally targeting the known live Render persistent volume.
-    if path==Path("/data") or Path("/data") in path.parents:
-        raise ShadowMigrationError("Live Render volume is not a rehearsal source")
-    if not path.is_file():
-        raise ShadowMigrationError("Expected an isolated SQLite file")
-    try:
+        path, ram_root=shadow_storage.require_isolated_source(source_db)
         before=migration_preflight.inspect_database(path)
-        with tempfile.TemporaryDirectory(prefix="edgepilot-shadow-rehearsal-") as root:
+        with _conn(path,readonly=True) as original:
+            source_fingerprint=historical_reconciliation.source_content_fingerprint(
+                original,before["tableCounts"])
+        with tempfile.TemporaryDirectory(
+                prefix="edgepilot-shadow-rehearsal-",dir=str(ram_root)) as root:
             work=Path(root)/"shadow.db"
             with _conn(path,readonly=True) as src, _conn(work) as dest:
                 src.backup(dest)
@@ -282,21 +286,43 @@ def rehearse_owner_shadow(source_db, *, credential_key, phrase):
             snapshot_report=migration_preflight.inspect_database(work)
             if before!=snapshot_report:
                 raise ShadowMigrationError("Isolated source changed during snapshot")
+            with _conn(work,readonly=True) as staged_copy:
+                copy_fingerprint=historical_reconciliation.source_content_fingerprint(
+                    staged_copy,before["tableCounts"])
+            if copy_fingerprint!=source_fingerprint:
+                raise ShadowMigrationError("Source and shadow contents do not match")
             with _conn(work) as stage:
                 report=_stage(stage,credential_key,before)
             shadow=migration_preflight.inspect_database(work)
             if shadow["integrity"]!="ok" or shadow["foreignKeys"]!="ok":
                 raise ShadowMigrationError("Shadow database failed integrity validation")
+            with _conn(work,readonly=True) as archived:
+                historical_reconciliation.verify_shadow_index(
+                    archived,before["tableCounts"])
             after=migration_preflight.inspect_database(path)
-            if after!=before:
+            with _conn(path,readonly=True) as original:
+                final_fingerprint=historical_reconciliation.source_content_fingerprint(
+                    original,before["tableCounts"])
+            if after!=before or final_fingerprint!=source_fingerprint:
                 raise ShadowMigrationError("Isolated source changed during rehearsal")
-            return {**report,"sourceLogicalInventoryUnchanged":True,
-                "isolatedIntegrityVerified":True,
-                "sourceSchemaSha256":before["schemaSha256"],
-                "originalTableCounts":before["tableCounts"],
-                "migrationExecutedOnProduction":False,
-                "productionDatabaseChanged":False,
-                "tenantActivationAuthorized":False}
+        # Reaching this point proves temporary files were cleaned up.
+        if Path(root).exists():
+            raise ShadowMigrationError("Disposable temporary storage was not removed")
+        return {**report,"sourceLogicalInventoryUnchanged":True,
+            "sourceContentsUnchanged":True,
+            "sourceToCopyContentsMatched":True,
+            "historicalRowFingerprintsVerified":True,
+            "disposableWorkingCopyRemoved":True,
+            "temporaryStorageVerifiedMemoryBacked":True,
+            "isolatedIntegrityVerified":True,
+            "sourceSchemaSha256":before["schemaSha256"],
+            "originalTableCounts":before["tableCounts"],
+            "migrationExecutedOnProduction":False,
+            "productionDatabaseChanged":False,
+            "tenantActivationAuthorized":False}
+    except (shadow_storage.MemoryStorageError,
+            historical_reconciliation.HistoryReconciliationError) as error:
+        raise ShadowMigrationError(str(error)) from None
     except ShadowMigrationError:
         raise
     except (sqlite3.Error,OSError,ValueError,TypeError,KeyError):
