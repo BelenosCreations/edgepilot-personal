@@ -1,3 +1,23 @@
+## Phase 6 (v0.2.12): Historical reconciliation and provenance (inactive)
+
+The owner shadow rehearsal now calls
+`backend/engine/historical_reconciliation.py` to inventory each legacy
+history row and create a temporary provenance index. Known explicit broker
+account references must match the previously verified Public account;
+blank references and unscoped automation, quotes, paper records, risk
+configurations and activity are quarantined without owner attribution.
+Conflicting explicit account references fail closed, and unrecognized
+tables are reported for review. The source DB remains read-only and all
+index rows, fingerprints and disposable tenant mappings are destroyed
+after the test. Read `HISTORICAL_RECONCILIATION_RUNBOOK.md` for exact
+classes, limitations and cutover gates.
+
+**Inventory completeness does not mean migration completion.** No
+unscoped paper fills, global observations or activity are assigned to
+an owner without independent evidence. No production rollout, new
+login, Public connection, worker or trading mode is activated.
+
+
 ## Phase 5 (v0.2.11): Isolated owner shadow mapping rehearsal (NOT a live migration)
 
 An offline-only owner-to-tenant staging rehearsal now exists:

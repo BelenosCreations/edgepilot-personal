@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
-from . import tenant_foundation, account_scope, migration_preflight
+from . import tenant_foundation, account_scope, migration_preflight, historical_reconciliation
 
 ENABLE_FLAG="EDGE_OWNER_MIGRATION_REHEARSAL_ENABLED"
 APPROVAL_PHRASE="SHADOW REHEARSAL ONLY"
@@ -148,6 +148,7 @@ def _stage(conn,credential_key,source_report):
     tenant_foundation.setup(conn.execute("PRAGMA database_list").fetchone()["file"])
     account_scope.setup(conn.execute("PRAGMA database_list").fetchone()["file"])
     _install_shadow_tables(conn)
+    historical_reconciliation.prepare(conn)
     # A new transaction contains all mapping writes. Never create working
     # sessions or activate the real account/worker.
     conn.execute("BEGIN IMMEDIATE")
@@ -228,6 +229,8 @@ def _stage(conn,credential_key,source_report):
             (user_id,account_id,row["id"],cur.lastrowid))
         cycle_count+=1
 
+    history=historical_reconciliation.reconcile(
+        conn,source_report["tableCounts"],source_account,user_id,account_id)
     digest=hashlib.sha256(source_account.encode("utf-8")).hexdigest()
     conn.execute("""INSERT INTO tenant_shadow_rehearsal_marker
         (id,source_schema_sha256,source_account_sha256,staging_state,created_at)
@@ -248,6 +251,7 @@ def _stage(conn,credential_key,source_report):
             "brokerCredentialCiphertextCopied":True,
             "credentialVerifiedWithoutDisclosure":True,
             "newIdentitySessions":0,
+            "historicalReconciliation":history,
             "workerEnabled":False,"paperEnabled":False,"liveEnabled":False,
             "pendingHistoricalTables":sorted(
                 name for name in source_report["tableCounts"]
