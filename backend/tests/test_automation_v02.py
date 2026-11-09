@@ -3,6 +3,7 @@ import os
 import sqlite3
 import tempfile
 import unittest
+from unittest.mock import patch
 from datetime import datetime, timedelta, timezone
 from engine import automation, engine_config
 
@@ -13,6 +14,7 @@ class AutomationTests(unittest.TestCase):
         self.path=os.path.join(self.temp.name,'auto.db')
         engine_config.setup(self.path)
         automation.setup(self.path)
+        self.session_mock=self.enterContext(patch('engine.stock_session.regular_session_state',return_value='OPEN'))
 
     def tearDown(self):
         self.temp.cleanup()
@@ -118,6 +120,25 @@ class AutomationTests(unittest.TestCase):
             with self.subTest(changed=changed),self.assertRaises(ValueError):
                 automation.process_quote(self.path,'auto',q)
         self.assertEqual(automation.status(self.path)['paper']['openPositions'],[])
+
+    def test_closed_or_unverified_equity_session_never_generates_paper_fills(self):
+        automation.configure(self.path,self.paper_config())
+        self.auto_plan()
+        automation.control(self.path,'start','auto')
+        self.seed_trend()
+        for state in ('CLOSED','UNKNOWN'):
+            self.session_mock.return_value=state
+            if state=='UNKNOWN':
+                with self.assertRaisesRegex(ValueError,'calendar unavailable'):
+                    automation.process_quote(self.path,'auto',self.quote())
+            else:
+                result=automation.process_quote(self.path,'auto',self.quote())
+                self.assertEqual(result['action'],'MARKET_CLOSED')
+            self.assertEqual(automation.status(self.path)['paper']['openPositions'],[])
+        with automation.db(self.path) as con:
+            n=con.execute('SELECT count(*) AS n FROM automation_quotes WHERE engine=?',('auto',)).fetchone()['n']
+        # Seeded observations are left untouched by rejected weekend or unknown-session inputs.
+        self.assertEqual(n,2)
 
     def test_emergency_stop_persists_and_latches_all_engines(self):
         automation.control(self.path,'start','auto')
