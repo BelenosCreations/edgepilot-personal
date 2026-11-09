@@ -220,5 +220,18 @@ class AutomationTests(unittest.TestCase):
         self.assertEqual(len(automation.status(self.path)['paper']['recentTrades']),1)
 
 
+    def test_master_risk_changes_pause_running_worker_before_rearming(self):
+        automation.configure(self.path,self.paper_config())
+        self.auto_plan()
+        automation.control(self.path,'start','auto')
+        changed={**self.paper_config(),'risk_level':'conservative'}
+        result=automation.configure(self.path,changed)
+        self.assertEqual(result['master']['risk_level'],'conservative')
+        self.assertFalse(result['master']['enabled'])
+        self.assertEqual(result['engines']['auto']['state'],'paused')
+        self.assertIn('risk settings changed',result['engines']['auto']['reason'].lower())
+        self.assertEqual(len(result['paper']['openPositions']),0)
+
+
 if __name__=='__main__':
     unittest.main()
