@@ -1,8 +1,7 @@
-"""EdgePilot phase-one engine configurations.
+"""EdgePilot v0.2 isolated automation planning profiles.
 
-These are planning preferences ONLY. No order routes, workers, allocations or
-paper fills are activated here. Distinct records prevent cross-engine settings
-from leaking across Auto-Trade, Micro-Trade and 15-Minute Trading.
+Paper execution is separately and explicitly armed through the automation
+controller; no config update ever triggers live broker orders.
 """
 import json
 import sqlite3
@@ -12,7 +11,8 @@ from datetime import datetime, timezone
 DEFAULTS = {
     'auto': {
         'stock_allocation':'0.00','crypto_allocation':'0.00','max_per_trade':'0.00',
-        'loss_stop':'0.00','profit_target':'0.00','max_trades':10,
+        'loss_stop':'0.00','profit_target':'0.00','rolling_loss_stop':'0.00',
+        'stock_loss_stop':'0.00','crypto_loss_stop':'0.00','max_open':3,
         'stock_market':True,'crypto_market':True
     },
     'micro': {
@@ -28,7 +28,8 @@ DEFAULTS = {
     },
 }
 MONEY_FIELDS = {
-    'auto':('stock_allocation','crypto_allocation','max_per_trade','loss_stop','profit_target'),
+    'auto':('stock_allocation','crypto_allocation','max_per_trade','loss_stop','profit_target',
+            'rolling_loss_stop','stock_loss_stop','crypto_loss_stop'),
     'micro':('allocation','max_per_trade','loss_stop','profit_target'),
     'fifteen':('allocation','max_per_trade','loss_stop','profit_target','max_spread_pct')
 }
@@ -38,7 +39,7 @@ BOOL_FIELDS = {
     'fifteen':('crypto_market','commodity_market','fx_market'),
 }
 INT_FIELDS = {
-    'auto': {'max_trades':(1,100)},
+    'auto': {'max_open':(1,20)},
     'micro': {'max_trades':(1,100),'max_open':(1,10),'cooldown_seconds':(0,3600)},
     'fifteen': {'max_trades':(1,100),'max_open':(1,10),'cooldown_seconds':(0,3600),
                 'minimum_seconds_left':(60,840)},
@@ -109,6 +110,10 @@ def validate(engine, body):
         raise ValueError('Maximum per-trade amount cannot exceed the planned allocation')
     if allocated and Decimal(result['loss_stop'])>allocated:
         raise ValueError('Loss stop cannot exceed the planned allocation')
+    if engine=='auto' and allocated:
+        for key in ('rolling_loss_stop','stock_loss_stop','crypto_loss_stop'):
+            if Decimal(result[key])>allocated:
+                raise ValueError(key+' cannot exceed total planned allocation')
     return result
 
 def save(path,engine,body):
