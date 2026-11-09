@@ -381,6 +381,16 @@ def process_quote(path,engine,quote,commission_bps='10'):
         e=con.execute('SELECT * FROM automation_engines WHERE engine=?',(engine,)).fetchone()
         if not m['enabled'] or m['emergency'] or m['mode'] not in ('observe','paper') or e['state']!='running':
             return {'action':'SKIP','reason':'Engine inactive or emergency stop'}
+        # The Public quote may look fresh outside regular stock market hours.
+        # Gate ALL paper fills at the authoritative engine boundary, not only
+        # in the background worker. Research-only Observe mode is unaffected.
+        if m['mode']=='paper':
+            from . import stock_session
+            session=stock_session.regular_session_state()
+            if session=='UNKNOWN':
+                raise ValueError('Equity market calendar unavailable; paper fills blocked')
+            if session!='OPEN':
+                return {'action':'MARKET_CLOSED','reason':'NYSE regular session closed; paper fills skipped'}
         captured=quote['capturedAt']
         con.execute('''INSERT INTO automation_quotes(engine,symbol,asset_class,captured_at,bid,ask,provider_timestamp)
                        VALUES(?,?,'stock',?,?,?,?)''',

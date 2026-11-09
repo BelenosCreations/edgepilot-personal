@@ -152,7 +152,7 @@ def healthz():
     return {'ok':True}
 
 @app.get('/api/health')
-def health(): return {'ok':True,'version':'0.2.1-navigation-icons','time':datetime.now(timezone.utc).isoformat()}
+def health(): return {'ok':True,'version':'0.2.2-regular-stock-session-guard','time':datetime.now(timezone.utc).isoformat()}
 def token():
     global cached_token,expires
     with lock:
@@ -845,7 +845,7 @@ def scanner_run():
                 try:results.append(opportunity_scan.assess(market_snapshot.prediction_snapshot(pub,w['event'],w['symbol']),fair_pct=w['fair_pct']))
                 except Exception:issues.append({'market':'prediction','symbol':w['symbol'],'reason':'Watched contract details unavailable'})
         output={'capturedAt':datetime.now(timezone.utc).isoformat(),'mode':mode,
-          'coverage':{'eligibleEquitiesReported':total,'equitiesSampled':len(symbols),'eventsReviewed':reviewed_events,'partialUniverse':mode!='watchlist'},
+          'coverage':{'eligibleEquitiesReported':total,'watchlistSymbols':len(manual),'equitiesSampled':len(symbols),'eventsReviewed':reviewed_events,'partialUniverse':mode!='watchlist'},
           'candidates':opportunity_scan.rank(results),'unavailable':issues,'readOnly':True,'eligibleForLiveExecution':False,
           'note':'Automatic discovery samples broker listings in rotating windows; it is NOT a whole-market simultaneous scan. Rankings are quote-quality scores, NOT return forecasts.'}
         with database() as c:
