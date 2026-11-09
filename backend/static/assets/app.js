@@ -61,7 +61,6 @@ function selectFundsGuide(direction){
   ? 'Deposit to Public: Open the official Public app → Menu → Deposit, select funding source and destination, review the amount and confirm in Public. No transfer happens here.'
   : 'Withdraw from Public: Open the official Public app → Menu → Withdrawal, choose your connected bank and settled funds, review the details and confirm in Public. Buying power is not necessarily withdrawable.';
 }
-function openFunds(direction){tab('funds');selectFundsGuide(direction);}
 async function loadFundsHistory(){
  const status=$('fundsHistoryStatus'),list=$('fundsHistoryList');
  if(!status||!list)return;
