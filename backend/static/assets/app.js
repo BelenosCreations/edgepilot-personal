@@ -111,6 +111,7 @@ async function loadAutomationStatus(updateFields=false){
    presentMasterLimits();
   }
   $('automationMasterBadge').textContent=m.emergency?'EMERGENCY':m.enabled?m.mode.toUpperCase():'OFF';
+  updateAutomationStartButtons();
   $('automationEmergencyReset').disabled=!m.emergency;
   let heartbeat=m.worker_heartbeat?new Date(m.worker_heartbeat).toLocaleString():'No heartbeat yet';
   $('automationMasterStatus').textContent=(data.workerConfigured?'Server worker configured':'Server worker is OFF')+
@@ -123,7 +124,7 @@ async function loadAutomationStatus(updateFields=false){
   $('paperRolling').textContent=money(p.rolling24hRealizedNet);
   for(const [engine,st] of Object.entries(data.engines)){
     $('automationBadge_'+engine).textContent=st.state.toUpperCase();
-    $('automationReason_'+engine).textContent=st.reason||'Engine '+st.state+'.';
+    $('automationReason_'+engine).textContent='Saved mode: '+m.mode.toUpperCase()+' · '+(st.reason||'Engine '+st.state+'.');
     $('automationStats_'+engine).textContent='Simulated completed trades: '+st.completedTrades+
       ' · Open paper positions: '+st.openPositions+' · Realized simulated net: '+money(st.netRealized);
   }
@@ -159,11 +160,32 @@ async function saveAutomationMaster(){
   await loadAutomationStatus(true);
  }catch(e){$('automationMasterStatus').textContent='Master plan was not saved: '+e.message;}
 }
+function updateAutomationStartButtons(){
+ const m=automationSnapshot?.master;
+ if(!m)return;
+ const unsaved=$('automationMode').value!==m.mode;
+ for(const name of ['auto','micro','fifteen']){
+  const btn=$('automationStart_'+name);
+  if(!btn)continue;
+  btn.textContent='Start '+(m.mode==='paper'?'Paper':'Observe');
+  btn.disabled=!!m.emergency||automationSnapshot.engines[name].state==='running'||unsaved;
+  btn.title=unsaved?'Unsaved mode change. Save master safeguards before starting.':
+   'Uses saved server mode: '+m.mode.toUpperCase();
+ }
+}
+$('automationMode').addEventListener('change',updateAutomationStartButtons);
 async function automationEngineAction(engine,action){
  const m=automationSnapshot?.master;
  if(action==='start'){
-  const mode=m?.mode||'observe';
-  if(!confirm('Start '+engine+' in '+mode.toUpperCase()+
+  if(!m){alert('Refresh the automation controller before starting an engine.');return;}
+  if($('automationMode').value!==m.mode){
+   alert('Mode change not saved. The backend is still set to '+m.mode.toUpperCase()+
+    '. Save master safeguards before starting.');return;
+  }
+  if(automationSnapshot.engines[engine]?.state==='running'){
+   alert('This engine is already running in saved '+m.mode.toUpperCase()+' mode.');return;
+  }
+  if(!confirm('Start '+engine+' in SAVED '+m.mode.toUpperCase()+
    ' mode? Paper mode is experimental only. It can model losses, fees and simulated positions; it cannot send real orders.'))return;
  }
  if(action==='stop'&&!confirm('Stop '+engine+' monitoring? Existing PAPER positions will remain recorded until reconciled.'))return;
