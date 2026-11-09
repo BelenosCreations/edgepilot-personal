@@ -34,6 +34,39 @@ class SyncTests(unittest.TestCase):
         reconcile.reconcile(self.db,'acct',self.p,[self.tx])
         reconcile.reconcile(self.db,'acct',self.p,[{**self.tx,'quantity':'3'}])
         self.assertEqual(reconcile.overview(self.db,'acct')['alerts'][0]['kind'],'CHANGED_TRANSACTION')
+    def test_acknowledge_all_account_scoped_and_idempotent(self):
+        import json
+        # More than 50 alerts ensures the bulk action includes notices not on screen.
+        with reconcile.db(self.db) as c:
+            for i in range(60):
+                c.execute("INSERT INTO sync_alerts(account,kind,fingerprint,message,detail_json,created) VALUES(?,?,?,?,?,?)",
+                          ('acct','UNATTRIBUTED_SELL','bulk-'+str(i),'Review sale',json.dumps({'repurchaseAllowed':False}),'2026-11-08T00:00:00Z'))
+            c.execute("INSERT INTO sync_alerts(account,kind,fingerprint,message,detail_json,created) VALUES(?,?,?,?,?,?)",
+                      ('other','POSITION_DECREASE','other-bulk','Review other','{}','2026-11-08T00:00:00Z'))
+        before=reconcile.overview(self.db,'acct')
+        self.assertEqual(before['openAlertCount'],60)
+        self.assertEqual(len(before['alerts']),50)
+        self.assertEqual(reconcile.dismiss_all(self.db,'acct'),60)
+        self.assertEqual(reconcile.dismiss_all(self.db,'acct'),0)
+        after=reconcile.overview(self.db,'acct')
+        self.assertEqual(after['openAlertCount'],0)
+        self.assertEqual(after['alerts'],[])
+        self.assertEqual(reconcile.overview(self.db,'other')['openAlertCount'],1)
+        with reconcile.db(self.db) as c:
+            rows=c.execute("SELECT state,detail_json FROM sync_alerts WHERE account='acct'").fetchall()
+        self.assertEqual(len(rows),60)
+        self.assertTrue(all(row['state']=='ACKNOWLEDGED' for row in rows))
+        self.assertTrue(all(json.loads(row['detail_json'])['repurchaseAllowed'] is False for row in rows))
+
+    def test_acknowledge_all_does_not_change_broker_history(self):
+        transaction={**self.tx,'id':'sale-bulk','side':'SELL'}
+        reconcile.reconcile(self.db,'acct',self.p,[transaction])
+        self.assertEqual(reconcile.overview(self.db,'acct')['openAlertCount'],1)
+        self.assertEqual(reconcile.dismiss_all(self.db,'acct'),1)
+        self.assertEqual(reconcile.overview(self.db,'acct')['totalTransactionsCaptured'],1)
+        with self.assertRaisesRegex(ValueError,'Select a Public account'):
+            reconcile.dismiss_all(self.db,'')
+
     def test_reject_incomplete_portfolio(self):
         with self.assertRaisesRegex(ValueError,'required'):reconcile.reconcile(self.db,'acct',{'positions':[]},[])
         self.assertEqual(reconcile.overview(self.db,'acct')['totalTransactionsCaptured'],0)
