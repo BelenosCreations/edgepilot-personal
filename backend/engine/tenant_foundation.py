@@ -14,9 +14,8 @@ import os
 import sqlite3
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet
 
 SCHEMA_VERSION = 1
 _ALLOWED_ROLES = frozenset(("owner", "member"))
@@ -49,11 +48,10 @@ def _open(path):
 def setup(path):
     """Add *new* v1 tenant tables. Never alter or copy legacy user data."""
     with _open(path) as conn:
-        conn.execute("BEGIN IMMEDIATE")
-        conn.executescript("""
+        conn.executescript("""BEGIN IMMEDIATE;
         CREATE TABLE IF NOT EXISTS tenant_schema_meta (
             id INTEGER PRIMARY KEY CHECK (id=1),
-            schema_version INTEGER NOT NULL CHECK(schema_version=1)
+            schema_version INTEGER NOT NULL CHECK(schema_version>0)
         );
         CREATE TABLE IF NOT EXISTS tenant_users (
             user_id TEXT PRIMARY KEY,
