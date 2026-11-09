@@ -298,6 +298,9 @@ def process_quote(path,engine,quote,commission_bps='10'):
         cfg=engine_config.read(path,engine)['config']
         capital=dec(m['paper_capital'])
         level=LEVELS[m['risk_level']]
+        # Revalue matching open paper positions before testing drawdown/rolling limits.
+        con.execute("UPDATE paper_positions SET last_bid=?,last_ask=? WHERE status='OPEN' AND engine=? AND symbol=?",
+                    (cash(bid),cash(ask),engine,symbol))
         realized,unrealized,exposure,positions=_pnl(con)
         equity=capital+realized+unrealized
         protection=capital*dec(m['protected_pct'])/100
@@ -392,6 +395,25 @@ def process_quote(path,engine,quote,commission_bps='10'):
         event(con,engine,'PAPER_ENTRY',f'{symbol} modeled ask {cash(ask)} qty {qty}; no broker order')
         return {'action':'PAPER_ENTRY','symbol':symbol,'qty':str(qty),'notional':cash(cost),
                 'warning':'Experimental paper trend rule, not a validated profitable strategy'}
+
+
+def fail_closed(path,reason):
+    """Any market-data or worker failure pauses engines and requires human restart."""
+    with db(path) as con:
+        con.execute('BEGIN IMMEDIATE')
+        for engine in ENGINES:
+            _pause(con,engine,str(reason)[:160])
+        con.execute('UPDATE automation_master SET enabled=0,last_error=?,updated_at=? WHERE id=1',
+                    (str(reason)[:240],now(),))
+        event(con,None,'FAIL_CLOSED',str(reason)[:220])
+    return status(path)
+
+
+def record_research(path,engine,detail):
+    if engine not in ENGINES:
+        raise ValueError('Unknown trading engine')
+    with db(path) as con:
+        event(con,engine,'OBSERVATION',detail)
 
 
 def acquire_lease(path,worker_id,seconds=120):
