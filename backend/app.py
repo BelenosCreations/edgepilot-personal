@@ -90,6 +90,9 @@ def authenticate():
     if request.method in ('POST','PUT','PATCH','DELETE') and not same_origin_request():
         return fail('Same-origin request required',403)
     if request.path.startswith('/api/identity/'):
+        # Identity account reads require a second independently enabled gate.
+        if request.path.startswith('/api/identity/accounts') and not tenant_read_enabled:
+            return fail('Not found',404)
         # Identity sessions cannot authenticate any existing broker, settings,
         # monitoring or order API. All routes here remain disabled by default.
         if not identity_auth_enabled:
