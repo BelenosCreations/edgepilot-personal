@@ -86,6 +86,9 @@ def setup(path):
         con.execute('''CREATE TABLE IF NOT EXISTS automation_events(
             id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, engine TEXT,
             event TEXT NOT NULL, details TEXT NOT NULL)''')
+        con.execute('''CREATE TABLE IF NOT EXISTS automation_highwater(
+            id INTEGER PRIMARY KEY CHECK(id=1), peak_equity TEXT NOT NULL)''')
+        con.execute("INSERT OR IGNORE INTO automation_highwater(id,peak_equity) VALUES(1,'0.00')")
         con.execute('''CREATE TABLE IF NOT EXISTS automation_worker_lease(
             id INTEGER PRIMARY KEY CHECK(id=1), worker_id TEXT NOT NULL, expires_at TEXT NOT NULL)''')
 
@@ -209,6 +212,7 @@ def status(path):
             qty,entry_ask,exit_bid,entry_fee,exit_fee,realized_net,opened_at,closed_at,close_reason
             FROM paper_positions WHERE status='CLOSED' ORDER BY closed_at DESC LIMIT 50''')]
         events=[dict(r) for r in con.execute('SELECT ts,engine,event,details FROM automation_events ORDER BY id DESC LIMIT 30')]
+        peak=con.execute('SELECT peak_equity FROM automation_highwater WHERE id=1').fetchone()['peak_equity']
         recent=datetime.now(timezone.utc)-timedelta(hours=24)
         rolling=sum((dec(r['realized_net']) for r in con.execute(
             "SELECT realized_net FROM paper_positions WHERE status='CLOSED' AND closed_at>=?",
@@ -224,7 +228,7 @@ def status(path):
             'riskProfile':LEVELS[m['risk_level']],
             'engines':eng,'paper':{
                 'capital':cash(capital),'equity':cash(equity),'realizedNet':cash(realized),
-                'unrealizedNet':cash(unrealized),'exposure':cash(exposure),
+                'unrealizedNet':cash(unrealized),'exposure':cash(exposure),'peakEquity':cash(max(dec(peak),capital)),
                 'rolling24hRealizedNet':cash(rolling),'openPositions':positions,
                 'recentTrades':closed},
             'events':events,
@@ -303,6 +307,15 @@ def process_quote(path,engine,quote,commission_bps='10'):
                     (cash(bid),cash(ask),engine,symbol))
         realized,unrealized,exposure,positions=_pnl(con)
         equity=capital+realized+unrealized
+        old_peak=dec(con.execute('SELECT peak_equity FROM automation_highwater WHERE id=1').fetchone()['peak_equity'])
+        peak=max(capital,old_peak,equity)
+        if peak>old_peak:
+            con.execute('UPDATE automation_highwater SET peak_equity=? WHERE id=1',(cash(peak),))
+        profit_lock=dec(m['profit_lock_pct'])
+        # Protect a percentage of already accrued virtual gains from peak equity.
+        if profit_lock>0 and peak>capital and equity<=peak-(peak-capital)*profit_lock/100:
+            for x in ENGINES:_pause(con,x,'Virtual high-water profit-lock drawdown triggered')
+            return {'action':'PAUSE','reason':'Profit-lock drawdown reached; manual resume required'}
         protection=capital*dec(m['protected_pct'])/100
         rolling_limit=capital*dec(level['rollingLossPct'])/100
         drawdown_limit=capital*dec(level['drawdownPct'])/100
@@ -310,7 +323,7 @@ def process_quote(path,engine,quote,commission_bps='10'):
         recent=sum((dec(r['realized_net']) for r in con.execute(
             "SELECT realized_net FROM paper_positions WHERE status='CLOSED' AND closed_at>=?",
             (rolled.isoformat(),))),Decimal(0))
-        if equity<=protection or equity<=capital-drawdown_limit or recent<=-rolling_limit:
+        if equity<=protection or equity<=peak-drawdown_limit or recent<=-rolling_limit:
             reason='Paper account drawdown or rolling loss threshold reached; manual resume required'
             for x in ENGINES:_pause(con,x,reason)
             return {'action':'PAUSE','reason':reason}
@@ -326,6 +339,15 @@ def process_quote(path,engine,quote,commission_bps='10'):
         if dec(cfg['loss_stop'])>0 and local_realized<=-dec(cfg['loss_stop']):
             _pause(con,engine,'Engine dollar loss pause reached')
             return {'action':'PAUSE','reason':'Engine loss stop reached'}
+        if engine=='auto' and dec(cfg.get('stock_loss_stop','0'))>0:
+            stock_loss=sum((dec(r['realized_net']) for r in con.execute(
+                "SELECT realized_net FROM paper_positions WHERE engine=? AND asset_class='stock' AND status='CLOSED'",(engine,))),Decimal(0))
+            if stock_loss<=-dec(cfg['stock_loss_stop']):
+                _pause(con,engine,'Auto-Trade stock dollar loss pause triggered')
+                return {'action':'PAUSE','reason':'Auto-Trade stock loss pause reached'}
+        if engine=='auto' and dec(cfg.get('profit_target','0'))>0 and local_realized>=dec(cfg['profit_target']):
+            _pause(con,engine,'Optional cumulative profit pause reached')
+            return {'action':'PAUSE','reason':'Configured Auto-Trade profit pause reached'}
         if engine=='auto' and dec(cfg.get('rolling_loss_stop','0'))>0:
             local_rolling=sum((dec(r['realized_net']) for r in con.execute(
                 "SELECT realized_net FROM paper_positions WHERE engine=? AND status='CLOSED' AND closed_at>=?",(engine,rolled.isoformat()))),Decimal(0))
@@ -375,7 +397,14 @@ def process_quote(path,engine,quote,commission_bps='10'):
             return {'action':'SKIP','reason':'Entry cooldown'}
         max_risk=capital*dec(level['riskPct'])/100
         global_exposure_cap=capital*dec(level['maxExposurePct'])/100
-        remaining=min(equity-protection-exposure,global_exposure_cap-exposure)
+        # Reinvest only the approved share of positive *realized* virtual gains.
+        # Reserve the remaining opted-out share as non-tradable paper cash.
+        gains=max(Decimal(0),realized)
+        reserve=gains*dec(m['reserve_profit_pct'])/100
+        compounded=gains*dec(m['compound_pct'])/100
+        incremental=min(compounded,capital*Decimal('.25'))
+        remaining=min(equity-protection-exposure-reserve,
+                      global_exposure_cap+incremental-exposure)
         local_exposure=sum((dec(p['entry_ask'])*dec(p['qty'])+dec(p['entry_fee']) for p in this_open),Decimal(0))
         budget=min(remaining,limits-local_exposure,dec(cfg['max_per_trade']),max_risk)
         # Stocks use a $5 simulated minimum order, matching current fractional equity floor.
