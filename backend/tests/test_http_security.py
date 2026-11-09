@@ -139,6 +139,8 @@ class HttpSecurityTests(unittest.TestCase):
         status=self.client.get(endpoint,base_url=self.base_url)
         self.assertEqual(status.status_code,200)
         self.assertFalse(status.get_json()['master']['liveTradingAvailable'])
+        self.assertIn('observationHealth',status.get_json())
+        self.assertIsNone(status.get_json()['observationHealth']['lastCycle'])
         headers={**self.origin,'X-Edge-CSRF':csrf}
         self.assertEqual(self.client.post('/api/automation/config',base_url=self.base_url,
                           headers=self.origin,json={}).status_code,403)

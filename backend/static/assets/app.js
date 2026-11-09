@@ -95,6 +95,49 @@ function presentMasterLimits(){
  const el=$('automationProfileLimits');if(el)el.textContent=RISK_TEXT[$('automationRiskLevel').value]||'Unknown risk profile';
 }
 $('automationRiskLevel').addEventListener('change',presentMasterLimits);
+function observationTime(timestamp){
+ if(!timestamp)return 'Never';
+ const date=new Date(timestamp);
+ return Number.isNaN(date.valueOf())?'Invalid timestamp':date.toLocaleString();
+}
+function renderObservationHealth(report,master){
+ const latest=report?.lastCycle;
+ const counters=report?.last24h;
+ const badge=$('observationHealthBadge');
+ const status=$('observationHealthStatus');
+ if(!latest){
+  badge.textContent='NO SCAN YET';
+  status.textContent='No completed market scan has been recorded. A worker heartbeat alone does not verify quote collection.';
+  $('observationLastCycle').textContent='Never';
+  $('observationLastSuccess').textContent=observationTime(report?.lastSuccessfulScanAt);
+  $('observationAccepted').textContent='—';
+  $('observationRejected').textContent='—';
+  $('observationSymbols').textContent='Symbols attempted: none yet';
+  $('observationMarketSession').textContent='NYSE regular session: not checked';
+  $('observationQuoteAge').textContent='Provider quote age at capture: unavailable';
+ }else{
+  badge.textContent=latest.state.replaceAll('_',' ');
+  status.textContent='Latest worker scan: '+latest.state.replaceAll('_',' ')+' · Saved mode: '+latest.mode.toUpperCase()+
+    ' · Worker heartbeat and quote verification are separate checks.';
+  $('observationLastCycle').textContent=observationTime(latest.completedAt);
+  $('observationLastSuccess').textContent=observationTime(report.lastSuccessfulScanAt);
+  $('observationAccepted').textContent=String(latest.quotesAccepted);
+  $('observationRejected').textContent=String(latest.quotesRejected);
+  const attempted=latest.symbols||[];
+  $('observationSymbols').textContent='Symbols attempted ('+attempted.length+'): '+(attempted.length?attempted.slice(0,8).join(', ')+(attempted.length>8?' and '+(attempted.length-8)+' more':''):'none');
+  $('observationMarketSession').textContent='NYSE scheduled regular session: '+latest.marketSession+
+    ' (calendar only; not a broker halt or execution check)';
+  $('observationQuoteAge').textContent='Provider quote age at capture: '+
+    (latest.quoteAgeSeconds===null?'unavailable':latest.quoteAgeSeconds+' seconds');
+ }
+ $('observation24Hours').textContent=counters?
+   'Last 24h · '+counters.cycles+' completed cycles · '+counters.cyclesWithVerifiedQuotes+
+   ' cycles with verified quotes · '+counters.quotesAccepted+' quotes accepted · '+
+   counters.quotesRejected+' quotes rejected':'No scan history recorded.';
+ const issue=latest?.issue;
+ $('observationIssue').classList.toggle('hidden',!issue);
+ $('observationIssue').textContent=issue?'Latest scan warning: '+issue:'';
+}
 async function loadAutomationStatus(updateFields=false){
  if(!authenticated)return;
  try{
@@ -117,6 +160,7 @@ async function loadAutomationStatus(updateFields=false){
    ' · '+(m.emergency?'Emergency locked':m.enabled?'Monitor active':'Inactive')+
    ' · Last heartbeat: '+heartbeat+(m.last_error?' · Latest issue: '+m.last_error:'')+
    ' · Live orders disabled. Paper models experimental.';
+  renderObservationHealth(data.observationHealth,m);
   $('paperEquity').textContent=money(p.equity);
   $('paperNet').textContent=money(p.realizedNet);
   $('paperExposure').textContent=money(p.exposure);
@@ -146,7 +190,7 @@ async function loadAutomationStatus(updateFields=false){
     const line=document.createElement('div');line.className='log';
     line.textContent=x.ts.slice(0,19)+' · '+(x.engine||'GLOBAL')+' · '+x.event+' · '+x.details;events.append(line);
   }
- }catch(e){$('automationMasterStatus').textContent='Automation controller unavailable: '+e.message;}
+ }catch(e){$('automationMasterStatus').textContent='Automation controller unavailable: '+e.message;$('observationHealthStatus').textContent='Observation diagnostics unavailable: '+e.message;}
 }
 async function saveAutomationMaster(){
  const body={
