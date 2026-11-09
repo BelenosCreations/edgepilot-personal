@@ -9,7 +9,7 @@ from urllib.parse import quote
 import requests
 from flask import Flask, jsonify, request, send_from_directory
 from dotenv import load_dotenv
-from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker
+from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health
 ROOT=Path(__file__).parent; load_dotenv(ROOT/'.env'); DB=Path(os.getenv('EDGE_DB_PATH',str(ROOT/'edgepilot.db'))); DB.parent.mkdir(parents=True,exist_ok=True)
 app=Flask(__name__,static_folder='static',static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # CSV/history research limit
@@ -37,6 +37,7 @@ ledger.setup(str(DB))
 reconcile.setup(str(DB))
 engine_config.setup(str(DB))
 automation.setup(str(DB))
+observation_health.setup(str(DB))
 order_audit.setup(str(DB))
 sessions=session_auth.SessionStore(str(DB))
 sessions.setup()
@@ -152,7 +153,7 @@ def healthz():
     return {'ok':True}
 
 @app.get('/api/health')
-def health(): return {'ok':True,'version':'0.2.4-funds-navigation-cleanup','time':datetime.now(timezone.utc).isoformat()}
+def health(): return {'ok':True,'version':'0.2.5-observation-health','time':datetime.now(timezone.utc).isoformat()}
 def token():
     global cached_token,expires
     with lock:
@@ -277,6 +278,7 @@ def save_engine_profile(engine):
 @app.get('/api/automation/status')
 def automation_status():
     result=automation.status(str(DB))
+    result['observationHealth']=observation_health.report(str(DB))
     result['workerConfigured']=os.getenv('EDGE_AUTOMATION_WORKER_ENABLED','false').lower()=='true'
     return result
 
