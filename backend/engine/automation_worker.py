@@ -34,6 +34,17 @@ def one_cycle(appmod, worker_id):
     if not m['mode'] in ('observe','paper'):
         automation.fail_closed(path,'Unsupported automation mode')
         return {'status':'FAIL_CLOSED','scanned':0}
+    # A recent Public quote does not prove the NYSE cash equity session is
+    # open. Do not poll for modeled fills when the regular exchange is closed.
+    if m['mode']=='paper' and any(e in engines for e in ('auto','micro')):
+        from . import stock_session
+        market_state=stock_session.regular_session_state()
+        if market_state=='UNKNOWN':
+            automation.fail_closed(path,'Stock exchange schedule unavailable; manual resume required')
+            return {'status':'PAUSED_NO_CALENDAR','scanned':0}
+        if market_state=='CLOSED':
+            automation.heartbeat(path,worker_id)
+            return {'status':'MARKET_CLOSED','scanned':0}
     try:
         account=appmod.selected_account()
         from . import opportunity_scan, market_snapshot
@@ -74,7 +85,11 @@ def one_cycle(appmod, worker_id):
                 continue
             for engine in stock_engines:
                 try:
-                    automation.process_quote(path,engine,quote)
+                    result=automation.process_quote(path,engine,quote)
+                    if result['action']=='MARKET_CLOSED':
+                        # Session closed between worker preflight and processing.
+                        automation.heartbeat(path,worker_id)
+                        return {'status':'MARKET_CLOSED','scanned':scanned}
                     scanned+=1
                     if symbol in required_symbols:
                         seen_open.add(symbol)
