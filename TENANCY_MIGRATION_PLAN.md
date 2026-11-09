@@ -1,3 +1,23 @@
+## Phase 5 (v0.2.11): Isolated owner shadow mapping rehearsal (NOT a live migration)
+
+An offline-only owner-to-tenant staging rehearsal now exists:
+`backend/engine/owner_shadow_migration.py` and
+`backend/tools/owner_shadow_rehearsal.py`, with the procedure and blockers
+in `OWNER_MIGRATION_SHADOW_RUNBOOK.md`. The tool reads only an already
+restored, isolated database copy, uses SQLite backup to create a second
+throwaway working copy, verifies the legacy encrypted Public credential using
+an externally supplied vault key, and creates a *dormant* user, account,
+credential connection, quarantined settings and fully traceable history
+mapping in the temporary copy. All source records are left unchanged.
+
+It will refuse the live `/data` mount, a wrong key, conflicting account
+references, existing tenants, missing selection or invalid history. It
+reports pending legacy history/automation tables as blockers. **There is
+no live migration operation, new login provisioning or tenant activation,
+and no changes to Render feature flags.** Production migration will require
+new explicit approval, a fresh encrypted backup and a maintenance window.
+
+
 ## Phase 4 (v0.2.10): Offline migration backup and restore rehearsal (NOT executed)
 
 Source-only tools have been added under `backend/engine/migration_preflight.py`
