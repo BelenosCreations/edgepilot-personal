@@ -1,3 +1,12 @@
+## Phase 7 (v0.2.13): Verified memory-backed rehearsal and quarantine review (inactive)
+
+Phase 6 now reports audited evidence-based review groups within historicalReconciliation.quarantineReview, including every quarantined row. Global watchlists/risk configurations, paper simulation, market observations, session tokens and credentials are never silently attributed or activated. Matching timestamps, SPY symbols, or a single selected account do not provide proof of record ownership.
+
+Plaintext safety: The restored source MUST be under a genuine Linux /dev/shm tmpfs. The tool rejects disk-backed inputs, symlinks pointing off tmpfs, and missing/insufficient memory capacity; creates its working copy with TemporaryDirectory(dir="/dev/shm"); verifies every original row's content fingerprint against the staged index; and discards that directory before reporting success. No default system temp directory is used for plaintext in this shadow rehearsal. Standalone migration_preflight backup/restore utilities remain separate and must be run only with the already approved memory-backed procedure.
+
+Detailed runbook: QUARANTINE_REVIEW_RUNBOOK.md. Live migration, new accounts, and trading activation require separate future approval.
+
+
 # EdgePilot Phase 6 — Historical provenance and account attribution
 
 **Status: inactive, synthetic/isolated rehearsal only.** No production data
