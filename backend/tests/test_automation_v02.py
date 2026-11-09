@@ -233,5 +233,25 @@ class AutomationTests(unittest.TestCase):
         self.assertEqual(len(result['paper']['openPositions']),0)
 
 
+    def test_paper_metrics_are_fee_aware_and_disclose_sample(self):
+        automation.configure(self.path,self.paper_config())
+        self.auto_plan()
+        automation.control(self.path,'start','auto')
+        self.seed_trend()
+        self.assertEqual(automation.process_quote(self.path,'auto',self.quote())['action'],'PAPER_ENTRY')
+        self.assertEqual(automation.process_quote(self.path,'auto',self.quote('106.00','106.02'))['action'],'PAPER_EXIT')
+        summary=automation.status(self.path)
+        perf=summary['performance']
+        self.assertEqual(perf['totalCompletedTrades'],1)
+        self.assertFalse(perf['sampleTruncated'])
+        by_auto=perf['byEngine']['auto']
+        self.assertEqual(by_auto['trades'],1)
+        self.assertEqual(by_auto['wins'],1)
+        self.assertIn('unvalidated_momentum',by_auto['strategies'])
+        self.assertGreaterEqual(float(by_auto['assumedFees']),0.0)
+        self.assertIn('Simulated',perf['source'])
+        self.assertIn('UNVALIDATED',perf['strategyReadiness'])
+
+
 if __name__=='__main__':
     unittest.main()
