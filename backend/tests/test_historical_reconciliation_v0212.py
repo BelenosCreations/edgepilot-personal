@@ -47,7 +47,7 @@ class Phase6HistoricalReconciliationTests(unittest.TestCase):
             c.execute("INSERT INTO account_snapshots VALUES(1,'TEST-BROKER-A',?,?,?)",
                       (UTC,"123.00","24.00"))
             c.execute("""INSERT INTO orders(id,account,symbol,state)
-                VALUES('order-1','TEST-BROKER-A','SPY')""")
+                VALUES('order-1','TEST-BROKER-A','SPY','NEW')""")
             c.execute("""INSERT INTO orders(id,account,symbol,state)
                 VALUES('order-2',NULL,'QQQ')""")
             c.execute("INSERT INTO activity VALUES(1,?,'private audit comment')",(UTC,))
