@@ -174,6 +174,9 @@ def control(path,action,engine=None):
                 raise ValueError('Global Emergency Stop must be reset first')
             if dec(m['paper_capital'])<=0 and m['mode']=='paper':
                 raise ValueError('Configure a positive virtual paper balance first')
+
+            if m['mode']=='paper' and engine=='fifteen':
+                raise ValueError('15-minute settlement-safe paper execution is not yet validated; Observe mode only')
             config=engine_config.read(path,engine)
             if m['mode']=='paper' and not config['configured']:
                 raise ValueError('Save this engine plan before starting paper automation')
