@@ -298,6 +298,10 @@ def automation_command(engine,action):
         confirmation='START PAPER' if m['mode']=='paper' else 'START OBSERVE'
         if action=='start' and data.get('confirmation')!=confirmation:
             return fail('Explicit '+confirmation+' confirmation required',400)
+        if action=='start' and os.getenv('EDGE_AUTOMATION_WORKER_ENABLED','false').lower()!='true':
+            return fail('Server-side market observer is not running; automation cannot start',503)
+        if action=='start' and not settings().get('account_id'):
+            return fail('Select a verified Public account first for read-only market quotes',400)
         with lock:
             result=automation.control(str(DB),action,engine)
             put('live_armed','0')
