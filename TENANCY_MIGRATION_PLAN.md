@@ -1,3 +1,23 @@
+## Phase 4 (v0.2.10): Offline migration backup and restore rehearsal (NOT executed)
+
+Source-only tools have been added under `backend/engine/migration_preflight.py`
+and `backend/tools/migration_rehearsal.py`, with instructions in
+`MIGRATION_REHEARSAL_RUNBOOK.md`. They do not connect to Flask or start in Render.
+They support sanitized read-only database inspection, streaming AES-256-GCM
+SQLite backups, authenticated restore to a brand-new destination, and a
+full temporary restore rehearsal. Opt-in requires
+`EDGE_MIGRATION_TOOLS_ENABLED=true` and an explicit operator approval phrase.
+The original database and all existing owner data are untouched.
+
+**No live backup, production validation, account migration or switch-over
+has occurred.** A future explicitly approved maintenance window must freeze
+writers, preserve both the independent backup key and separate Render Public
+credential vault key, verify recoverability on encrypted scratch, document
+row counts and checksums, and confirm the owner’s account details before
+any migration script is built or used. Avoid uploading backup files or keys
+to GitHub or chat. A successful dry run does not enable other users.
+
+
 ## Phase 3 (v0.2.9): Dormant account-scoped authorization and journals
 
 The new `account_scope` module prepares isolated tables for portfolio snapshots,
