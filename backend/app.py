@@ -7,9 +7,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
 import requests
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, g
 from dotenv import load_dotenv
-from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation
+from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth
 ROOT=Path(__file__).parent; load_dotenv(ROOT/'.env'); DB=Path(os.getenv('EDGE_DB_PATH',str(ROOT/'edgepilot.db'))); DB.parent.mkdir(parents=True,exist_ok=True)
 app=Flask(__name__,static_folder='static',static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # CSV/history research limit
@@ -43,10 +43,18 @@ sessions=session_auth.SessionStore(str(DB))
 sessions.setup()
 credential_vault=broker_credentials.BrokerCredentialStore(str(DB))
 credential_vault.setup()
-# Inactive multi-tenant schema preparation is opt-in. Existing owner settings,
-# Public secret, sessions, automation and ledger are never migrated here.
-if os.getenv('EDGE_TENANT_SCHEMA_PREPARE','false').lower()=='true':
+# The new identity subsystem is deliberately independent of legacy sessions.
+# Activation requires BOTH separate flags and an explicit migration review.
+tenant_schema_enabled=os.getenv('EDGE_TENANT_SCHEMA_PREPARE','false').lower()=='true'
+identity_auth_enabled=os.getenv('EDGE_IDENTITY_AUTH_ENABLED','false').lower()=='true'
+if identity_auth_enabled and not tenant_schema_enabled:
+    raise RuntimeError('Identity subsystem requires the prepared tenant schema')
+identity_store=None
+if tenant_schema_enabled:
     tenant_foundation.setup(str(DB))
+    if identity_auth_enabled:
+        identity_auth.setup(str(DB))
+        identity_store=identity_auth.IdentityStore(str(DB))
 def settings():
     with database() as c: return {r['k']:r['v'] for r in c.execute('SELECT * FROM settings')}
 def put(k,v):
@@ -74,6 +82,22 @@ def authenticate():
     # All state-changing endpoints, including login, require same-origin browser calls.
     if request.method in ('POST','PUT','PATCH','DELETE') and not same_origin_request():
         return fail('Same-origin request required',403)
+    if request.path.startswith('/api/identity/'):
+        # Identity sessions cannot authenticate any existing broker, settings,
+        # monitoring or order API. All routes here remain disabled by default.
+        if not identity_auth_enabled:
+            return fail('Not found',404)
+        if request.path=='/api/identity/login' and request.method=='POST':
+            return
+        token=request.cookies.get(identity_auth.COOKIE_NAME,'')
+        principal=identity_store.principal(token)
+        if principal is None:
+            return fail('Not authenticated',401)
+        if request.method in ('POST','PUT','PATCH','DELETE'):
+            if identity_store.principal(token,request.headers.get('X-Edge-Identity-CSRF','')) is None:
+                return fail('Invalid request verification token',403)
+        g.edge_identity=principal
+        return
     if request.path=='/api/login':
         return
     session=request.cookies.get(session_auth.COOKIE_NAME,'')
@@ -124,6 +148,50 @@ def login():
     return result
 
 
+# Separate identity-only endpoints: never authorize legacy owner operations.
+# The feature is opt-in and there is intentionally no HTTP registration flow.
+@app.post('/api/identity/login')
+def identity_login():
+    payload=request.get_json(silent=True)
+    if not isinstance(payload,dict) or set(payload)!={'username','password'}:
+        return fail('Invalid login',401)
+    try:
+        issued=identity_store.authenticate(
+            payload['username'],payload['password'],request.remote_addr or 'unknown')
+    except identity_auth.TooManyAttempts:
+        return fail('Too many attempts. Try later.',429)
+    if issued is None:
+        return fail('Invalid login',401)
+    response=jsonify({'ok':True,'csrf':issued['csrf'],
+        'expiresAt':datetime.fromtimestamp(issued['expires_at'],timezone.utc).isoformat()})
+    response.set_cookie(identity_auth.COOKIE_NAME,issued['token'],
+        max_age=identity_auth.SESSION_SECONDS,
+        secure=True,httponly=True,samesite='Strict',path='/')
+    return response
+
+
+@app.get('/api/identity/session')
+def identity_session():
+    token=request.cookies.get(identity_auth.COOKIE_NAME,'')
+    rotated=identity_store.rotate_csrf(token)
+    if rotated is None:
+        return fail('Not authenticated',401)
+    principal,csrf=rotated
+    return {'ok':True,'csrf':csrf,
+            'user':{'userId':principal['user_id'],
+                    'label':principal['label'],'role':principal['role']},
+            'scope':'identity_only_no_broker_access'}
+
+
+@app.post('/api/identity/logout')
+def identity_logout():
+    identity_store.revoke(request.cookies.get(identity_auth.COOKIE_NAME,''))
+    response=jsonify({'ok':True})
+    response.delete_cookie(identity_auth.COOKIE_NAME,path='/',
+                           secure=True,httponly=True,samesite='Strict')
+    return response
+
+
 @app.get('/api/session')
 def get_session():
     session=request.cookies.get(session_auth.COOKIE_NAME,'')
@@ -157,7 +225,7 @@ def healthz():
     return {'ok':True}
 
 @app.get('/api/health')
-def health(): return {'ok':True,'version':'0.2.7-tenant-foundation-inactive','time':datetime.now(timezone.utc).isoformat()}
+def health(): return {'ok':True,'version':'0.2.8-identity-auth-inactive','time':datetime.now(timezone.utc).isoformat()}
 def token():
     global cached_token,expires
     with lock:
