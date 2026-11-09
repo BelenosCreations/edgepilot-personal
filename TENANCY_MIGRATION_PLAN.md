@@ -1,3 +1,48 @@
+## Phase 3 (v0.2.9): Dormant account-scoped authorization and journals
+
+The new `account_scope` module prepares isolated tables for portfolio snapshots,
+observation cycles, account-level worker leases, and a fail-closed per-account
+runtime status: Observe selected, worker/paper/live enabled flags all ZERO.
+The scoped store requires the session principal from `IdentityStore.principal`
+and checks ownership/active status against both `tenant_accounts` and the
+owning Public connection. Cross-user or revoked account access fails closed.
+
+The additional independent activation gate is
+`EDGE_TENANT_ACCOUNT_READS_ENABLED=true` alongside the previous
+`EDGE_TENANT_SCHEMA_PREPARE=true` and
+`EDGE_IDENTITY_AUTH_ENABLED=true`. All remain **false by default**.
+These gates are NOT being enabled in Render. Even when they are enabled in
+an isolated test environment, only read-only identity endpoints can list
+authorized accounts and show stored summaries:
+`GET /api/identity/accounts` and
+`GET /api/identity/accounts/<id>/summary`.
+These routes do not call Public or scan markets, and cannot place orders.
+Each uses only the verified cookie identity, not an HTTP user_id parameter.
+
+The *future* per-account worker storage has separate transactional leases,
+with one active worker per account and no cross-account status mutation. It is
+not wired to the existing single-account observation worker, broker adapter,
+or an Android control. There are no tenant worker threads, live quote calls,
+or records initialized from the existing account. New portfolio balances
+in tests are synthetic test fixtures, not actual account values.
+
+**Remaining required gates before migration or shared use:**
+- External review of Public Individual API terms for each deployment model.
+- Verified full backup + restoration rehearsal of current SQLite and encryption
+  material; require owner approval before initiating any live migration.
+- Build a provider-authenticated per-account brokerage adapter, credential
+  rotation and least-privilege account selection; bind account IDs to their
+  exact owning connection and fail closed on token mismatches.
+- Refactor and test **every** existing route, worker, cache, accounting,
+  history and risk allocation path to use authenticated tenant/account context
+  (not just the new read-only routes). Provide an isolation test matrix.
+- Integrate worker scheduling, per-account quotas and alerts; preserve existing
+  saved Observe state and avoid silent service interruptions during cutover.
+- Develop owner self-account switching, admin invitations, MFA/passkeys,
+  recovery, revocation and an audited staged rollout. No user sign-up is
+  currently permitted.
+
+
 ## Phase 2 (v0.2.8): independent identity authentication (still inactive)
 
 The separate Argon2id identity module now supports backend-internal identity
