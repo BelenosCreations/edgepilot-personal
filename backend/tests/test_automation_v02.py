@@ -98,7 +98,8 @@ class AutomationTests(unittest.TestCase):
         self.assertGreater(float(entry['qty']),0)
         paper=automation.status(self.path)['paper']
         self.assertEqual(len(paper['openPositions']),1)
-        self.assertLessEqual(float(paper['exposure']),10.0)
+        # The 0.5% preset caps estimated loss-at-model-stop, not gross stock notional.
+        self.assertLessEqual(float(paper['exposure']),50.0)
         out=automation.process_quote(self.path,'auto',self.quote('106.00','106.02'))
         self.assertEqual(out['action'],'PAPER_EXIT')
         after=automation.status(self.path)['paper']
