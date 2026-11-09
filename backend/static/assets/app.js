@@ -127,14 +127,20 @@ async function loadAutomationStatus(updateFields=false){
     $('automationStats_'+engine).textContent='Simulated completed trades: '+st.completedTrades+
       ' · Open paper positions: '+st.openPositions+' · Realized simulated net: '+money(st.netRealized);
   }
-  const closed=p.recentTrades||[];
-  const wins=closed.filter(x=>Number(x.realized_net)>0).length;
-  const fees=closed.reduce((a,x)=>a+Number(x.entry_fee||0)+Number(x.exit_fee||0),0);
-  $('automationPerformance').textContent=closed.length+
-   ' recent completed paper trades · '+wins+' profitable · modeled win rate: '+
-   (closed.length?(wins/closed.length*100).toFixed(1)+'%':'—')+
-   ' · modeled entry/exit fees: '+money(fees)+
-   ' · This does not include real broker fills or prove a profitable strategy.';
+  const perf=data.performance||{};
+  const lines=['Simulated paper trading only — never broker-confirmed execution.'];
+  for(const [engine,stats] of Object.entries(perf.byEngine||{})){
+    lines.push(engine.toUpperCase()+': '+stats.trades+' completed · '+
+      stats.wins+' wins / '+stats.losses+' losses · '+stats.winRatePct+
+      '% modeled win rate · '+money(stats.modeledNet)+' modeled net · '+
+      money(stats.assumedFees)+' assumed fees · '+money(stats.closedTradeDrawdown)+
+      ' realized closed-trade drawdown');
+  }
+  if(!(perf.tradesInSample>0))lines.push('No completed simulated trades recorded yet.');
+  if(perf.sampleTruncated)lines.push('Partial sample: '+perf.tradesInSample+
+      ' of '+perf.totalCompletedTrades+' completed trades.');
+  lines.push('Unvalidated strategies: results do not establish predictive advantage.');
+  $('automationPerformance').textContent=lines.join('\n');
   const events=$('automationRecentEvents');events.replaceChildren();
   for(const x of (data.events||[]).slice(0,12)){
     const line=document.createElement('div');line.className='log';
