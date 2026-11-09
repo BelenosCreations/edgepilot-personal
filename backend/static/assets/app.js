@@ -162,7 +162,48 @@ applyTheme();setPeriod('1M');
 
 // v0.19.1 — read-only synchronization; no broker trades or position attribution.
 async function runBrokerSync(){const el=$('syncStatus');el.textContent='Synchronizing Public records…';try{const out=await api('sync/run','POST',{});el.textContent=`${out.status}: ${out.importedTransactions} newly captured transactions; ${out.openAlerts} alerts. No executions imported into trading ledger.`;await loadSyncStatus()}catch(err){el.textContent='Sync failed: '+err.message}}
-async function loadSyncStatus(){try{const d=await api('sync/status');$('syncStatus').textContent=d.lastSync?`Last sync: ${d.lastSync.ts} · ${d.totalTransactionsCaptured} broker transactions saved · attribution not verified`:'No completed sync. Tap Sync now.';const box=$('syncAlerts');box.replaceChildren();(d.alerts||[]).forEach(a=>{const item=document.createElement('div');item.className='rule';const title=document.createElement('p');title.textContent=a.message;const btn=document.createElement('button');btn.textContent='Acknowledge';btn.onclick=async()=>{if(!confirm('Dismiss this informational alert? This does not authorize repurchase.'))return;await api('sync/alerts/'+a.id+'/acknowledge','POST',{});await loadSyncStatus()};item.append(title,btn);box.append(item)});}catch(e){$('syncStatus').textContent='Synchronization status unavailable: '+e.message}}
+async function loadSyncStatus(){
+ const action=$('syncAcknowledgeAll');
+ action.disabled=true;
+ try{
+  const d=await api('sync/status');
+  $('syncStatus').textContent=d.lastSync?`Last sync: ${d.lastSync.ts} · ${d.totalTransactionsCaptured} broker transactions saved · attribution not verified`:'No completed sync. Tap Sync now.';
+  const count=Number(d.openAlertCount??(d.alerts||[]).length);
+  $('syncAlertCount').textContent=`${count} outstanding ${count===1?'alert':'alerts'}`+(count>(d.alerts||[]).length?` (showing latest ${(d.alerts||[]).length})`:'');
+  action.disabled=count===0;
+  const box=$('syncAlerts');box.replaceChildren();
+  (d.alerts||[]).forEach(a=>{
+   const item=document.createElement('div');item.className='rule';
+   const title=document.createElement('p');title.textContent=a.message;
+   const btn=document.createElement('button');btn.textContent='Acknowledge';
+   btn.onclick=async()=>{
+    if(!confirm('Acknowledge this informational alert? No repurchase or trading permission is granted.'))return;
+    btn.disabled=true;
+    try{await api('sync/alerts/'+a.id+'/acknowledge','POST',{});await loadSyncStatus()}
+    catch(e){$('syncStatus').textContent='Acknowledgement failed: '+e.message;btn.disabled=false}
+   };
+   item.append(title,btn);box.append(item);
+  });
+ }catch(e){
+  $('syncStatus').textContent='Synchronization status unavailable: '+e.message;
+  $('syncAlertCount').textContent='Alert count unavailable';
+ }
+}
+async function acknowledgeAllSyncAlerts(){
+ const btn=$('syncAcknowledgeAll');
+ if(btn.disabled)return;
+ const countText=$('syncAlertCount').textContent;
+ if(!confirm('Acknowledge ALL '+countText+' for this selected Public account? This only marks notices as reviewed. It does not verify sales, allow repurchases, delete records, or enable orders.'))return;
+ btn.disabled=true;
+ try{
+  const r=await api('sync/alerts/acknowledge-all','POST',{});
+  await loadSyncStatus();
+  $('syncStatus').textContent=`Acknowledged ${r.acknowledgedCount} alerts for the selected Public account. Historical records retained; no trading actions.`;
+ }catch(e){
+  $('syncStatus').textContent='Acknowledge All failed: '+e.message;
+  await loadSyncStatus();
+ }
+}
 
 // v0.19.2 — order details auditing (read only; never post P&L).
 async function runOrderAudit(){const el=$('orderAuditStatus');el.textContent='Fetching Public order details…';try{const r=await api('orders/audit/run','POST',{});el.textContent=`Observed ${r.ordersObserved} orders; ${r.newTrades} new confirmed trade IDs. Actual fees/origins remain unverified; live trading disabled.`;await loadOrderAudit()}catch(e){el.textContent='Audit failed: '+e.message}}
