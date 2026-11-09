@@ -1,7 +1,89 @@
 let base='',csrf='',authenticated=false,snap=null; const $=id=>document.getElementById(id);
 const money=x=>Number.isFinite(Number(x))?'$'+Number(x).toFixed(2):'—';
 function esc(v){return String(v??'').replace(/[&<>"']/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]))}
-function tab(id){if(id!=='settings'&&$('publicApiSecret'))$('publicApiSecret').value='';if(id==='settings'&&authenticated)loadPublicKeyStatus();if(id==='markets'&&base&&authenticated)loadScannerConfig();document.querySelectorAll('.section').forEach(n=>n.classList.toggle('active',n.id===id));document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active-nav',(b.getAttribute('onclick')||'').includes("'"+id+"'")));}
+function tab(id){
+ if(id!=='settings'&&$('publicApiSecret'))$('publicApiSecret').value='';
+ if(id==='settings'&&authenticated)loadPublicKeyStatus();
+ if(id==='markets'&&base&&authenticated)loadScannerConfig();
+ if(['auto','micro','fifteen'].includes(id)&&authenticated)loadEngineProfiles();
+ if(id==='funds'&&authenticated)loadFundsHistory();
+ document.querySelectorAll('.section').forEach(n=>n.classList.toggle('active',n.id===id));
+ const top=['dash','auto','micro','fifteen'].includes(id)?id:'more';
+ document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active-nav',b.dataset.nav===top));
+}
+// Distinct, stored plans -- never enable broker orders or simulated fills.
+const ENGINE_INPUTS={
+ auto:{stock_allocation:'autoStockAllocation',crypto_allocation:'autoCryptoAllocation',
+       max_per_trade:'autoMaxPerTrade',loss_stop:'autoLossStop',profit_target:'autoProfitTarget',
+       max_trades:'autoMaxTrades',stock_market:'autoStocks',crypto_market:'autoCrypto'},
+ micro:{allocation:'microAllocation',max_per_trade:'microMaxPerTrade',loss_stop:'microLossStop',
+        profit_target:'microProfitTarget',max_trades:'microMaxTradesSession',max_open:'microMaxOpen',
+        cooldown_seconds:'microCooldown',stock_market:'microStocks',prediction_market:'microPredictions'},
+ fifteen:{allocation:'fifteenAllocation',max_per_trade:'fifteenMaxPerTrade',loss_stop:'fifteenLossStop',
+          profit_target:'fifteenProfitTarget',max_trades:'fifteenMaxTradesSession',max_open:'fifteenMaxOpen',
+          cooldown_seconds:'fifteenCooldown',minimum_seconds_left:'fifteenMinRemaining',
+          max_spread_pct:'fifteenMaxSpread',crypto_market:'fifteenCrypto',
+          commodity_market:'fifteenCommodities',fx_market:'fifteenFx'}
+};
+const ENGINE_INTEGER_FIELDS=new Set(['max_trades','max_open','cooldown_seconds','minimum_seconds_left']);
+async function loadEngineProfiles(){
+ try {
+  const result=await api('engines/config');
+  for(const [engine,fields] of Object.entries(ENGINE_INPUTS)){
+   const profile=result.profiles?.[engine];if(!profile)continue;
+   for(const [key,id] of Object.entries(fields)){
+    const input=$(id);if(!input)continue;
+    if(input.type==='checkbox')input.checked=profile.config[key]===true;
+    else input.value=profile.config[key];
+   }
+   $(engine+'PlanStatus').textContent=profile.configured
+    ? 'Saved '+new Date(profile.updatedAt).toLocaleString()+'. Planning only: no paper or live trading started.'
+    : 'Not configured. All engines remain inactive; save these preferences when ready.';
+  }
+ }catch(e){for(const engine of Object.keys(ENGINE_INPUTS))$(engine+'PlanStatus').textContent='Cannot load saved plan: '+e.message;}
+}
+async function saveEngineConfig(engine){
+ const fields=ENGINE_INPUTS[engine],status=$(engine+'PlanStatus');
+ if(!fields)return;
+ const payload={};
+ for(const [key,id] of Object.entries(fields)){
+  const el=$(id);
+  payload[key]=el.type==='checkbox'?el.checked:ENGINE_INTEGER_FIELDS.has(key)?Number(el.value):el.value;
+ }
+ try{
+  const out=await api('engines/'+engine+'/config','POST',payload);
+  status.textContent='Plan saved '+new Date(out.profile.updatedAt).toLocaleString()+'. No order, paper trade or funding reservation was made.';
+ }catch(e){status.textContent='Plan not saved: '+e.message;}
+}
+function selectFundsGuide(direction){
+ $('fundsGuide').textContent=direction==='deposit'
+  ? 'Deposit to Public: Open the official Public app → Menu → Deposit, select funding source and destination, review the amount and confirm in Public. No transfer happens here.'
+  : 'Withdraw from Public: Open the official Public app → Menu → Withdrawal, choose your connected bank and settled funds, review the details and confirm in Public. Buying power is not necessarily withdrawable.';
+}
+function openFunds(direction){tab('funds');selectFundsGuide(direction);}
+async function loadFundsHistory(){
+ const status=$('fundsHistoryStatus'),list=$('fundsHistoryList');
+ if(!status||!list)return;
+ status.textContent='Reading locally captured Public history…';
+ list.replaceChildren();
+ try{
+  const d=await api('funds/transfer-history');
+  if(!d.historyCaptured){
+   status.textContent=d.warning||'Synchronize your Public account in Overview first.';
+   return;
+  }
+  status.textContent='Captured sync: '+new Date(d.lastSync).toLocaleString()+'. Transfer-like records may be incomplete. Public History is authoritative.';
+  if(!d.entries.length){
+   list.textContent='No recognizable transfer-like entries found in captured history. Check Public for complete activity.';
+   return;
+  }
+  for(const x of d.entries){
+   const div=document.createElement('div');div.className='log';
+   div.textContent=x.label+' · '+(x.timestamp||'Date unavailable')+' · Unverified bank-transfer classification';
+   list.append(div);
+  }
+ }catch(e){status.textContent='Transfer history unavailable: '+e.message;}
+}
 async function api(path,method='GET',data){
  if(!authenticated||!base)throw Error('Sign in to EdgePilot first');
  let r=await fetch(base+'/api/'+path,{method,credentials:'same-origin',cache:'no-store',
@@ -43,6 +125,7 @@ async function restoreSession(){
 async function refresh(){try{snap=await api('dashboard');let b=snap.broker,s=snap.settings;
 try {let l=await api('ledger');$('ledgerPnl').textContent=money(l.realizedPnl);$('realizedHome').textContent=money(l.realizedPnl);$('ledgerCost').textContent=money(l.openCostBasis);$('ledgerStatus').textContent=l.warning; $('salePrompts').textContent=(l.pendingDecisions||[]).length+' manual-sale decisions pending (workflow not yet active).';}catch(e){$('ledgerStatus').textContent='Ledger unavailable: '+e.message;}
 $('profileLabel').value=s.profile_label||'My EdgePilot';$('portfolioValue').textContent=b?money(b.balance):'—';$('holdingsCount').textContent=b?String(b.positionCount):'—';renderHoldings(b?.holdings||[]);$('balance').textContent=b?money(b.balance):'—';$('balanceMode').textContent=b?`Risk source: ${b.balanceSource==='independent'?'Assigned EdgePilot '+money(b.effectiveBalance):'Live Public '+money(b.effectiveBalance)}`:'Risk source: unavailable';$('balanceAlert').classList.toggle('hidden',!b?.requiresBalanceReset);$('balanceAlert').textContent=b?.balanceAlert||'';$('protected').textContent=b?money(b.protectedAmount):'—';$('riskbudget').textContent=b?money(b.riskBudget):'—';$('remaining').textContent=b?money(b.remainingToRisk):'—';$('power').textContent=b?money(b.cashBuyingPower):'—';
+$('fundsAccountValue').textContent=b?money(b.balance):'—';$('fundsBuyingPower').textContent=b?money(b.cashBuyingPower):'—';
 $('accountCashBuyingPower').textContent=b?money(b.cashBuyingPower):'—';
 $('accountHoldingsValue').textContent=b?money(b.positionsExposure):'—';
 $('accountSnapshotNote').textContent=b

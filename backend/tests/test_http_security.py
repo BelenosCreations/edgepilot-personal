@@ -49,7 +49,7 @@ class HttpSecurityTests(unittest.TestCase):
         self.assertNotIn('valid-test-token',login.get_data(as_text=True))
         health=self.client.get('/api/health',base_url=self.base_url)
         self.assertEqual(health.status_code,200)
-        self.assertIn('0.19.15.3',health.get_json()['version'])
+        self.assertIn('0.19.16',health.get_json()['version'])
         csrf=login.get_json()['csrf']
         no_csrf=self.client.post('/api/disarm',base_url=self.base_url,headers=self.origin,json={})
         self.assertEqual(no_csrf.status_code,403)
@@ -127,6 +127,58 @@ class HttpSecurityTests(unittest.TestCase):
             self.assertFalse(self.client.get('/api/broker/credentials/status',base_url=self.base_url).get_json()['configured'])
             self.assertEqual(self.appmod.settings()['account_id'],'')
 
+
+    def test_engine_profiles_are_authenticated_inactive_and_validate_input(self):
+        get_route='/api/engines/config'
+        post_route='/api/engines/micro/config'
+        self.assertEqual(self.client.get(get_route,base_url=self.base_url).status_code,401)
+        self.assertEqual(self.client.post(post_route,base_url=self.base_url,headers=self.origin,json={}).status_code,401)
+        login=self.sign_in()
+        csrf=login.get_json()['csrf']
+        self.assertEqual(self.client.post(post_route,base_url=self.base_url,headers=self.origin,json={}).status_code,403)
+        headers={**self.origin,'X-Edge-CSRF':csrf}
+        data=self.client.get(get_route,base_url=self.base_url).get_json()
+        self.assertFalse(data['activationAvailable'])
+        self.assertEqual(set(data['profiles']),{'auto','micro','fifteen'})
+        plan=self.appmod.engine_config.DEFAULTS['micro'].copy()
+        plan.update({'allocation':'20.00','loss_stop':'5.00','max_per_trade':'2.00'})
+        result=self.client.post(post_route,base_url=self.base_url,headers=headers,json=plan)
+        self.assertEqual(result.status_code,200)
+        self.assertFalse(result.get_json()['profile']['active'])
+        self.assertFalse(result.get_json()['profile']['liveTradingAvailable'])
+        self.assertEqual(result.get_json()['profile']['config']['allocation'],'20.00')
+        self.assertFalse(self.client.get(get_route,base_url=self.base_url).get_json()['profiles']['auto']['configured'])
+        self.assertEqual(self.appmod.settings()['live_armed'],'0')
+        bad={**plan,'active':True}
+        self.assertEqual(self.client.post(post_route,base_url=self.base_url,headers=headers,json=bad).status_code,400)
+        self.assertEqual(self.client.post(post_route,base_url=self.base_url,headers={'Origin':'https://evil.example','X-Edge-CSRF':csrf},json=plan).status_code,403)
+        self.assertEqual(self.client.post('/api/engines/unknown/config',base_url=self.base_url,headers=headers,json=plan).status_code,400)
+
+    def test_funds_history_is_auth_protected_and_never_exposes_bank_details(self):
+        endpoint='/api/funds/transfer-history'
+        self.assertEqual(self.client.get(endpoint,base_url=self.base_url).status_code,401)
+        login=self.sign_in()
+        self.assertEqual(login.status_code,200)
+        empty=self.client.get(endpoint,base_url=self.base_url).get_json()
+        self.assertFalse(empty['historyCaptured'])
+        self.appmod.put('account_id','acct-A')
+        import sqlite3
+        with sqlite3.connect(self.temp.name+'/test.db') as c:
+            c.execute('''INSERT INTO sync_transactions(account,tx_id,timestamp,symbol,side,type,subtype,raw_json,first_seen)
+                         VALUES(?,?,?,?,?,?,?,?,?)''',
+                      ('acct-A','x1','2026-11-08T17:00:00Z','','','DEPOSIT','ACH',
+                       '{"bankAccount":"secret-bank-9876","amount":"123.45"}','2026-11-08T18:00:00Z'))
+            c.execute('''INSERT INTO sync_runs(account,ts,status,imported_count,pages,message)
+                         VALUES(?,?,?,?,?,?)''',('acct-A','2026-11-08T18:00:00Z','READ_ONLY_COMPLETE',1,1,'synced'))
+        out=self.client.get(endpoint,base_url=self.base_url)
+        self.assertEqual(out.status_code,200)
+        payload=out.get_json()
+        self.assertTrue(payload['historyCaptured'])
+        self.assertEqual(len(payload['entries']),1)
+        self.assertFalse(payload['entries'][0]['verifiedBankTransfer'])
+        self.assertNotIn('secret-bank-9876',out.get_data(as_text=True))
+        self.assertNotIn('123.45',out.get_data(as_text=True))
+        self.assertEqual(self.client.post(endpoint,base_url=self.base_url,headers=self.origin,json={}).status_code,403)
 
     def test_bulk_sync_acknowledgement_requires_session_csrf_and_selected_account(self):
         endpoint='/api/sync/alerts/acknowledge-all'
