@@ -65,13 +65,22 @@ class TradingNavigationTests(unittest.TestCase):
         self.assertIn('id="fifteenMinRemaining"',self.panel('fifteen'))
         self.assertIn('id="fifteenMaxSpread"',self.panel('fifteen'))
 
-    def test_funds_shortcuts_are_read_only_and_functional(self):
-        self.assertIn("openFunds('deposit')",self.panel('dash'))
-        self.assertIn("openFunds('withdraw')",self.panel('dash'))
-        self.assertIn('id="fundsHistoryList"',self.panel('funds'))
-        self.assertIn('id="fundsAccountValue"',self.panel('funds'))
-        self.assertIn('Not available in EdgePilot',self.panel('funds'))
-        for name in ('openFunds','selectFundsGuide','loadFundsHistory','loadEngineProfiles','saveEngineConfig'):
+    def test_funds_remain_read_only_under_more_not_on_overview(self):
+        overview=self.panel('dash')
+        more=self.panel('more')
+        funds=self.panel('funds')
+        self.assertNotIn('Funds &amp; Transfers',overview)
+        self.assertNotIn("openFunds('deposit')",overview)
+        self.assertNotIn("openFunds('withdraw')",overview)
+        self.assertNotIn('function openFunds(',self.js)
+        self.assertIn('<button type="button" onclick="tab(\'funds\')">Funds &amp; Transfers</button>',more)
+        self.assertIn('<h2>Funds &amp; Transfers</h2>',funds)
+        self.assertIn("selectFundsGuide('deposit')",funds)
+        self.assertIn("selectFundsGuide('withdraw')",funds)
+        self.assertIn('id="fundsHistoryList"',funds)
+        self.assertIn('id="fundsAccountValue"',funds)
+        self.assertIn('Not available in EdgePilot',funds)
+        for name in ('selectFundsGuide','loadFundsHistory','loadEngineProfiles','saveEngineConfig'):
             self.assertIn('function '+name+'(',self.js)
         self.assertIn("api('funds/transfer-history')",self.js)
         self.assertIn("api('engines/'+engine+'/config','POST',payload)",self.js)
