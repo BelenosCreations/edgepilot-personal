@@ -427,11 +427,15 @@ def process_quote(path,engine,quote,commission_bps='10'):
         # This $5 minimum is a SIMULATION eligibility constraint, not a broker order.
         # Stocks use a $5 simulated minimum order, matching current fractional equity floor.
         if budget<Decimal('5.00'):return {'action':'SKIP','reason':'Capital limits below $5 paper order minimum'}
-        qty=(budget/(ask*(1+bps/10000))).quantize(Decimal('.000001'),rounding=ROUND_DOWN)
+        # Reserve a rounded-up fee BEFORE computing quantity so cent rounding
+        # can never make the modeled transaction exceed its atomic risk budget.
+        from decimal import ROUND_UP
+        fee_reserve=(budget*bps/10000).quantize(MONEY,rounding=ROUND_UP)
+        qty=((budget-fee_reserve)/ask).quantize(Decimal('.000001'),rounding=ROUND_DOWN)
         cost=qty*ask
-        entry_fee=(cost*bps/10000).quantize(MONEY)
-        if qty<=0 or cost+entry_fee>budget:
-            return {'action':'SKIP','reason':'Allocation cannot cover estimated costs'}
+        entry_fee=(cost*bps/10000).quantize(MONEY,rounding=ROUND_UP)
+        if qty<=0 or cost<Decimal('5.00') or cost+entry_fee>budget:
+            return {'action':'SKIP','reason':'Allocation cannot cover $5 minimum and rounded-up costs'}
         paper_id=str(uuid.uuid4())
         con.execute('''INSERT INTO paper_positions
             (id,engine,asset_class,symbol,strategy,qty,entry_ask,entry_fee,
