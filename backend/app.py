@@ -263,8 +263,10 @@ def save_engine_profile(engine):
     try:
         payload=request.get_json(silent=True)
         with lock:
-            updated=engine_config.save(str(DB),engine,payload)
+            # Always pause before replacing limits so a racing worker cannot
+            # accept a new entry using partially changed risk preferences.
             automation.control(str(DB),'pause',engine)
+            updated=engine_config.save(str(DB),engine,payload)
             put('live_armed','0')
             log('Updated '+engine+' plan; engine paused pending manual restart')
         return {'ok':True,'profile':updated,'activationAvailable':True,'liveTradingAvailable':False}
