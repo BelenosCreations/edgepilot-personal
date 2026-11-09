@@ -6,6 +6,7 @@ function tab(id){
  if(id==='settings'&&authenticated)loadPublicKeyStatus();
  if(id==='markets'&&base&&authenticated)loadScannerConfig();
  if(['auto','micro','fifteen'].includes(id)&&authenticated)loadEngineProfiles();
+ if(['auto','micro','fifteen','dash'].includes(id)&&authenticated)loadAutomationStatus();
  if(id==='funds'&&authenticated)loadFundsHistory();
  document.querySelectorAll('.section').forEach(n=>n.classList.toggle('active',n.id===id));
  const top=['dash','auto','micro','fifteen'].includes(id)?id:'more';
@@ -15,7 +16,7 @@ function tab(id){
 const ENGINE_INPUTS={
  auto:{stock_allocation:'autoStockAllocation',crypto_allocation:'autoCryptoAllocation',
        max_per_trade:'autoMaxPerTrade',loss_stop:'autoLossStop',profit_target:'autoProfitTarget',
-       max_trades:'autoMaxTrades',stock_market:'autoStocks',crypto_market:'autoCrypto'},
+       rolling_loss_stop:'autoRollingLoss',stock_loss_stop:'autoStockLoss',crypto_loss_stop:'autoCryptoLoss',max_open:'autoMaxOpen',stock_market:'autoStocks',crypto_market:'autoCrypto'},
  micro:{allocation:'microAllocation',max_per_trade:'microMaxPerTrade',loss_stop:'microLossStop',
         profit_target:'microProfitTarget',max_trades:'microMaxTradesSession',max_open:'microMaxOpen',
         cooldown_seconds:'microCooldown',stock_market:'microStocks',prediction_market:'microPredictions'},
@@ -52,7 +53,7 @@ async function saveEngineConfig(engine){
  }
  try{
   const out=await api('engines/'+engine+'/config','POST',payload);
-  status.textContent='Plan saved '+new Date(out.profile.updatedAt).toLocaleString()+'. No order, paper trade or funding reservation was made.';
+  status.textContent='Plan saved. This engine was paused to safely apply changed limits; restart Observe/Paper manually. Live orders remain locked.';await loadAutomationStatus();
  }catch(e){status.textContent='Plan not saved: '+e.message;}
 }
 function selectFundsGuide(direction){
@@ -83,6 +84,96 @@ async function loadFundsHistory(){
    list.append(div);
   }
  }catch(e){status.textContent='Transfer history unavailable: '+e.message;}
+}
+// v0.2 master automation: browser never places a broker order.
+const RISK_TEXT={
+ conservative:'0.25% per-trade risk · 1% rolling loss pause · 5% drawdown · 25% exposure',
+ balanced:'0.5% per-trade risk · 2% rolling loss pause · 8% drawdown · 50% exposure',
+ aggressive:'1% per-trade risk · 3% rolling loss pause · 12% drawdown · 75% exposure'
+};
+let automationSnapshot=null;
+function presentMasterLimits(){
+ const el=$('automationProfileLimits');if(el)el.textContent=RISK_TEXT[$('automationRiskLevel').value]||'Unknown risk profile';
+}
+$('automationRiskLevel').addEventListener('change',presentMasterLimits);
+async function loadAutomationStatus(updateFields=false){
+ if(!authenticated)return;
+ try{
+  const data=await api('automation/status');
+  automationSnapshot=data;const m=data.master,p=data.paper;
+  if(updateFields){
+   for(const [field,id] of Object.entries({
+    mode:'automationMode',risk_level:'automationRiskLevel',paper_capital:'automationPaperCapital',
+    protected_pct:'automationProtectedPct',profit_lock_pct:'automationProfitLock',
+    compound_pct:'automationCompoundPct',reserve_profit_pct:'automationReservePct'})){
+    $(id).value=m[field];
+   }
+   presentMasterLimits();
+  }
+  $('automationMasterBadge').textContent=m.emergency?'EMERGENCY':m.enabled?m.mode.toUpperCase():'OFF';
+  $('automationEmergencyReset').disabled=!m.emergency;
+  let heartbeat=m.worker_heartbeat?new Date(m.worker_heartbeat).toLocaleString():'No heartbeat yet';
+  $('automationMasterStatus').textContent=(data.workerConfigured?'Server worker configured':'Server worker is OFF')+
+   ' · '+(m.emergency?'Emergency locked':m.enabled?'Monitor active':'Inactive')+
+   ' · Last heartbeat: '+heartbeat+(m.last_error?' · Latest issue: '+m.last_error:'')+
+   ' · Live orders disabled. Paper models experimental.';
+  $('paperEquity').textContent=money(p.equity);
+  $('paperNet').textContent=money(p.realizedNet);
+  $('paperExposure').textContent=money(p.exposure);
+  $('paperRolling').textContent=money(p.rolling24hRealizedNet);
+  for(const [engine,st] of Object.entries(data.engines)){
+    $('automationBadge_'+engine).textContent=st.state.toUpperCase();
+    $('automationReason_'+engine).textContent=st.reason||'Engine '+st.state+'.';
+    $('automationStats_'+engine).textContent='Simulated completed trades: '+st.completedTrades+
+      ' · Open paper positions: '+st.openPositions+' · Realized simulated net: '+money(st.netRealized);
+  }
+  const closed=p.recentTrades||[];
+  const wins=closed.filter(x=>Number(x.realized_net)>0).length;
+  const fees=closed.reduce((a,x)=>a+Number(x.entry_fee||0)+Number(x.exit_fee||0),0);
+  $('automationPerformance').textContent=closed.length+
+   ' recent completed paper trades · '+wins+' profitable · modeled win rate: '+
+   (closed.length?(wins/closed.length*100).toFixed(1)+'%':'—')+
+   ' · modeled entry/exit fees: '+money(fees)+
+   ' · This does not include real broker fills or prove a profitable strategy.';
+  const events=$('automationRecentEvents');events.replaceChildren();
+  for(const x of (data.events||[]).slice(0,12)){
+    const line=document.createElement('div');line.className='log';
+    line.textContent=x.ts.slice(0,19)+' · '+(x.engine||'GLOBAL')+' · '+x.event+' · '+x.details;events.append(line);
+  }
+ }catch(e){$('automationMasterStatus').textContent='Automation controller unavailable: '+e.message;}
+}
+async function saveAutomationMaster(){
+ const body={
+  mode:$('automationMode').value,risk_level:$('automationRiskLevel').value,
+  paper_capital:$('automationPaperCapital').value,protected_pct:$('automationProtectedPct').value,
+  profit_lock_pct:$('automationProfitLock').value,compound_pct:$('automationCompoundPct').value,
+  reserve_profit_pct:$('automationReservePct').value};
+ try{
+  await api('automation/config','POST',body);
+  await loadAutomationStatus(true);
+ }catch(e){$('automationMasterStatus').textContent='Master plan was not saved: '+e.message;}
+}
+async function automationEngineAction(engine,action){
+ const m=automationSnapshot?.master;
+ if(action==='start'){
+  const mode=m?.mode||'observe';
+  if(!confirm('Start '+engine+' in '+mode.toUpperCase()+
+   ' mode? Paper mode is experimental only. It can model losses, fees and simulated positions; it cannot send real orders.'))return;
+ }
+ if(action==='stop'&&!confirm('Stop '+engine+' monitoring? Existing PAPER positions will remain recorded until reconciled.'))return;
+ try{
+  const mode=m?.mode||'observe';
+  const body=action==='start'?{confirmation:mode==='paper'?'START PAPER':'START OBSERVE'}:{};
+  await api('automation/'+engine+'/'+action,'POST',body);
+  await loadAutomationStatus();
+ }catch(e){$('automationReason_'+engine).textContent='Action blocked: '+e.message;}
+}
+async function resetAutomationEmergency(){
+ if(!confirm('Clear the Emergency Stop latch? All engines will remain PAUSED; you must restart each explicitly.'))return;
+ try{
+  await api('automation/emergency/reset','POST',{confirmation:'RESET EMERGENCY'});
+  await loadAutomationStatus();
+ }catch(e){$('automationMasterStatus').textContent='Reset blocked: '+e.message;}
 }
 async function api(path,method='GET',data){
  if(!authenticated||!base)throw Error('Sign in to EdgePilot first');
@@ -135,7 +226,7 @@ $('barfill').style.width=b&&Number(b.balance)?Math.min(100,100*Number(b.riskBudg
 $('livestate').textContent=s.live_armed==='1'?'ARMED':'DISARMED';$('livestate').className='pill '+(s.live_armed==='1'?'on':'');
 $('balanceSource').value=s.balance_source||'public';$('independentBalance').value=s.independent_balance||'10.00';balanceSourceChanged();$('holdingsScope').value=s.holdings_scope||'allocated_only';$('cap').value=s.spend_cap;$('pct').value=s.protected_pct;$('single').value=s.per_trade_cap;$('daily').value=s.daily_loss_cap;$('autonomy').checked=s.autonomous==='1';$('microEnabled').checked=s.micro_enabled==='1';$('stockEdge').value=s.micro_stock_min_edge_pct||'0.50';$('predEdge').value=s.micro_prediction_min_edge_pct||'3.00';$('microNet').value=s.micro_min_net_dollars||'0.05';$('microTrades').value=s.micro_max_trades_day||'5';
 $('activity').innerHTML=(snap.activity||[]).map(x=>`<div class="log">${esc(x.ts.slice(0,16))} · ${esc(x.message)}</div>`).join('')||'No activity yet';$('orders').innerHTML=(snap.orders||[]).map(x=>`<div class="log">${esc(x.side)} ${esc(x.symbol)} ×${x.qty} @ ${esc(x.limit_price)}<br><span class="muted">${esc(x.state)} · ${esc(x.created.slice(0,16))}</span></div>`).join('')||'No orders yet';
-await loadPerformance();$('watchList').innerHTML=(snap.watch||[]).map(w=>`<div class="rule">${esc(w.symbol)} · buy ≤ ${esc(w.buy_below)} / sell ≥ ${esc(w.sell_above)} <button onclick="toggleRule('${esc(w.id)}')">${w.enabled?'Disable':'Enable'}</button></div>`).join('');
+await loadPerformance();await loadAutomationStatus(true);$('watchList').innerHTML=(snap.watch||[]).map(w=>`<div class="rule">${esc(w.symbol)} · buy ≤ ${esc(w.buy_below)} / sell ≥ ${esc(w.sell_above)} <button onclick="toggleRule('${esc(w.id)}')">${w.enabled?'Disable':'Enable'}</button></div>`).join('');
 if(s.account_id){$('account').innerHTML=`<option value="${esc(s.account_id)}">${esc(s.account_id)}</option>`}else{$('account').innerHTML='<option value="">Choose account</option>'}
 }catch(e){$('brokerError').textContent=e.message;}}
 
@@ -180,7 +271,7 @@ async function loadAccounts(){try{let d=await api('accounts');$('account').inner
 async function saveSettings(){try{let body={spend_cap:$('cap').value,protected_pct:$('pct').value,per_trade_cap:$('single').value,daily_loss_cap:$('daily').value};if($('account').value&&$('account').value!==(snap?.settings.account_id||''))body.account_id=$('account').value;await api('settings','POST',body);$('saveResult').textContent='Saved. Live trading disarmed if allocation/account changed.';await refresh();}catch(e){alertError(e)}}
 async function changeAutonomy(){let on=$('autonomy').checked;try{if(on&&!confirm('Store fully autonomous preference? Automated execution is NOT active in this prototype.')){$('autonomy').checked=false;return;}await api('settings','POST',{autonomous:on?'1':'0',...(on?{confirmation:'ENABLE AUTONOMY'}:{})});await refresh();}catch(e){$('autonomy').checked=!on;alertError(e)}}
 async function arm(){if(!confirm('Arm REAL-money manual trading? Loss of capital is possible.'))return;try{await api('settings','POST',{live_armed:'1',confirmation:'ARM LIVE TRADING'});await refresh();}catch(e){alertError(e)}}
-async function emergency(){try{await api('disarm','POST',{});await refresh();alert('Trading disarmed. Existing broker orders are NOT canceled.');}catch(e){alertError(e)}}
+async function emergency(){try{await api('disarm','POST',{});await refresh();await loadAutomationStatus();alert('Global Emergency Stop latched. All engines paused; existing broker orders are NOT canceled. Manual reset required.');}catch(e){alertError(e)}}
 // v0.19.14: manually refreshed 15-minute event-details snapshots (no trade path).
 async function loadFifteenMinuteMarkets(){
  const status=$('fifteenStatus'), list=$('fifteenList');
