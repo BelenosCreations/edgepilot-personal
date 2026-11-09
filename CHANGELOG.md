@@ -1,3 +1,11 @@
+## v0.19.15.3 — 2026-11-08 — Public Synchronization Acknowledge All
+**Added:** Public Synchronization now shows the full count of outstanding alerts (including those beyond the latest 50 displayed) and a disabled-when-empty **Acknowledge All** button with an explicit confirmation prompt. New authenticated, same-origin/CSRF-protected `POST /api/sync/alerts/acknowledge-all` endpoint and atomic `dismiss_all` journal action.
+**Changed:** Bulk acknowledgement is strictly scoped to the currently selected Public account and only updates `OPEN` notices to `ACKNOWLEDGED`. It leaves broker transaction history, alert details, execution attribution, repurchase permissions, risk settings and trading configuration untouched. The action returns the affected count, supports safe repeats, and refreshes the alert list.
+**Fixed:** Removes the need to dismiss dozens of informational synchronization alerts individually; accounts with more than 50 open alerts can now acknowledge every outstanding alert without losing the underlying records.
+**Tests:** Added tests covering 60 open alerts, cross-account separation, retained historical records, idempotency, session/CSRF/origin enforcement, selected-account requirement and UI confirmation; full CI results required before deployment.
+**Known limitations:** Acknowledged notices stay acknowledged when the same event fingerprint is encountered again. Bulk acknowledgement is informational and does not verify or reconcile individual sales, grant permission to repurchase or resolve uncertain orders. Historical accounting and live order execution remain disabled/unverified as before.
+**Next:** Verify full CI and deploy to Render, then confirm the Acknowledge All button works in the existing Android app without a new APK.
+
 ## v0.19.15.2 — 2026-11-08 — Protected balance range correction
 **Added:** Regression tests covering 0% and 99% as valid protected percentages, while -1%, 100%, and 101% are rejected. UI assertion verifies the permitted numeric input range.
 **Changed:** Settings → Protected balance now accepts 0–99% inclusive (previously 1–100%). Default remains 50%, and no existing saved user setting is silently changed. A previously saved 100% must be manually adjusted to 99% or less before saving settings again.
