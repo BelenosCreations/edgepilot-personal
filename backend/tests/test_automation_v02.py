@@ -165,5 +165,60 @@ class AutomationTests(unittest.TestCase):
         self.assertEqual(after['engines']['auto']['state'],'paused')
 
 
+    def test_micro_trade_session_restart_counts_only_new_completed_trades(self):
+        plan=engine_config.DEFAULTS['micro'].copy()
+        plan.update({'allocation':'200.00','max_per_trade':'50.00','max_trades':1})
+        engine_config.save(self.path,'micro',plan)
+        automation.configure(self.path,self.paper_config())
+        automation.control(self.path,'start','micro')
+        with automation.db(self.path) as c:
+            current=datetime.now(timezone.utc).isoformat()
+            c.execute("""INSERT INTO paper_positions
+             (id,engine,asset_class,symbol,strategy,qty,entry_ask,entry_fee,opened_at,
+              last_bid,last_ask,status,exit_bid,exit_fee,closed_at,realized_net)
+             VALUES('old1','micro','stock','AAPL','test','1','100','0.01',?,
+                    '101','101.02','CLOSED','101','0.01',?,'1.00')""",(current,current))
+        paused=automation.process_quote(self.path,'micro',self.quote())
+        self.assertEqual(paused['action'],'PAUSE')
+        self.assertEqual(automation.status(self.path)['engines']['micro']['completedTrades'],1)
+        automation.control(self.path,'stop','micro')
+        restarted=automation.control(self.path,'start','micro')
+        self.assertEqual(restarted['engines']['micro']['completedTrades'],0)
+        self.assertEqual(restarted['engines']['micro']['totalCompletedTrades'],1)
+        self.assertEqual(automation.process_quote(self.path,'micro',self.quote())['action'],'OBSERVE')
+
+    def test_virtual_capital_cannot_change_after_trades(self):
+        automation.configure(self.path,self.paper_config())
+        self.auto_plan()
+        automation.control(self.path,'start','auto')
+        with automation.db(self.path) as c:
+            current=datetime.now(timezone.utc).isoformat()
+            c.execute("""INSERT INTO paper_positions
+             (id,engine,asset_class,symbol,strategy,qty,entry_ask,entry_fee,opened_at,
+              last_bid,last_ask,status,exit_bid,exit_fee,closed_at,realized_net)
+             VALUES('closed1','auto','stock','AAPL','test','1','100','0.01',?,
+                    '101','101.02','CLOSED','101','0.01',?,'1.00')""",(current,current))
+        with self.assertRaisesRegex(ValueError,'starting capital'):
+            automation.configure(self.path,{**self.paper_config(),'paper_capital':'3000.00'})
+        self.assertEqual(automation.master(self.path)['paper_capital'],'2000.00')
+
+    def test_global_risk_pause_disables_master_without_erasing_history(self):
+        automation.configure(self.path,self.paper_config())
+        self.auto_plan()
+        automation.control(self.path,'start','auto')
+        with automation.db(self.path) as c:
+            current=datetime.now(timezone.utc).isoformat()
+            c.execute("""INSERT INTO paper_positions
+             (id,engine,asset_class,symbol,strategy,qty,entry_ask,entry_fee,opened_at,
+              last_bid,last_ask,status,exit_bid,exit_fee,closed_at,realized_net)
+             VALUES('loss1','auto','stock','AAPL','test','1','100','0.01',?,
+                    '99','99.02','CLOSED','99','0.01',?,'-120.00')""",(current,current))
+        result=automation.process_quote(self.path,'auto',self.quote())
+        self.assertEqual(result['action'],'PAUSE')
+        self.assertFalse(automation.status(self.path)['master']['enabled'])
+        self.assertEqual(automation.status(self.path)['engines']['auto']['state'],'paused')
+        self.assertEqual(len(automation.status(self.path)['paper']['recentTrades']),1)
+
+
 if __name__=='__main__':
     unittest.main()
