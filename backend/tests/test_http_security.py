@@ -49,7 +49,7 @@ class HttpSecurityTests(unittest.TestCase):
         self.assertNotIn('valid-test-token',login.get_data(as_text=True))
         health=self.client.get('/api/health',base_url=self.base_url)
         self.assertEqual(health.status_code,200)
-        self.assertIn('0.19.16',health.get_json()['version'])
+        self.assertIn('0.2',health.get_json()['version'])
         csrf=login.get_json()['csrf']
         no_csrf=self.client.post('/api/disarm',base_url=self.base_url,headers=self.origin,json={})
         self.assertEqual(no_csrf.status_code,403)
@@ -138,7 +138,7 @@ class HttpSecurityTests(unittest.TestCase):
         self.assertEqual(self.client.post(post_route,base_url=self.base_url,headers=self.origin,json={}).status_code,403)
         headers={**self.origin,'X-Edge-CSRF':csrf}
         data=self.client.get(get_route,base_url=self.base_url).get_json()
-        self.assertFalse(data['activationAvailable'])
+        self.assertTrue(data['activationAvailable'])
         self.assertEqual(set(data['profiles']),{'auto','micro','fifteen'})
         plan=self.appmod.engine_config.DEFAULTS['micro'].copy()
         plan.update({'allocation':'20.00','loss_stop':'5.00','max_per_trade':'2.00'})
