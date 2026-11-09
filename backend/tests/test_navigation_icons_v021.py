@@ -11,7 +11,7 @@ JS = (ROOT / "backend/static/assets/app.js").read_text(encoding="utf-8")
 class NavigationIconTests(unittest.TestCase):
     def test_five_tabs_have_unique_inline_svg_icons_and_labels(self):
         nav = HTML.split('<nav class="nav" aria-label="Main navigation">', 1)[1].split("</nav>", 1)[0]
-        buttons = re.findall(r'<button\\b[^>]*data-nav="([^"]+)"[^>]*>(.*?)</button>', nav, re.S)
+        buttons = re.findall(r'<button[^>]*data-nav="([^"]+)"[^>]*>(.*?)</button>', nav, re.S)
         self.assertEqual([key for key, _ in buttons], ["dash", "auto", "micro", "fifteen", "more"])
         for (_, inner), label in zip(buttons, ["Overview", "Auto-Trade", "Micro-Trade", "15-Minute", "More"]):
             self.assertEqual(inner.count('<svg class="nav-icon"'), 1)
