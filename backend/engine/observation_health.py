@@ -53,7 +53,7 @@ def record_cycle(path,*,mode,state,market_session='NOT_APPLICABLE',symbols=(),
         if not isinstance(quote_age_seconds,int) or not 0<=quote_age_seconds<=86400:
             raise ValueError('Invalid quote age')
     unique=list(dict.fromkeys(symbols))
-    if len(unique)>10 or any(not isinstance(x,str) or not x.isascii() or
+    if len(unique)>100 or any(not isinstance(x,str) or not x.isascii() or
                              len(x)>15 or not x or not all(c.isalnum() or c in '.-' for c in x)
                              for x in unique):
         raise ValueError('Invalid observation symbol metadata')
