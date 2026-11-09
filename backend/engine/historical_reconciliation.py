@@ -192,3 +192,64 @@ def reconcile(con,source_table_counts,selected_account,user_id,account_id):
         "fullHistoryMigrated":False,
         "cutoverReady":False,
     }
+
+
+def _legacy_rows(con, table):
+    quoted = _q(table)
+    return con.execute("SELECT rowid AS _shadow_source_rowid, * FROM " +
+                       quoted + " ORDER BY rowid")
+
+
+def source_content_fingerprint(con, counts):
+    """Private stable logical contents digest, including original row IDs.
+
+    Does not return credential values or individual row hashes. Used to detect
+    same-count edits that schema-only/row-count checks would miss.
+    """
+    hasher = hashlib.sha256()
+    for table, expected in sorted(counts.items()):
+        if table.startswith("tenant_") or table.startswith("sqlite_"):
+            continue
+        hasher.update(table.encode("utf-8"))
+        actual = 0
+        for row in _legacy_rows(con, table):
+            actual += 1
+            hasher.update(str(row["_shadow_source_rowid"]).encode("ascii"))
+            hasher.update(bytes.fromhex(_digest(row)))
+        if actual != expected:
+            raise HistoryReconciliationError("Source contents changed during rehearsal")
+    return hasher.hexdigest()
+
+
+def verify_shadow_index(con, counts):
+    """Verify all saved source-row fingerprints against original temp history.
+
+    Run only after staging, on the disposable database. Never counts alone.
+    No row data, fingerprints or IDs leave the temporary database.
+    """
+    total = 0
+    for table, expected in sorted(counts.items()):
+        if table.startswith("tenant_") or table.startswith("sqlite_"):
+            continue
+        checked = 0
+        for row in _legacy_rows(con, table):
+            checked += 1
+            item = con.execute("""SELECT source_sha256 FROM tenant_shadow_history_index
+                WHERE source_table=? AND source_rowid=?""",
+                (table, row["_shadow_source_rowid"])).fetchone()
+            if not item or item["source_sha256"] != _digest(row):
+                raise HistoryReconciliationError("Historical row provenance mismatch")
+        if checked != expected:
+            raise HistoryReconciliationError("Historical row count mismatch")
+        inventory = con.execute("""SELECT recorded_count FROM
+            tenant_shadow_history_inventory WHERE source_table=?""",
+            (table,)).fetchone()
+        if not inventory or inventory["recorded_count"] != checked:
+            raise HistoryReconciliationError("Historical inventory mismatch")
+        total += checked
+    if con.execute("SELECT COUNT(*) FROM tenant_shadow_history_index").fetchone()[0] != total:
+        raise HistoryReconciliationError("Unexpected row in provenance index")
+    if con.execute("SELECT COUNT(*) FROM tenant_shadow_history_inventory").fetchone()[0] != len([
+        t for t in counts if not t.startswith(("tenant_", "sqlite_"))]):
+        raise HistoryReconciliationError("Unexpected historical inventory table")
+    return True
