@@ -128,6 +128,34 @@ class HttpSecurityTests(unittest.TestCase):
             self.assertEqual(self.appmod.settings()['account_id'],'')
 
 
+    def test_bulk_sync_acknowledgement_requires_session_csrf_and_selected_account(self):
+        endpoint='/api/sync/alerts/acknowledge-all'
+        self.assertEqual(self.client.post(endpoint,base_url=self.base_url,headers=self.origin,json={}).status_code,401)
+        login=self.sign_in()
+        self.assertEqual(login.status_code,200)
+        csrf=login.get_json()['csrf']
+        self.assertEqual(self.client.post(endpoint,base_url=self.base_url,headers=self.origin,json={}).status_code,403)
+        good_headers={**self.origin,'X-Edge-CSRF':csrf}
+        self.assertEqual(self.client.post(endpoint,base_url=self.base_url,headers=good_headers,json={}).status_code,400)
+        self.appmod.put('account_id','acct-A')
+        with self.appmod.reconcile.db(str(self.appmod.DB)) as c:
+            for acct,number in [('acct-A','1'),('acct-A','2'),('acct-B','3')]:
+                c.execute("INSERT INTO sync_alerts(account,kind,fingerprint,message,detail_json,created) VALUES(?,?,?,?,?,?)",
+                          (acct,'UNATTRIBUTED_SELL','route-test-'+number,'Review sale','{"repurchaseAllowed": false}','2026-11-08T00:00:00Z'))
+        rejected=self.client.post(endpoint,base_url=self.base_url,headers={'Origin':'https://evil.example','X-Edge-CSRF':csrf},json={})
+        self.assertEqual(rejected.status_code,403)
+        response=self.client.post(endpoint,base_url=self.base_url,headers=good_headers,json={})
+        self.assertEqual(response.status_code,200)
+        body=response.get_json()
+        self.assertEqual(body['acknowledgedCount'],2)
+        self.assertEqual(body['openAlertCount'],0)
+        self.assertEqual(self.appmod.reconcile.overview(str(self.appmod.DB),'acct-A')['openAlertCount'],0)
+        self.assertEqual(self.appmod.reconcile.overview(str(self.appmod.DB),'acct-B')['openAlertCount'],1)
+        self.assertFalse(self.client.get('/api/dashboard',base_url=self.base_url).get_json()['liveTradingAvailable'])
+        repeat=self.client.post(endpoint,base_url=self.base_url,headers=good_headers,json={})
+        self.assertEqual(repeat.status_code,200)
+        self.assertEqual(repeat.get_json()['acknowledgedCount'],0)
+
     def test_protected_balance_accepts_zero_and_ninety_nine_and_rejects_out_of_range(self):
         sign_in=self.sign_in()
         self.assertEqual(sign_in.status_code,200)
