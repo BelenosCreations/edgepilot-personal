@@ -230,6 +230,57 @@ def _pnl(con):
     return realized,unrealized,exposure,positions
 
 
+def _performance(con):
+    """Account and per-engine paper statistics: simulation, not actual fills.
+
+    Limit expensive row-level analysis to 5,000 recent closed simulated cycles.
+    Total historic counts remain explicit so a limited sample is never passed
+    off as complete historical performance.
+    """
+    total=con.execute("SELECT COUNT(*) AS n FROM paper_positions WHERE status='CLOSED'").fetchone()['n']
+    rows=[dict(r) for r in con.execute("""SELECT engine,strategy,realized_net,entry_fee,exit_fee,closed_at
+        FROM paper_positions WHERE status='CLOSED' ORDER BY closed_at DESC LIMIT 5000""")]
+    rows.reverse()
+    buckets={}
+    for x in rows:
+        key=x['engine']
+        b=buckets.setdefault(key,{'count':0,'wins':0,'losses':0,'breakeven':0,
+                                  'net':Decimal(0),'fees':Decimal(0),
+                                  'avgWinSum':Decimal(0),'avgLossSum':Decimal(0),
+                                  'running':Decimal(0),'peak':Decimal(0),'maxDrawdown':Decimal(0),
+                                  'strategies':{}})
+        p=dec(x['realized_net'])
+        fees=dec(x['entry_fee'])+dec(x['exit_fee'] or 0)
+        b['count']+=1;b['net']+=p;b['fees']+=fees
+        b['running']+=p
+        b['peak']=max(b['peak'],b['running'])
+        b['maxDrawdown']=max(b['maxDrawdown'],b['peak']-b['running'])
+        if p>0:b['wins']+=1;b['avgWinSum']+=p
+        elif p<0:b['losses']+=1;b['avgLossSum']+=abs(p)
+        else:b['breakeven']+=1
+        name=x['strategy']
+        strategy=b['strategies'].setdefault(name,{'count':0,'net':Decimal(0)})
+        strategy['count']+=1;strategy['net']+=p
+    report={}
+    for key,b in buckets.items():
+        report[key]={
+            'trades':b['count'],'wins':b['wins'],'losses':b['losses'],
+            'breakeven':b['breakeven'],'winRatePct':str(
+                (Decimal(b['wins'])*100/Decimal(b['count'])).quantize(MONEY)),
+            'modeledNet':cash(b['net']),'assumedFees':cash(b['fees']),
+            'avgWin':cash(b['avgWinSum']/b['wins']) if b['wins'] else '0.00',
+            'avgLoss':cash(b['avgLossSum']/b['losses']) if b['losses'] else '0.00',
+            'closedTradeDrawdown':cash(b['maxDrawdown']),
+            'strategies':{k:{'trades':v['count'],'modeledNet':cash(v['net'])}
+                          for k,v in b['strategies'].items()},
+        }
+    return {'byEngine':report,'tradesInSample':len(rows),
+            'totalCompletedTrades':total,'sampleTruncated':len(rows)<total,
+            'source':'Simulated paper fills and assumed costs; no broker-confirmed executions',
+            'drawdownMeaning':'Closed-trade realized equity curve only; open-position drawdown may be worse',
+            'strategyReadiness':'UNVALIDATED; ranking simulated returns is not evidence of future profitability'}
+
+
 def status(path):
     with db(path) as con:
         m=dict(con.execute('SELECT * FROM automation_master WHERE id=1').fetchone())
@@ -243,6 +294,7 @@ def status(path):
             FROM paper_positions WHERE status='CLOSED' ORDER BY closed_at DESC LIMIT 50''')]
         events=[dict(r) for r in con.execute('SELECT ts,engine,event,details FROM automation_events ORDER BY id DESC LIMIT 30')]
         peak=con.execute('SELECT peak_equity FROM automation_highwater WHERE id=1').fetchone()['peak_equity']
+        performance=_performance(con)
         recent=datetime.now(timezone.utc)-timedelta(hours=24)
         rolling=sum((dec(r['realized_net']) for r in con.execute(
             "SELECT realized_net FROM paper_positions WHERE status='CLOSED' AND closed_at>=?",
@@ -265,7 +317,7 @@ def status(path):
                 'unrealizedNet':cash(unrealized),'exposure':cash(exposure),'peakEquity':cash(max(dec(peak),capital)),
                 'rolling24hRealizedNet':cash(rolling),'openPositions':positions,
                 'recentTrades':closed},
-            'events':events,
+            'events':events,'performance':performance,
             'limitations':['No real broker orders, no bank transfers, no proven profitability',
                            'Paper fills are modeled, not broker confirmed',
                            'Stock-only experimental paper signals; crypto and 15-minute orders unavailable',
