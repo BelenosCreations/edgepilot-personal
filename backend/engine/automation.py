@@ -184,8 +184,7 @@ def control(path,action,engine=None):
             config=engine_config.read(path,engine)
             if m['mode']=='paper' and not config['configured']:
                 raise ValueError('Save this engine plan before starting paper automation')
-            if m['mode']=='paper' and engine=='fifteen':
-                raise ValueError('15-minute settlement-safe paper execution is not yet validated; Observe mode only')
+
             if m['mode']=='paper' and engine=='auto' and not config['config']['stock_market']:
                 raise ValueError('Automated crypto paper orders are not yet implemented; enable stock/ETF observation first')
             if m['mode']=='paper' and engine in ('auto','micro'):
