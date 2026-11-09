@@ -196,5 +196,39 @@ class Phase6HistoricalReconciliationTests(unittest.TestCase):
         self.assertIn("'liveTradingAvailable':False",app)
 
 
+    def test_review_dispositions_are_exhaustive_and_never_assign_ownership(self):
+        _,stage=self._staged()
+        h=stage["historicalReconciliation"]
+        q=h["quarantineReview"]
+        self.assertEqual(sum(group["rows"] for group in q["groups"].values()),
+                         h["quarantinedRows"]+h["unexplainedRows"])
+        for group in q["groups"].values():
+            self.assertFalse(group["tenantImported"])
+            self.assertTrue(group["disposition"])
+            self.assertTrue(group["action"])
+        self.assertEqual(q["groups"]["paper_simulation"]["rows"],1)
+        self.assertEqual(q["groups"]["ambiguous_account"]["rows"],1)
+        self.assertEqual(q["groups"]["automation_market_research"]["rows"],1)
+        self.assertEqual(q["groups"]["unscoped_observations"]["rows"],1)
+        self.assertIn("credential_security",q["groups"])
+        self.assertIn("login_security",q["groups"])
+        self.assertIn("activity_and_ai",q["groups"])
+        self.assertTrue(q["allOwnershipInferencesWithheld"])
+        self.assertTrue(q["noRecordsDeleted"])
+        self.assertFalse(q["readyForCutover"])
+        for secret in ("TEST-BROKER-A","private audit comment","test-token-hash","order-1"):
+            self.assertNotIn(secret,json.dumps(q))
+
+    def test_unknown_schema_requires_manual_review_and_never_tenant_imports(self):
+        with sqlite3.connect(self.path) as c:
+            c.execute("CREATE TABLE maybe_other_account(id INTEGER PRIMARY KEY,unknown TEXT)")
+            c.execute("INSERT INTO maybe_other_account VALUES(1,'anonymous historical note')")
+        _,stage=self._staged()
+        q=stage["historicalReconciliation"]["quarantineReview"]
+        self.assertEqual(q["groups"]["unknown_schema"]["rows"],1)
+        self.assertEqual(q["unresolvedUnknownSchemaRows"],1)
+        self.assertFalse(q["groups"]["unknown_schema"]["tenantImported"])
+
+
 if __name__=="__main__":
     unittest.main()
