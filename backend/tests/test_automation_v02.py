@@ -94,7 +94,7 @@ class AutomationTests(unittest.TestCase):
         automation.control(self.path,'start','auto')
         self.seed_trend()
         entry=automation.process_quote(self.path,'auto',self.quote())
-        self.assertEqual(entry['action'],'PAPER_ENTRY')
+        self.assertEqual(entry['action'],'PAPER_ENTRY',entry)
         self.assertGreater(float(entry['qty']),0)
         paper=automation.status(self.path)['paper']
         self.assertEqual(len(paper['openPositions']),1)
