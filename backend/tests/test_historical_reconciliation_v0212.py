@@ -20,7 +20,7 @@ UTC="2026-11-09T08:00:00+00:00"
 
 class Phase6HistoricalReconciliationTests(unittest.TestCase):
     def setUp(self):
-        self.temp=tempfile.TemporaryDirectory()
+        self.temp=tempfile.TemporaryDirectory(dir="/dev/shm")
         self.path=Path(self.temp.name)/"isolated.db"
         self.key=Fernet.generate_key().decode()
         cipher=Fernet(self.key.encode()).encrypt(b"ONLY-A-FAKE-TEST-PUBLIC-CREDENTIAL-0001")
