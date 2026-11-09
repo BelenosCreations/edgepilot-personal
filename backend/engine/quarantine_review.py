@@ -12,9 +12,9 @@ POLICIES = {
     "observation_cycles": ("unscoped_observations", "ARCHIVE_UNVERIFIED"),
     "automation_quotes": ("automation_market_research", "ARCHIVE_UNVERIFIED"),
     "automation_events": ("automation_market_research", "ARCHIVE_UNVERIFIED"),
-    "automation_master": ("automation_runtime", "RECREATE_DISABLED"),
-    "automation_engines": ("automation_runtime", "RECREATE_DISABLED"),
-    "automation_highwater": ("automation_runtime", "ARCHIVE_UNVERIFIED"),
+    "automation_master": ("automation_runtime", "REVIEW_RECREATE_DISABLED"),
+    "automation_engines": ("automation_runtime", "REVIEW_RECREATE_DISABLED"),
+    "automation_highwater": ("automation_runtime", "REVIEW_RECREATE_DISABLED"),
     "automation_worker_lease": ("ephemeral_runtime", "DO_NOT_REUSE"),
     "paper_positions": ("paper_simulation", "PROVE_OWNER_FIRST"),
     "activity": ("activity_and_ai", "ARCHIVE_UNVERIFIED"),
@@ -25,8 +25,8 @@ POLICIES = {
     "watch": ("configuration_and_watchlists", "REVIEW_BEFORE_IMPORT"),
     "ledger_meta": ("ledger_metadata", "RECONCILE_INDEPENDENTLY"),
     "settings": ("configuration_and_watchlists", "REVIEW_BEFORE_IMPORT"),
-    "edge_sessions": ("login_security", "ROTATE_AND_REPROVISION"),
-    "edge_login_failures": ("login_security", "DO_NOT_REUSE"),
+    "edge_sessions": ("login_security", "REPROVISION_NO_OLD_SESSIONS"),
+    "edge_login_failures": ("login_security", "REPROVISION_NO_OLD_SESSIONS"),
     "broker_credentials": ("credential_security", "VERIFY_VAULT_SEPARATELY"),
 }
 ACTIONS = {
