@@ -138,6 +138,13 @@ def configure(path, data):
         open_count=con.execute("SELECT COUNT(*) AS n FROM paper_positions WHERE status='OPEN'").fetchone()['n']
         if open_count and old['mode']!=mode:
             raise ValueError('Close existing paper positions before switching Observe and Paper modes')
+        # Risk settings are never hot-swapped underneath an active paper model.
+        # The controller pauses each active engine atomically before applying new
+        # rules; the operator must restart it explicitly.
+        if old['enabled']:
+            for active in con.execute("SELECT engine FROM automation_engines WHERE state='running'").fetchall():
+                _set_engine(con,active['engine'],'paused','Master risk settings changed; manual restart required')
+            con.execute('UPDATE automation_master SET enabled=0 WHERE id=1')
         con.execute('''UPDATE automation_master SET mode=?,risk_level=?,paper_capital=?,
           protected_pct=?,profit_lock_pct=?,compound_pct=?,reserve_profit_pct=?,updated_at=?
           WHERE id=1''',(mode,level,values['paper_capital'],values['protected_pct'],
