@@ -65,6 +65,10 @@ def setup(path):
         con.execute('''CREATE TABLE IF NOT EXISTS automation_engines(
             engine TEXT PRIMARY KEY, state TEXT NOT NULL, reason TEXT NOT NULL,
             updated_at TEXT NOT NULL, last_signal_at TEXT)''')
+        fields={r['name'] for r in con.execute('PRAGMA table_info(automation_engines)')}
+        for column in ('session_started_at','risk_reset_at'):
+            if column not in fields:
+                con.execute('ALTER TABLE automation_engines ADD COLUMN '+column+' TEXT')
         for engine in ENGINES:
             con.execute('''INSERT OR IGNORE INTO automation_engines
                 (engine,state,reason,updated_at) VALUES(?,'stopped','',?)''',(engine,now()))
@@ -189,6 +193,17 @@ def control(path,action,engine=None):
                 allocation=dec(c['stock_allocation']) if engine=='auto' else dec(c['allocation'])
                 if allocation<=0 or dec(c['max_per_trade'])<=0:
                     raise ValueError('Set a positive equity allocation and per-trade limit before paper trading')
+            previous=con.execute('SELECT state,reason,session_started_at FROM automation_engines WHERE engine=?',(engine,)).fetchone()
+            open_positions=con.execute("SELECT COUNT(*) AS n FROM paper_positions WHERE engine=? AND status='OPEN'",(engine,)).fetchone()['n']
+            if engine in ('micro','fifteen') and (previous['state']=='stopped' or not previous['session_started_at']) and not open_positions:
+                con.execute('UPDATE automation_engines SET session_started_at=? WHERE engine=?',(now(),engine))
+            if engine=='auto' and previous['state']=='paused' and (
+                    'Engine dollar loss pause' in previous['reason'] or
+                    'stock dollar loss pause' in previous['reason'] or
+                    'profit pause' in previous['reason']):
+                # An explicit operator restart resets only lifetime engine-specific
+                # stops; shared rolling/drawdown protections are never reset.
+                con.execute('UPDATE automation_engines SET risk_reset_at=? WHERE engine=?',(now(),engine))
             con.execute('UPDATE automation_master SET enabled=1,updated_at=? WHERE id=1',(now(),))
             _set_engine(con,engine,'running','Observe only' if m['mode']=='observe' else 'Experimental paper simulation; not validated for live orders')
         else:
@@ -212,7 +227,7 @@ def _pnl(con):
 def status(path):
     with db(path) as con:
         m=dict(con.execute('SELECT * FROM automation_master WHERE id=1').fetchone())
-        eng={r['engine']:{k:r[k] for k in ('state','reason','updated_at','last_signal_at')}
+        eng={r['engine']:{k:r[k] for k in ('state','reason','updated_at','last_signal_at','session_started_at','risk_reset_at')}
              for r in con.execute('SELECT * FROM automation_engines')}
         realized,unrealized,exposure,positions=_pnl(con)
         capital=dec(m['paper_capital'])
@@ -228,8 +243,12 @@ def status(path):
             (recent.isoformat(),))),Decimal(0))
         for engine in ENGINES:
             eng[engine]['openPositions']=sum(1 for p in positions if p['engine']==engine)
-            eng[engine]['completedTrades']=con.execute(
+            eng[engine]['totalCompletedTrades']=con.execute(
                 "SELECT COUNT(*) AS n FROM paper_positions WHERE engine=? AND status='CLOSED'",(engine,)).fetchone()['n']
+            baseline=eng[engine]['session_started_at'] if engine in ('micro','fifteen') else None
+            eng[engine]['completedTrades']=con.execute(
+                "SELECT COUNT(*) AS n FROM paper_positions WHERE engine=? AND status='CLOSED' AND (? IS NULL OR closed_at>=?)",
+                (engine,baseline,baseline)).fetchone()['n']
             eng[engine]['netRealized']=cash(sum((dec(r['realized_net']) for r in con.execute(
                 "SELECT realized_net FROM paper_positions WHERE engine=? AND status='CLOSED'",(engine,))),Decimal(0)))
     return {'master':{**m,'liveTradingAvailable':False,
@@ -341,20 +360,26 @@ def process_quote(path,engine,quote,commission_bps='10'):
             for x in ENGINES:_pause(con,x,reason)
             return {'action':'PAUSE','reason':reason}
         limits=dec(cfg['stock_allocation']) if engine=='auto' else dec(cfg['allocation'])
+        eng_row=con.execute('SELECT session_started_at,risk_reset_at FROM automation_engines WHERE engine=?',(engine,)).fetchone()
+        baseline=eng_row['session_started_at'] if engine=='micro' else eng_row['risk_reset_at']
         if engine=='micro':
-            completed=con.execute("SELECT COUNT(*) AS n FROM paper_positions WHERE engine=? AND status='CLOSED'",(engine,)).fetchone()['n']
+            completed=con.execute(
+                "SELECT COUNT(*) AS n FROM paper_positions WHERE engine=? AND status='CLOSED' AND (? IS NULL OR closed_at>=?)",
+                (engine,baseline,baseline)).fetchone()['n']
             if completed>=cfg['max_trades']:
                 _pause(con,engine,'Micro-Trade completed-trade limit reached')
                 return {'action':'PAUSE','reason':'Session trade limit reached'}
         this_open=[p for p in positions if p['engine']==engine]
         local_realized=sum((dec(r['realized_net']) for r in con.execute(
-            "SELECT realized_net FROM paper_positions WHERE engine=? AND status='CLOSED'",(engine,))),Decimal(0))
+            "SELECT realized_net FROM paper_positions WHERE engine=? AND status='CLOSED' AND (? IS NULL OR closed_at>=?)",
+            (engine,baseline,baseline))),Decimal(0))
         if dec(cfg['loss_stop'])>0 and local_realized<=-dec(cfg['loss_stop']):
             _pause(con,engine,'Engine dollar loss pause reached')
             return {'action':'PAUSE','reason':'Engine loss stop reached'}
         if engine=='auto' and dec(cfg.get('stock_loss_stop','0'))>0:
             stock_loss=sum((dec(r['realized_net']) for r in con.execute(
-                "SELECT realized_net FROM paper_positions WHERE engine=? AND asset_class='stock' AND status='CLOSED'",(engine,))),Decimal(0))
+                "SELECT realized_net FROM paper_positions WHERE engine=? AND asset_class='stock' AND status='CLOSED' AND (? IS NULL OR closed_at>=?)",
+                (engine,baseline,baseline))),Decimal(0))
             if stock_loss<=-dec(cfg['stock_loss_stop']):
                 _pause(con,engine,'Auto-Trade stock dollar loss pause triggered')
                 return {'action':'PAUSE','reason':'Auto-Trade stock loss pause reached'}
