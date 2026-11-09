@@ -9,7 +9,7 @@ from urllib.parse import quote
 import requests
 from flask import Flask, jsonify, request, send_from_directory
 from dotenv import load_dotenv
-from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute
+from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config
 ROOT=Path(__file__).parent; load_dotenv(ROOT/'.env'); DB=Path(os.getenv('EDGE_DB_PATH',str(ROOT/'edgepilot.db'))); DB.parent.mkdir(parents=True,exist_ok=True)
 app=Flask(__name__,static_folder='static',static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # CSV/history research limit
@@ -35,6 +35,7 @@ def init():
 init()
 ledger.setup(str(DB))
 reconcile.setup(str(DB))
+engine_config.setup(str(DB))
 order_audit.setup(str(DB))
 sessions=session_auth.SessionStore(str(DB))
 sessions.setup()
@@ -150,7 +151,7 @@ def healthz():
     return {'ok':True}
 
 @app.get('/api/health')
-def health(): return {'ok':True,'version':'0.19.15.3-sync-bulk-ack','time':datetime.now(timezone.utc).isoformat()}
+def health(): return {'ok':True,'version':'0.19.16-trading-tabs-and-funds','time':datetime.now(timezone.utc).isoformat()}
 def token():
     global cached_token,expires
     with lock:
@@ -247,6 +248,57 @@ def verify_connection():
         load_portfolio=portfolio,
     )
     return jsonify(check)
+
+# v0.19.16 -- configuration-only independent trading engines.
+# These routes deliberately contain no order, activation, or paper-fill actions.
+@app.get('/api/engines/config')
+def engine_profiles():
+    return {'profiles':engine_config.all_profiles(str(DB)),
+            'activationAvailable':False,'paperTradingAvailable':False,
+            'warning':'Planning settings only. No strategy worker, live order or paper fill is running.'}
+
+@app.post('/api/engines/<engine>/config')
+def save_engine_profile(engine):
+    try:
+        payload=request.get_json(silent=True)
+        with lock:
+            updated=engine_config.save(str(DB),engine,payload)
+            put('live_armed','0')
+            log('Updated '+engine+' trading planning preferences; engines remain inactive')
+        return {'ok':True,'profile':updated,'activationAvailable':False}
+    except (ValueError,TypeError) as exc:
+        return fail(exc,400)
+
+@app.get('/api/funds/transfer-history')
+def funds_transfer_history():
+    """Read-only, best-effort hints from an already-captured Public sync journal.
+    Not a banking/withdrawable-funds API, and never transfers money.
+    """
+    account=settings().get('account_id','')
+    if not account:
+        return {'entries':[],'historyCaptured':False,
+                'warning':'Select your Public account first. Transfers are completed in Public.'}
+    with database() as c:
+        run=c.execute('SELECT ts FROM sync_runs WHERE account=? ORDER BY id DESC LIMIT 1',(account,)).fetchone()
+        rows=c.execute('''SELECT timestamp,type,subtype FROM sync_transactions
+                          WHERE account=? ORDER BY first_seen DESC LIMIT 500''',(account,)).fetchall()
+    entries=[]
+    for r in rows:
+        name=(str(r['type'] or '')+' '+str(r['subtype'] or '')).upper()
+        if 'DEPOSIT' in name:
+            label='Deposit-like history entry'
+        elif 'WITHDRAW' in name:
+            label='Withdrawal-like history entry'
+        elif 'TRANSFER' in name or 'ACH' in name:
+            label='Transfer-like history entry'
+        else:
+            continue
+        entries.append({'timestamp':str(r['timestamp'] or '')[:40],
+                        'label':label,'verifiedBankTransfer':False})
+        if len(entries)==25:break
+    return {'entries':entries,'historyCaptured':bool(run),
+            'lastSync':run['ts'] if run else None,
+            'warning':'Public app History is authoritative. These entries may be incomplete or non-bank transfers. Withdrawable cash and transfer status are not available through this endpoint.'}
 
 @app.get('/api/accounts')
 def accounts():
