@@ -21,7 +21,7 @@ UTC="2026-11-09T08:00:00+00:00"
 
 class ShadowOwnerMigrationTests(unittest.TestCase):
     def setUp(self):
-        self.temp=tempfile.TemporaryDirectory()
+        self.temp=tempfile.TemporaryDirectory(dir="/dev/shm")
         self.path=Path(self.temp.name)/"restored-isolated.db"
         self.key=Fernet.generate_key().decode("ascii")
         self.badkey=Fernet.generate_key().decode("ascii")
