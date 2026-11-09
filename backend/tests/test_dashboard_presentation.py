@@ -50,7 +50,7 @@ class DashboardPresentationTests(unittest.TestCase):
     def test_no_new_order_execution_or_secret_fields(self):
         app=APP.read_text(encoding='utf-8')
         self.assertIn("'liveTradingAvailable':False",app)
-        self.assertIn('0.2-automation-risk-and-experimental-paper',app)
+        self.assertIn('0.2.1-navigation-icons',app)
         html=HTML.read_text(encoding='utf-8')
         self.assertNotIn('value="0.15"',html)
 
