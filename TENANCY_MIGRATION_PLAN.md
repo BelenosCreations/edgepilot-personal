@@ -1,3 +1,32 @@
+## Phase 2 (v0.2.8): independent identity authentication (still inactive)
+
+The separate Argon2id identity module now supports backend-internal identity
+provisioning and user-bound four-hour web sessions. It introduces no self-service
+registration endpoint and **does not** share credentials or permissions with
+the existing single-user EdgePilot login.
+
+Two explicit flags are required to enable the identity-only routes:
+`EDGE_TENANT_SCHEMA_PREPARE=true` and
+`EDGE_IDENTITY_AUTH_ENABLED=true`. Both currently default to false. **Do not
+enable either flag on the production service** until after the supervised
+migration and end-to-end route scoping review. No such flags are being modified
+in Render by this release.
+
+When eventually enabled in an isolated environment, only these scoped routes
+are permitted: POST `/api/identity/login`, GET `/api/identity/session`, and
+POST `/api/identity/logout`. They use a separate Secure/HttpOnly
+`__Host-edgepilot_identity` cookie and `X-Edge-Identity-CSRF` request header,
+and have **no authorization to the legacy /api dashboard, Public connections,
+accounts, settings, automation, historical records, trading or transfers**.
+Provisioning is internal-only: no public user-creation, recovery or invite API.
+
+Operator-controlled first-user enrollment, password resets, second factors,
+permission boundaries, backups, account migration and controlled deprecation
+of legacy tokens are **separate future tasks**. Never tell another person to
+reuse your existing EdgePilot token. A login API being present in source code
+does not make EdgePilot suitable for shared deployment.
+
+
 # EdgePilot multi-user / multi-account foundation — Phase 1 (v0.2.7)
 
 **Status: source-code foundation only. Disabled by default.**
