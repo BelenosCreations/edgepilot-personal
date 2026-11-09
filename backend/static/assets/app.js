@@ -1,4 +1,7 @@
 let base='',csrf='',authenticated=false,snap=null; const $=id=>document.getElementById(id);
+const OBSERVATION_AUTO_REFRESH_MS=120000;
+let observationLastStatusRefreshAt=0,observationScheduledRefreshBusy=false;
+
 const money=x=>Number.isFinite(Number(x))?'$'+Number(x).toFixed(2):'—';
 function esc(v){return String(v??'').replace(/[&<>"']/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]))}
 function tab(id){
@@ -161,6 +164,8 @@ async function loadAutomationStatus(updateFields=false){
    ' · Last heartbeat: '+heartbeat+(m.last_error?' · Latest issue: '+m.last_error:'')+
    ' · Live orders disabled. Paper models experimental.';
   renderObservationHealth(data.observationHealth,m);
+  observationLastStatusRefreshAt=Date.now();
+  $('observationAutoRefresh').textContent='Auto-refresh: every 2 minutes while Overview is visible · Last display update: '+new Date(observationLastStatusRefreshAt).toLocaleTimeString();
   $('paperEquity').textContent=money(p.equity);
   $('paperNet').textContent=money(p.realizedNet);
   $('paperExposure').textContent=money(p.exposure);
@@ -521,5 +526,23 @@ async function verifyBrokerConnection(){
   if(r.broker==='verified'&&r.selectedAccount==='none')el.textContent+='\nNext: Settings → select account → Save settings.';
  } catch(e) { el.textContent='Connection check unavailable: '+e.message; }
 }
+function shouldAutoRefreshObservationHealth(){
+ return authenticated && document.visibilityState==='visible' &&
+  !!$('dash')?.classList.contains('active') &&
+  Date.now()-observationLastStatusRefreshAt>=OBSERVATION_AUTO_REFRESH_MS;
+}
+async function refreshObservationHealthAutomatically(){
+ if(observationScheduledRefreshBusy||!shouldAutoRefreshObservationHealth())return;
+ observationScheduledRefreshBusy=true;
+ try{await loadAutomationStatus(false);}
+ finally{observationScheduledRefreshBusy=false;}
+}
+// A lightweight foreground clock checks the age of the displayed status.
+// It only fetches the existing read-only automation/status endpoint every ~2 minutes.
+setInterval(refreshObservationHealthAutomatically,30000);
+document.addEventListener('visibilitychange',()=>{
+ if(document.visibilityState==='visible')refreshObservationHealthAutomatically();
+});
+
 // A hosted PWA connects to its own secure origin. Credentials are never persisted by this script.
 if($('url') && location.protocol==='https:'){$('url').value=location.origin;restoreSession();}

@@ -153,7 +153,7 @@ def healthz():
     return {'ok':True}
 
 @app.get('/api/health')
-def health(): return {'ok':True,'version':'0.2.5-observation-health','time':datetime.now(timezone.utc).isoformat()}
+def health(): return {'ok':True,'version':'0.2.6-observation-auto-refresh','time':datetime.now(timezone.utc).isoformat()}
 def token():
     global cached_token,expires
     with lock:
