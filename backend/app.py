@@ -9,7 +9,7 @@ from urllib.parse import quote
 import requests
 from flask import Flask, jsonify, request, send_from_directory, g
 from dotenv import load_dotenv
-from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth
+from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, account_scope
 ROOT=Path(__file__).parent; load_dotenv(ROOT/'.env'); DB=Path(os.getenv('EDGE_DB_PATH',str(ROOT/'edgepilot.db'))); DB.parent.mkdir(parents=True,exist_ok=True)
 app=Flask(__name__,static_folder='static',static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # CSV/history research limit
@@ -47,14 +47,21 @@ credential_vault.setup()
 # Activation requires BOTH separate flags and an explicit migration review.
 tenant_schema_enabled=os.getenv('EDGE_TENANT_SCHEMA_PREPARE','false').lower()=='true'
 identity_auth_enabled=os.getenv('EDGE_IDENTITY_AUTH_ENABLED','false').lower()=='true'
+tenant_read_enabled=os.getenv('EDGE_TENANT_ACCOUNT_READS_ENABLED','false').lower()=='true'
 if identity_auth_enabled and not tenant_schema_enabled:
     raise RuntimeError('Identity subsystem requires the prepared tenant schema')
+if tenant_read_enabled and not identity_auth_enabled:
+    raise RuntimeError('Tenant account reads require identity authentication')
 identity_store=None
+tenant_account_store=None
 if tenant_schema_enabled:
     tenant_foundation.setup(str(DB))
     if identity_auth_enabled:
         identity_auth.setup(str(DB))
         identity_store=identity_auth.IdentityStore(str(DB))
+        if tenant_read_enabled:
+            account_scope.setup(str(DB))
+            tenant_account_store=account_scope.AccountScopeStore(str(DB),identity_store)
 def settings():
     with database() as c: return {r['k']:r['v'] for r in c.execute('SELECT * FROM settings')}
 def put(k,v):
@@ -170,6 +177,34 @@ def identity_login():
     return response
 
 
+# Read-only tenant-account metadata and persisted research data.
+# Requires a verified identity cookie, account ownership and an additional
+# feature flag. These endpoints never call Public or the legacy global worker.
+@app.get('/api/identity/accounts')
+def identity_accounts():
+    if not tenant_read_enabled:
+        return fail('Not found',404)
+    token=request.cookies.get(identity_auth.COOKIE_NAME,'')
+    try:
+        return {'accounts':tenant_account_store.list_accounts(token),
+                'readOnly':True,'brokerConnected':False,
+                'note':'Account-scoped storage only; no live broker requests or workers'}
+    except account_scope.TenantAccessError:
+        return fail('Not authenticated',401)
+
+
+@app.get('/api/identity/accounts/<account_id>/summary')
+def identity_account_summary(account_id):
+    if not tenant_read_enabled:
+        return fail('Not found',404)
+    token=request.cookies.get(identity_auth.COOKIE_NAME,'')
+    try:
+        return tenant_account_store.account_summary(token,account_id)
+    except account_scope.TenantAccessError:
+        # Uniform 404 for missing, disabled, revoked or other user's account.
+        return fail('Account unavailable',404)
+
+
 @app.get('/api/identity/session')
 def identity_session():
     token=request.cookies.get(identity_auth.COOKIE_NAME,'')
@@ -225,7 +260,7 @@ def healthz():
     return {'ok':True}
 
 @app.get('/api/health')
-def health(): return {'ok':True,'version':'0.2.8-identity-auth-inactive','time':datetime.now(timezone.utc).isoformat()}
+def health(): return {'ok':True,'version':'0.2.9-account-scoping-inactive','time':datetime.now(timezone.utc).isoformat()}
 def token():
     global cached_token,expires
     with lock:
