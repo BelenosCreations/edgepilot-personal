@@ -263,7 +263,7 @@ def healthz():
     return {'ok':True}
 
 @app.get('/api/health')
-def health(): return {'ok':True,'version':'0.2.12-history-reconciliation-inactive','time':datetime.now(timezone.utc).isoformat()}
+def health(): return {'ok':True,'version':'0.2.13-memory-quarantine-review-inactive','time':datetime.now(timezone.utc).isoformat()}
 def token():
     global cached_token,expires
     with lock:
