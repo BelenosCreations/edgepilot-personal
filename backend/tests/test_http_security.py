@@ -49,7 +49,7 @@ class HttpSecurityTests(unittest.TestCase):
         self.assertNotIn('valid-test-token',login.get_data(as_text=True))
         health=self.client.get('/api/health',base_url=self.base_url)
         self.assertEqual(health.status_code,200)
-        self.assertIn('0.19.16',health.get_json()['version'])
+        self.assertIn('0.2',health.get_json()['version'])
         csrf=login.get_json()['csrf']
         no_csrf=self.client.post('/api/disarm',base_url=self.base_url,headers=self.origin,json={})
         self.assertEqual(no_csrf.status_code,403)
@@ -128,6 +128,51 @@ class HttpSecurityTests(unittest.TestCase):
             self.assertEqual(self.appmod.settings()['account_id'],'')
 
 
+    def test_automation_master_routes_require_session_csrf_and_never_enable_live(self):
+        endpoint='/api/automation/status'
+        self.assertEqual(self.client.get(endpoint,base_url=self.base_url).status_code,401)
+        self.assertEqual(self.client.post('/api/automation/config',base_url=self.base_url,
+                          headers=self.origin,json={}).status_code,401)
+        login=self.sign_in()
+        self.assertEqual(login.status_code,200)
+        csrf=login.get_json()['csrf']
+        status=self.client.get(endpoint,base_url=self.base_url)
+        self.assertEqual(status.status_code,200)
+        self.assertFalse(status.get_json()['master']['liveTradingAvailable'])
+        headers={**self.origin,'X-Edge-CSRF':csrf}
+        self.assertEqual(self.client.post('/api/automation/config',base_url=self.base_url,
+                          headers=self.origin,json={}).status_code,403)
+        cfg={'mode':'paper','risk_level':'balanced','paper_capital':'2000.00',
+             'protected_pct':'50.00','profit_lock_pct':'0.00',
+             'compound_pct':'0.00','reserve_profit_pct':'0.00'}
+        self.assertEqual(self.client.post('/api/automation/config',base_url=self.base_url,
+                         headers=headers,json={**cfg,'mode':'live'}).status_code,400)
+        saved=self.client.post('/api/automation/config',base_url=self.base_url,
+                               headers=headers,json=cfg)
+        self.assertEqual(saved.status_code,200)
+        self.assertFalse(saved.get_json()['master']['enabled'])
+        self.assertEqual(self.appmod.settings()['live_armed'],'0')
+        self.assertEqual(self.client.post('/api/automation/auto/start',base_url=self.base_url,
+                         headers=headers,json={}).status_code,400)
+        self.assertEqual(self.client.post('/api/automation/unknown/start',base_url=self.base_url,
+                         headers=headers,json={'confirmation':'START PAPER'}).status_code,400)
+
+    def test_emergency_stop_latches_and_reset_never_restarts_engine(self):
+        login=self.sign_in()
+        headers={**self.origin,'X-Edge-CSRF':login.get_json()['csrf']}
+        self.assertEqual(self.client.post('/api/disarm',base_url=self.base_url,
+                                         headers=headers,json={}).status_code,200)
+        state=self.client.get('/api/automation/status',base_url=self.base_url).get_json()
+        self.assertEqual(state['master']['emergency'],1)
+        self.assertEqual(state['engines']['auto']['state'],'paused')
+        self.assertEqual(self.client.post('/api/automation/emergency/reset',base_url=self.base_url,
+                                         headers=headers,json={}).status_code,400)
+        reset=self.client.post('/api/automation/emergency/reset',base_url=self.base_url,
+                               headers=headers,json={'confirmation':'RESET EMERGENCY'})
+        self.assertEqual(reset.status_code,200)
+        self.assertEqual(reset.get_json()['master']['emergency'],0)
+        self.assertEqual(reset.get_json()['engines']['auto']['state'],'paused')
+
     def test_engine_profiles_are_authenticated_inactive_and_validate_input(self):
         get_route='/api/engines/config'
         post_route='/api/engines/micro/config'
@@ -138,7 +183,7 @@ class HttpSecurityTests(unittest.TestCase):
         self.assertEqual(self.client.post(post_route,base_url=self.base_url,headers=self.origin,json={}).status_code,403)
         headers={**self.origin,'X-Edge-CSRF':csrf}
         data=self.client.get(get_route,base_url=self.base_url).get_json()
-        self.assertFalse(data['activationAvailable'])
+        self.assertTrue(data['activationAvailable'])
         self.assertEqual(set(data['profiles']),{'auto','micro','fifteen'})
         plan=self.appmod.engine_config.DEFAULTS['micro'].copy()
         plan.update({'allocation':'20.00','loss_stop':'5.00','max_per_trade':'2.00'})

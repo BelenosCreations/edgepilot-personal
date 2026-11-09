@@ -15,6 +15,11 @@ services:
         value: /data/edgepilot.db
       - key: ENABLE_LIVE_ORDERS
         value: "false"
+      # Experimental observe and paper-only monitoring: no broker orders.
+      - key: EDGE_AUTOMATION_WORKER_ENABLED
+        value: "true"
+      - key: EDGE_AUTOMATION_POLL_SECONDS
+        value: "90"
     disk:
       name: edgepilot-data
       mountPath: /data

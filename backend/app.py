@@ -9,7 +9,7 @@ from urllib.parse import quote
 import requests
 from flask import Flask, jsonify, request, send_from_directory
 from dotenv import load_dotenv
-from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config
+from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker
 ROOT=Path(__file__).parent; load_dotenv(ROOT/'.env'); DB=Path(os.getenv('EDGE_DB_PATH',str(ROOT/'edgepilot.db'))); DB.parent.mkdir(parents=True,exist_ok=True)
 app=Flask(__name__,static_folder='static',static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # CSV/history research limit
@@ -36,6 +36,7 @@ init()
 ledger.setup(str(DB))
 reconcile.setup(str(DB))
 engine_config.setup(str(DB))
+automation.setup(str(DB))
 order_audit.setup(str(DB))
 sessions=session_auth.SessionStore(str(DB))
 sessions.setup()
@@ -151,7 +152,7 @@ def healthz():
     return {'ok':True}
 
 @app.get('/api/health')
-def health(): return {'ok':True,'version':'0.19.16-phase1-trading-tabs-and-funds','time':datetime.now(timezone.utc).isoformat()}
+def health(): return {'ok':True,'version':'0.2-automation-risk-and-experimental-paper','time':datetime.now(timezone.utc).isoformat()}
 def token():
     global cached_token,expires
     with lock:
@@ -254,20 +255,73 @@ def verify_connection():
 @app.get('/api/engines/config')
 def engine_profiles():
     return {'profiles':engine_config.all_profiles(str(DB)),
-            'activationAvailable':False,'paperTradingAvailable':False,
-            'warning':'Planning settings only. No strategy worker, live order or paper fill is running.'}
+            'activationAvailable':True,'paperTradingAvailable':True,
+            'warning':'Observe and experimental stock paper modes can be started separately. Live brokerage order execution remains unavailable.'}
 
 @app.post('/api/engines/<engine>/config')
 def save_engine_profile(engine):
     try:
         payload=request.get_json(silent=True)
         with lock:
+            # Always pause before replacing limits so a racing worker cannot
+            # accept a new entry using partially changed risk preferences.
+            automation.control(str(DB),'pause',engine)
             updated=engine_config.save(str(DB),engine,payload)
             put('live_armed','0')
-            log('Updated '+engine+' trading planning preferences; engines remain inactive')
-        return {'ok':True,'profile':updated,'activationAvailable':False}
+            log('Updated '+engine+' plan; engine paused pending manual restart')
+        return {'ok':True,'profile':updated,'activationAvailable':True,'liveTradingAvailable':False}
     except (ValueError,TypeError) as exc:
         return fail(exc,400)
+
+# v0.2 master automation commands. These never place a live broker order.
+@app.get('/api/automation/status')
+def automation_status():
+    result=automation.status(str(DB))
+    result['workerConfigured']=os.getenv('EDGE_AUTOMATION_WORKER_ENABLED','false').lower()=='true'
+    return result
+
+@app.post('/api/automation/config')
+def automation_config():
+    try:
+        with lock:
+            result=automation.configure(str(DB),request.get_json(silent=True))
+            put('live_armed','0')
+        return result
+    except (ValueError,TypeError) as exc:
+        return fail(exc,400)
+
+@app.post('/api/automation/<engine>/<action>')
+def automation_command(engine,action):
+    if engine not in automation.ENGINES or action not in ('start','pause','stop'):
+        return fail('Unsupported trading engine or control',400)
+    try:
+        data=request.get_json(silent=True) or {}
+        m=automation.master(str(DB))
+        confirmation='START PAPER' if m['mode']=='paper' else 'START OBSERVE'
+        if action=='start' and data.get('confirmation')!=confirmation:
+            return fail('Explicit '+confirmation+' confirmation required',400)
+        if action=='start' and os.getenv('EDGE_AUTOMATION_WORKER_ENABLED','false').lower()!='true':
+            return fail('Server-side market observer is not running; automation cannot start',503)
+        if action=='start' and not settings().get('account_id'):
+            return fail('Select a verified Public account first for read-only market quotes',400)
+        if action=='start':
+            last_heartbeat=automation.master(str(DB)).get('worker_heartbeat')
+            if not last_heartbeat or (datetime.now(timezone.utc)-datetime.fromisoformat(last_heartbeat)).total_seconds()>180:
+                return fail('Automation worker heartbeat is missing or stale; cannot start',503)
+        with lock:
+            result=automation.control(str(DB),action,engine)
+            put('live_armed','0')
+        return result
+    except (ValueError,TypeError) as exc:
+        return fail(exc,400)
+
+@app.post('/api/automation/emergency/reset')
+def automation_emergency_reset():
+    if (request.get_json(silent=True) or {}).get('confirmation')!='RESET EMERGENCY':
+        return fail('Explicit reset confirmation required',400)
+    try:
+        with lock:return automation.control(str(DB),'reset_emergency')
+    except ValueError as exc:return fail(exc,400)
 
 @app.get('/api/funds/transfer-history')
 def funds_transfer_history():
@@ -552,7 +606,10 @@ def execute(data,automatic=False):
 
 @app.post('/api/disarm')
 def disarm():
-    with lock:put('autonomous','0');put('live_armed','0');log('Emergency stop activated')
+    with lock:
+        put('autonomous','0');put('live_armed','0')
+        automation.control(str(DB),'emergency')
+        log('Global Emergency Stop activated including all paper/observe engines')
     return {'ok':True}
 @app.post('/api/watch')
 def add_watch():
@@ -874,6 +931,10 @@ def predictive_walk_forward():
 def scanner_history():
     with database() as c: rows=c.execute('SELECT ts,result_json FROM scan_runs ORDER BY id DESC LIMIT 10').fetchall()
     return {'runs':[{'capturedAt':r['ts'],'candidateCount':len(json.loads(r['result_json'])['candidates'])} for r in rows]}
+
+# Uses one Render Starter web worker, shared local SQLite and a lease.
+# Experimental Observe/Paper only; production live execution still hard-blocked.
+automation_worker.start_web_worker(__import__(__name__))
 
 if __name__=='__main__':
     app.run(host=os.getenv('HOST','127.0.0.1'),port=int(os.getenv('PORT','8787')),debug=False)
