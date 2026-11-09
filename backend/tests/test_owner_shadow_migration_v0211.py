@@ -109,6 +109,51 @@ class ShadowOwnerMigrationTests(unittest.TestCase):
         self.assertEqual(again["snapshotRowsMapped"],2)
         self.assertEqual(again["observationRowsMapped"],2)
 
+    def test_disposable_target_preserves_provenance_and_never_enables_runtime(self):
+        # Inspect the shadow copy *only* inside a fixture, before disposal.
+        from engine import migration_preflight
+        target=Path(self.temp.name)/"shadow-inspection.db"
+        with sqlite3.connect(self.path) as source, sqlite3.connect(target) as dest:
+            source.backup(dest)
+        inventory=migration_preflight.inspect_database(target)
+        with shadow._conn(target) as conn:
+            staged=shadow._stage(conn,self.key,inventory)
+        self.assertEqual(staged["snapshotRowsMapped"],2)
+        with sqlite3.connect(target) as c:
+            c.row_factory=sqlite3.Row
+            c.execute("PRAGMA foreign_keys=ON")
+            self.assertIsNone(c.execute("PRAGMA foreign_key_check").fetchone())
+            self.assertEqual(c.execute("SELECT COUNT(*) FROM tenant_users").fetchone()[0],1)
+            self.assertEqual(c.execute("SELECT COUNT(*) FROM tenant_accounts").fetchone()[0],1)
+            self.assertEqual(c.execute("SELECT COUNT(*) FROM tenant_identities").fetchone()[0]
+                             if c.execute("SELECT 1 FROM sqlite_master WHERE name='tenant_identities'").fetchone()
+                             else 0,0)
+            owner=c.execute("SELECT user_id FROM tenant_users").fetchone()["user_id"]
+            account=c.execute("SELECT account_id FROM tenant_accounts").fetchone()["account_id"]
+            self.assertEqual(c.execute("SELECT credential_ciphertext FROM tenant_connections").fetchone()[0],
+                             self.ciphertext)
+            self.assertEqual([tuple(x) for x in c.execute(
+                "SELECT account_value,buying_power FROM tenant_portfolio_snapshots ORDER BY snapshot_id")],
+                [("110.01","50.00"),("111.52","48.24")])
+            self.assertEqual([tuple(x) for x in c.execute(
+                "SELECT mode,state,market_session,accepted,rejected FROM tenant_observation_cycles ORDER BY cycle_id")],
+                [("observe","OK","CLOSED",2,0),("observe","PARTIAL","OPEN",1,1)])
+            self.assertEqual([tuple(x) for x in c.execute(
+                "SELECT source_table,source_id FROM tenant_shadow_lineage ORDER BY source_table,source_id")],
+                [("account_snapshots",1),("account_snapshots",9),
+                 ("observation_cycles",2),("observation_cycles",8)])
+            runtime=c.execute("SELECT * FROM tenant_runtime_status").fetchone()
+            self.assertEqual((runtime["worker_enabled"],runtime["paper_enabled"],
+                              runtime["live_enabled"],runtime["requested_mode"]),
+                             (0,0,0,"observe"))
+            self.assertEqual(c.execute("SELECT COUNT(*) FROM tenant_shadow_settings").fetchone()[0],7)
+            self.assertEqual(c.execute("SELECT source_value FROM tenant_shadow_settings WHERE source_key='account_id'").fetchone()[0],
+                             "TEST-PUBLIC-ONLY")
+            self.assertEqual(c.execute("SELECT COUNT(*) FROM orders").fetchone()[0],1)
+            self.assertEqual(c.execute("SELECT COUNT(*) FROM activity").fetchone()[0],1)
+            self.assertEqual(c.execute("SELECT staging_state FROM tenant_shadow_rehearsal_marker").fetchone()[0],
+                             "REHEARSED_ONLY")
+
     def test_rejects_wrong_key_without_leaking_credentials(self):
         before=self.path.read_bytes()
         with self.assertRaisesRegex(shadow.ShadowMigrationError,"verification failed") as context:
