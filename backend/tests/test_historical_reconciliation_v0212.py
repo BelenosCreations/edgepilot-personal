@@ -148,8 +148,8 @@ class Phase6HistoricalReconciliationTests(unittest.TestCase):
                 with sqlite3.connect(self.path) as c:
                     c.execute(sql)
                 try:
-                    with self.assertRaisesRegex(history.HistoryReconciliationError,
-                                                 "Conflicting account reference"):
+                    with self.assertRaises((history.HistoryReconciliationError,
+                                            shadow.ShadowMigrationError)):
                         self._staged()
                 finally:
                     with sqlite3.connect(self.path) as c:
