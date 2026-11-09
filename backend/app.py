@@ -304,6 +304,10 @@ def automation_command(engine,action):
             return fail('Server-side market observer is not running; automation cannot start',503)
         if action=='start' and not settings().get('account_id'):
             return fail('Select a verified Public account first for read-only market quotes',400)
+        if action=='start':
+            last_heartbeat=automation.master(str(DB)).get('worker_heartbeat')
+            if not last_heartbeat or (datetime.now(timezone.utc)-datetime.fromisoformat(last_heartbeat)).total_seconds()>180:
+                return fail('Automation worker heartbeat is missing or stale; cannot start',503)
         with lock:
             result=automation.control(str(DB),action,engine)
             put('live_armed','0')
