@@ -128,6 +128,12 @@ def configure(path, data):
         old=con.execute('SELECT * FROM automation_master WHERE id=1').fetchone()
         if old['mode']!=mode and old['enabled']:
             raise ValueError('Stop all engines before switching Observe and Paper modes')
+        position_count=con.execute('SELECT COUNT(*) AS n FROM paper_positions').fetchone()['n']
+        if position_count and values['paper_capital']!=old['paper_capital']:
+            raise ValueError('Cannot change paper starting capital after trades exist; historical performance must remain comparable')
+        open_count=con.execute("SELECT COUNT(*) AS n FROM paper_positions WHERE status='OPEN'").fetchone()['n']
+        if open_count and old['mode']!=mode:
+            raise ValueError('Close existing paper positions before switching Observe and Paper modes')
         con.execute('''UPDATE automation_master SET mode=?,risk_level=?,paper_capital=?,
           protected_pct=?,profit_lock_pct=?,compound_pct=?,reserve_profit_pct=?,updated_at=?
           WHERE id=1''',(mode,level,values['paper_capital'],values['protected_pct'],
@@ -270,7 +276,11 @@ def _validated_quote(quote):
 
 def _pause(con,engine,reason):
     row=con.execute('SELECT state FROM automation_engines WHERE engine=?',(engine,)).fetchone()
-    if row and row['state']=='running':_set_engine(con,engine,'paused',reason)
+    if row and row['state']=='running':
+        _set_engine(con,engine,'paused',reason)
+        remaining=con.execute("SELECT COUNT(*) AS n FROM automation_engines WHERE state='running'").fetchone()['n']
+        if not remaining:
+            con.execute('UPDATE automation_master SET enabled=0,updated_at=? WHERE id=1',(now(),))
 
 
 def process_quote(path,engine,quote,commission_bps='10'):
@@ -395,7 +405,11 @@ def process_quote(path,engine,quote,commission_bps='10'):
         cooldown=cfg.get('cooldown_seconds',60)
         if last and (datetime.now(timezone.utc)-datetime.fromisoformat(last['opened_at'])).total_seconds()<cooldown:
             return {'action':'SKIP','reason':'Entry cooldown'}
-        max_risk=capital*dec(level['riskPct'])/100
+        # Percentage risk is an *estimated* loss at a modeled 2% stop, plus
+        # spread and fees. A price gap can still exceed this estimate.
+        max_modeled_loss=capital*dec(level['riskPct'])/100
+        modeled_loss_fraction=Decimal('.02')+(ask-bid)/ask+(bps/Decimal('10000'))*2
+        risk_limited_notional=max_modeled_loss/modeled_loss_fraction
         global_exposure_cap=capital*dec(level['maxExposurePct'])/100
         # Reinvest only the approved share of positive *realized* virtual gains.
         # Reserve the remaining opted-out share as non-tradable paper cash.
@@ -406,7 +420,8 @@ def process_quote(path,engine,quote,commission_bps='10'):
         remaining=min(equity-protection-exposure-reserve,
                       global_exposure_cap+incremental-exposure)
         local_exposure=sum((dec(p['entry_ask'])*dec(p['qty'])+dec(p['entry_fee']) for p in this_open),Decimal(0))
-        budget=min(remaining,limits-local_exposure,dec(cfg['max_per_trade']),max_risk)
+        budget=min(remaining,limits-local_exposure,dec(cfg['max_per_trade']),risk_limited_notional)
+        # This $5 minimum is a SIMULATION eligibility constraint, not a broker order.
         # Stocks use a $5 simulated minimum order, matching current fractional equity floor.
         if budget<Decimal('5.00'):return {'action':'SKIP','reason':'Capital limits below $5 paper order minimum'}
         qty=(budget/(ask*(1+bps/10000))).quantize(Decimal('.000001'),rounding=ROUND_DOWN)
@@ -421,7 +436,8 @@ def process_quote(path,engine,quote,commission_bps='10'):
             VALUES(?,?,'stock',?,'unvalidated_momentum',?,?,?,?,?,?,'OPEN')''',
             (paper_id,engine,symbol,str(qty),cash(ask),cash(entry_fee),now(),cash(bid),cash(ask)))
         con.execute('UPDATE automation_engines SET last_signal_at=? WHERE engine=?',(now(),engine))
-        event(con,engine,'PAPER_ENTRY',f'{symbol} modeled ask {cash(ask)} qty {qty}; no broker order')
+        event(con,engine,'PAPER_ENTRY',
+              f'{symbol} modeled ask {cash(ask)} qty {qty}; risk-at-stop estimate {cash(cost*modeled_loss_fraction)}; no broker order')
         return {'action':'PAPER_ENTRY','symbol':symbol,'qty':str(qty),'notional':cash(cost),
                 'warning':'Experimental paper trend rule, not a validated profitable strategy'}
 
