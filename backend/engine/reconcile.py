@@ -109,7 +109,9 @@ def overview(path,account):
         run=c.execute('SELECT * FROM sync_runs WHERE account=? ORDER BY id DESC LIMIT 1',(account,)).fetchone()
         alerts=c.execute("SELECT id,kind,message,detail_json,created FROM sync_alerts WHERE account=? AND state='OPEN' ORDER BY id DESC LIMIT 50",(account,)).fetchall()
         count=c.execute('SELECT count(*) FROM sync_transactions WHERE account=?',(account,)).fetchone()[0]
+        open_count=c.execute("SELECT count(*) FROM sync_alerts WHERE account=? AND state='OPEN'",(account,)).fetchone()[0]
         return {'lastSync':dict(run) if run else None,'totalTransactionsCaptured':count,
+                'openAlertCount':open_count,
                 'alerts':[{'id':r['id'],'kind':r['kind'],'message':r['message'],'detail':json.loads(r['detail_json']),'created':r['created']} for r in alerts],
                 'verifiedAttribution':False,'liveTradingAvailable':False}
 
@@ -117,3 +119,16 @@ def dismiss(path, account, alert_id):
     with db(path) as c:
         n=c.execute("UPDATE sync_alerts SET state='ACKNOWLEDGED' WHERE id=? AND account=? AND state='OPEN'",(alert_id,account)).rowcount
         return bool(n)
+
+def dismiss_all(path, account):
+    """Acknowledge every OPEN sync alert for one selected account, atomically.
+
+    Does not delete alerts or transactions, change attribution, approve repurchases,
+    touch the trading ledger, or place any order. Safe to repeat (returns 0).
+    """
+    if not isinstance(account,str) or not account.strip():
+        raise ValueError('Select a Public account before acknowledging sync alerts')
+    with db(path) as c:
+        c.execute('BEGIN IMMEDIATE')
+        count=c.execute("UPDATE sync_alerts SET state='ACKNOWLEDGED' WHERE account=? AND state='OPEN'",(account,)).rowcount
+        return count
