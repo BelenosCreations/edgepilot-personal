@@ -9,7 +9,7 @@ from urllib.parse import quote
 import requests
 from flask import Flask, jsonify, request, send_from_directory
 from dotenv import load_dotenv
-from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health
+from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation
 ROOT=Path(__file__).parent; load_dotenv(ROOT/'.env'); DB=Path(os.getenv('EDGE_DB_PATH',str(ROOT/'edgepilot.db'))); DB.parent.mkdir(parents=True,exist_ok=True)
 app=Flask(__name__,static_folder='static',static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # CSV/history research limit
@@ -43,6 +43,10 @@ sessions=session_auth.SessionStore(str(DB))
 sessions.setup()
 credential_vault=broker_credentials.BrokerCredentialStore(str(DB))
 credential_vault.setup()
+# Inactive multi-tenant schema preparation is opt-in. Existing owner settings,
+# Public secret, sessions, automation and ledger are never migrated here.
+if os.getenv('EDGE_TENANT_SCHEMA_PREPARE','false').lower()=='true':
+    tenant_foundation.setup(str(DB))
 def settings():
     with database() as c: return {r['k']:r['v'] for r in c.execute('SELECT * FROM settings')}
 def put(k,v):
@@ -153,7 +157,7 @@ def healthz():
     return {'ok':True}
 
 @app.get('/api/health')
-def health(): return {'ok':True,'version':'0.2.6-observation-auto-refresh','time':datetime.now(timezone.utc).isoformat()}
+def health(): return {'ok':True,'version':'0.2.7-tenant-foundation-inactive','time':datetime.now(timezone.utc).isoformat()}
 def token():
     global cached_token,expires
     with lock:
