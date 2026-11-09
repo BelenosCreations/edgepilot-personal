@@ -10,7 +10,7 @@ function tab(id){
  if(id==='funds'&&authenticated)loadFundsHistory();
  document.querySelectorAll('.section').forEach(n=>n.classList.toggle('active',n.id===id));
  const top=['dash','auto','micro','fifteen'].includes(id)?id:'more';
- document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active-nav',b.dataset.nav===top));
+ document.querySelectorAll('.nav button').forEach(b=>{const selected=b.dataset.nav===top;b.classList.toggle('active-nav',selected);if(selected)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
 }
 // Distinct, stored plans -- never enable broker orders or simulated fills.
 const ENGINE_INPUTS={
