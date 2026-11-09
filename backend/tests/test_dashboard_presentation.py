@@ -29,6 +29,18 @@ class DashboardPresentationTests(unittest.TestCase):
         self.assertIn('money(b.positionsExposure)',js)
         self.assertIn("b?money(b.balance):'—'",js)
 
+    def test_public_sync_acknowledge_all_control_is_safe_and_confirmed(self):
+        html=HTML.read_text(encoding='utf-8')
+        js=JS.read_text(encoding='utf-8')
+        self.assertIn('id="syncAcknowledgeAll"',html)
+        self.assertIn('disabled onclick="acknowledgeAllSyncAlerts()"',html)
+        self.assertIn('id="syncAlertCount"',html)
+        self.assertIn('async function acknowledgeAllSyncAlerts()',js)
+        self.assertIn("api('sync/alerts/acknowledge-all','POST',{})",js)
+        self.assertIn("d.openAlertCount",js)
+        self.assertIn("if(!confirm('Acknowledge ALL",js)
+        self.assertIn("Historical records retained; no trading actions",js)
+
     def test_protection_percentage_input_range(self):
         html=HTML.read_text(encoding='utf-8')
         self.assertIn('Protected balance (0–99%)',html)
@@ -38,7 +50,7 @@ class DashboardPresentationTests(unittest.TestCase):
     def test_no_new_order_execution_or_secret_fields(self):
         app=APP.read_text(encoding='utf-8')
         self.assertIn("'liveTradingAvailable':False",app)
-        self.assertIn('0.19.15.2-protection-range',app)
+        self.assertIn('0.19.15.3-sync-bulk-ack',app)
         html=HTML.read_text(encoding='utf-8')
         self.assertNotIn('value="0.15"',html)
 

@@ -150,7 +150,7 @@ def healthz():
     return {'ok':True}
 
 @app.get('/api/health')
-def health(): return {'ok':True,'version':'0.19.15.2-protection-range','time':datetime.now(timezone.utc).isoformat()}
+def health(): return {'ok':True,'version':'0.19.15.3-sync-bulk-ack','time':datetime.now(timezone.utc).isoformat()}
 def token():
     global cached_token,expires
     with lock:
@@ -371,7 +371,7 @@ def audit_orders_run():
 @app.get('/api/sync/status')
 def sync_status():
     acct=settings().get('account_id','')
-    if not acct:return {'lastSync':None,'alerts':[],'warning':'Select account first'}
+    if not acct:return {'lastSync':None,'alerts':[],'openAlertCount':0,'warning':'Select account first'}
     return reconcile.overview(str(DB),acct)
 
 @app.post('/api/sync/run')
@@ -409,6 +409,19 @@ def sync_acknowledge(alert_id):
     try:
         if not reconcile.dismiss(str(DB),selected_account(),alert_id):return fail('Alert not found',404)
         return {'ok':True,'note':'Alert acknowledged only; no order, repurchase, or attribution changes made.'}
+    except Exception as exc:return fail(exc)
+
+@app.post('/api/sync/alerts/acknowledge-all')
+def sync_acknowledge_all():
+    """Bulk acknowledgement is informational only; order permissions remain unchanged."""
+    try:
+        with lock:
+            acct=selected_account()
+            count=reconcile.dismiss_all(str(DB),acct)
+            if count:
+                log('Acknowledged '+str(count)+' Public synchronization alerts; no trading actions')
+            return {'ok':True,'acknowledgedCount':count,'openAlertCount':0,
+                    'note':'Sync alerts acknowledged only; transaction records and audit history retained. No order, repurchase or attribution changes.'}
     except Exception as exc:return fail(exc)
 
 @app.get('/api/markets/15-minute')
