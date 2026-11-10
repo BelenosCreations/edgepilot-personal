@@ -81,7 +81,20 @@ class OfflineDurableSafetyTests(unittest.TestCase):
                                         [self.owner_a]*8,
                                         [self.account_a]*8))
         self.assertEqual(results.count("ADMITTED"),2)
-        self.assertEqual(results.count("BUDGET_EXHAUSTED"),6)
+        # Under genuine multi-process SQLite contention the timeout may fail
+        # closed with STATE_UNAVAILABLE rather than reach the budget check.
+        # Both outcomes are denials. They must never become a third admission.
+        self.assertEqual(len(results),8)
+        self.assertTrue(set(results).issubset({
+            "ADMITTED", "BUDGET_EXHAUSTED", "STATE_UNAVAILABLE"}), results)
+        self.assertEqual(sum(value != "ADMITTED" for value in results),6)
+        with sqlite3.connect(self.guard.db_path) as con:
+            scoped=con.execute("""SELECT COUNT(*) FROM offline_usage
+                WHERE owner_id=? AND account_id=?""",
+                (self.owner_a,self.account_a)).fetchone()[0]
+            self.assertEqual(scoped,2)
+            self.assertEqual(con.execute("""SELECT COUNT(*) FROM offline_audit
+                WHERE event='ADMIT'""").fetchone()[0],2)
         self.assertTrue(self.guard.admit_synthetic(self.owner_b,self.account_b)
                         ["offlineOnly"])
 
