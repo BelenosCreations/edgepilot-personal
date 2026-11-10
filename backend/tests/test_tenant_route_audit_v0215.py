@@ -44,10 +44,10 @@ class TenantBoundaryAuditTests(unittest.TestCase):
         for name in ("tenant_api_gateway","tenant_monitor_blueprint"):
             with self.assertRaises(tenant_route_audit.ApiBoundaryError):
                 tenant_route_audit.inspect_sources(
-                    self.app + "\\nfrom engine import "+name+"\\n",self.worker)
+                    self.app + "\nfrom engine import "+name+"\n",self.worker)
             with self.assertRaises(tenant_route_audit.ApiBoundaryError):
                 tenant_route_audit.inspect_sources(
-                    self.app,self.worker + "\\nfrom engine import "+name+"\\n")
+                    self.app,self.worker + "\nfrom engine import "+name+"\n")
 
     def test_tenant_payload_code_is_not_live_wired(self):
         self.assertNotIn("tenant_history_details",self.app)
