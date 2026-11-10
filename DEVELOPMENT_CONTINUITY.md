@@ -227,3 +227,25 @@ identity/passkey/Public-tenant feature gates remain unchanged. The next
 technical work is website association validation and safe isolated-test
 passkey verification; real orders, transfers and production multiuser
 cutover remain disabled.
+
+## November 10, 2026 — Android Digital Asset Links Render configuration staged
+
+The owner opened the website's /.well-known/assetlinks.json on their
+current phone and captured a JSON 404 from EdgePilot. This was the
+expected fail-closed response while EDGE_ANDROID_CERT_SHA256 was absent
+or invalid. A copy of the independently CI-verified signed APK
+(GitHub run #42888113943, attempt 2) was read and its Android v2/v3
+signature blocks independently parsed; both contain the same X.509
+certificate and SHA-256 fingerprint. The public certificate fingerprint,
+not a signing secret, was merged into the existing Render service's
+EDGE_ANDROID_CERT_SHA256 variable. Render deployment
+`dep-dbppig56e07s73b34d1g` was verified status=live.
+
+This is the server configuration milestone only. At this checkpoint a
+subsequent external fetch of the public HTTPS JSON response had NOT
+been independently confirmed. The owner should reopen the same URL
+and confirm it now returns a JSON array containing the correct Android
+package and certificate. An installed app's Android Credential Manager
+association and tenant biometric authentication remain completely
+unverified. Do not turn on dormant multiuser/tenant/passkey/Public flags
+or enable orders or transfers as an implied consequence of this deploy.
