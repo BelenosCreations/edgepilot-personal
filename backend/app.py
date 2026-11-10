@@ -9,8 +9,12 @@ from urllib.parse import quote
 import requests
 from flask import Flask, jsonify, request, send_from_directory, g
 from dotenv import load_dotenv
-from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, tenant_password_change, tenant_session_controls, tenant_registration, tenant_passkeys, account_scope, tenant_monitor_blueprint, tenant_watchlist, tenant_public_vault, tenant_public_live_readonly
-ROOT=Path(__file__).parent; load_dotenv(ROOT/'.env'); DB=Path(os.getenv('EDGE_DB_PATH',str(ROOT/'edgepilot.db'))); DB.parent.mkdir(parents=True,exist_ok=True)
+from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, tenant_password_change, tenant_session_controls, tenant_registration, tenant_passkeys, account_scope, tenant_monitor_blueprint, tenant_watchlist, tenant_public_vault, tenant_public_live_readonly, staging_isolation
+ROOT=Path(__file__).parent; load_dotenv(ROOT/'.env')
+# Refuse unsafe isolated-test configuration before opening any database,
+# owner credential store or background-worker state. Production is unchanged.
+staging_isolation.validate(os.environ)
+DB=Path(os.getenv('EDGE_DB_PATH',str(ROOT/'edgepilot.db'))); DB.parent.mkdir(parents=True,exist_ok=True)
 app=Flask(__name__,static_folder='static',static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # CSV/history research limit
 BASE='https://api.public.com'; lock=threading.RLock(); cached_token=None; expires=0
