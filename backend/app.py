@@ -369,7 +369,7 @@ def healthz():
     return {'ok':True}
 
 @app.get('/api/health')
-def health(): return {'ok':True,'version':'0.2.26-tenant-public-credential-vault-opt-in','time':datetime.now(timezone.utc).isoformat()}
+def health(): return {'ok':True,'version':'0.2.27-tenant-public-readonly-opt-in','time':datetime.now(timezone.utc).isoformat()}
 def token():
     global cached_token,expires
     with lock:
