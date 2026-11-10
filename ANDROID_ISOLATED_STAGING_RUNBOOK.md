@@ -52,7 +52,8 @@ HTTPS backend and exact domain are verified.
 
 ## Isolated website association
 
-The backend Digital Asset Links route still publishes com.edgepilot.mobile
+The backend staging startup guard and Digital Asset Links route enforce
+separate nontrading configuration. The association route still publishes com.edgepilot.mobile
 by default. To serve the separate staging package, an isolated test service
 must explicitly set both EDGE_ISOLATED_STAGING=true and
 EDGE_ANDROID_ASSOCIATION_PACKAGE=com.edgepilot.mobile.staging. The route
@@ -70,8 +71,10 @@ the following safety conditions also hold:
 - A missing requested staging package or an arbitrary package is refused.
 - The existing production package and its association response remain intact.
 
-These checks guard association publication, not the entire backend startup.
-They are NOT authorization to route a live account or real brokerage
+These conditions are enforced both by the website association route and
+by a process-startup preflight that refuses unsafe isolated-test settings
+**before database or owner credential-store initialization**. They do not
+constitute authorization to route any live account or real brokerage
 connection to staging. A staged service requires a separate private test
 database, separate URL and operational isolation; treat it as untrusted
 until reviewed.
@@ -97,6 +100,10 @@ isolated HTTPS service, consider this test-only set:
     EDGE_TENANT_PUBLIC_READONLY_ENABLED=false
     PUBLIC_API_SECRET=[UNSET]
     EDGE_APP_TOKEN=[UNSET]
+    EDGE_CREDENTIAL_KEY=[UNSET]
+    EDGE_TENANT_ACCOUNT_READS_ENABLED=false
+    EDGE_TENANT_MONITOR_PREVIEW_ENABLED=false
+    EDGE_TENANT_WATCHLIST_EDIT_ENABLED=false
 
 This is a test-only *plan*, not a Render change. A temporary SQLite file
 is not a recovery or durable multi-user database. Do not use actual
