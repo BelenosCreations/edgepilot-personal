@@ -93,3 +93,17 @@ BelenosCreations/edgepilot-personal. Read DEVELOPMENT_CONTINUITY.md, VERSION,
 CHANGELOG.md, MULTIUSER_PLATFORM_ACCEPTANCE.md and the latest merged PR and
 open branches. Continue approved multi-user development with periodic
 updates, preserving all brokerage/trading safety restrictions."
+
+## Current milestone checkpoint (v0.2.35)
+
+Public key rotation and disconnection are now controlled from a member's own
+/account interface. Credentials stay encrypted on the server; previously
+verified account bindings are disabled and must be verified again after
+rotation or disconnect. Revocation/rotation revalidates session and CSRF
+within the same database transaction, preventing stale authorization after
+logout. The feature remains default-off with the existing identity/vault
+gate. Refer to TENANT_PUBLIC_CONNECTION_MANAGEMENT_RUNBOOK.md for acceptance
+and limitations. Physical two-device biometric login and actual two-account
+Public validation remain uncompleted. Always verify current GitHub VERSION,
+PR status and exact-head CI before announcing release completion.
+
