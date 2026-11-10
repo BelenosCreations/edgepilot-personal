@@ -625,6 +625,9 @@ def android_passkey_asset_links():
         return fail('Not found',404)
     package='com.edgepilot.mobile'
     requested_package=os.getenv('EDGE_ANDROID_ASSOCIATION_PACKAGE','').strip()
+    if (os.getenv('EDGE_ISOLATED_STAGING','false').lower()=='true' and
+        not requested_package):
+        return fail('Not found',404)
     if requested_package:
         # Isolated WebAuthn phone testing needs a separate installable package
         # and a distinct HTTPS host, never the legacy owner deployment.
