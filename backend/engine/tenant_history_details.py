@@ -217,6 +217,26 @@ def stage(con, *, user_id,account_id, expected_references):
         ORDER BY r.reference_id""",(user_id,account_id)).fetchall()
     if len(refs)!=expected_references:
         raise DetailSafetyError("Historical reference count mismatch")
+    # Preflight every supported source row before inserting a typed summary.
+    # A same-count edit must be rejected even on a repeated rehearsal.
+    for ref in refs:
+        table=ref["source_table"]
+        if table not in SUPPORTED_TABLES:
+            continue
+        columns={r["name"] for r in con.execute(
+            "PRAGMA table_info("+ '"'+table+'"'+")")}
+        if not _REQUIRED[table].issubset(columns):
+            continue
+        source=con.execute("SELECT rowid AS _shadow_source_rowid, * FROM "+'"'+table+'"'+
+                           " WHERE rowid=?",(ref["source_rowid"],)).fetchone()
+        from .historical_reconciliation import _digest
+        if source is None or _digest(source)!=ref["source_sha256"]:
+            raise DetailSafetyError("Source history provenance mismatch")
+        owner=con.execute("""SELECT provider_account_ref
+            FROM tenant_accounts WHERE user_id=? AND account_id=?""",
+            (user_id,account_id)).fetchone()
+        if not owner or source["account"]!=owner["provider_account_ref"]:
+            raise DetailSafetyError("History reference owner mismatch")
     staged={"transactionSummaries":0,"brokerActivitySummaries":0,"auditSummaries":0}
     unsupported=0
     for ref in refs:
