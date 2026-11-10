@@ -3,3 +3,10 @@
 **/__pycache__/
 **/*.pyc
 *.apk
+
+# Never commit Android release signing material or generated signed APKs.
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.aab
