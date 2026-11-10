@@ -39,7 +39,12 @@ class SharedBackendArchitectureGates(unittest.TestCase):
     def test_shared_android_endpoint_not_per_user_backend_selector(self):
         java = (ROOT / "android/app/src/main/java/com/edgepilot/mobile/MainActivity.java").read_text(encoding="utf-8")
         self.assertIn("private static final String SITE", java)
-        self.assertIn("https://edgepilot.belenoscreations.biz/", java)
+        gradle = (ROOT / "android/app/build.gradle.kts").read_text(encoding="utf-8")
+        self.assertIn("BuildConfig.EDGE_HOST", java)
+        self.assertIn('"https://" + HOST + "/"', java)
+        self.assertIn('applicationId = "com.edgepilot.mobile"', gradle)
+        self.assertIn('edgepilot.belenoscreations.biz', gradle)
+        self.assertIn('applicationIdSuffix = ".staging"', gradle)
         self.assertIn("setAcceptThirdPartyCookies(webView, false)", java)
         self.assertIn("MIXED_CONTENT_NEVER_ALLOW", java)
 
