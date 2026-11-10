@@ -1,6 +1,8 @@
 package com.edgepilot.mobile;
 
 import android.app.Activity;
+import android.content.Intent;
+import android.content.ActivityNotFoundException;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
@@ -40,6 +42,16 @@ public final class MainActivity extends Activity {
                 && uri.getUserInfo() == null;
     }
 
+    private static boolean approvedPublicHelp(Uri uri) {
+        if (uri == null || !"https".equalsIgnoreCase(uri.getScheme())
+                || !"public.com".equalsIgnoreCase(uri.getHost())
+                || (uri.getPort() != -1 && uri.getPort() != 443)
+                || uri.getUserInfo() != null || uri.getQuery() != null
+                || uri.getFragment() != null) return false;
+        final String path = uri.getPath();
+        return "/signup".equals(path) || "/api/docs/quickstart".equals(path);
+    }
+
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         getWindow().setStatusBarColor(Color.rgb(12,20,35));
@@ -74,8 +86,23 @@ public final class MainActivity extends Activity {
         webView.setWebChromeClient(new WebChromeClient());
         webView.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                // Never navigate to another host or arbitrary URL scheme inside the authenticated WebView.
-                return !allowed(request.getUrl());
+                if (allowed(request.getUrl())) return false;
+                // Only an explicit, main-frame user click on these two
+                // provider-owned help links can leave EdgePilot. The Public
+                // site runs in the user's external browser, never our WebView.
+                if (request.isForMainFrame() && request.hasGesture()
+                        && approvedPublicHelp(request.getUrl())) {
+                    try {
+                        Intent browser = new Intent(Intent.ACTION_VIEW, request.getUrl());
+                        browser.addCategory(Intent.CATEGORY_BROWSABLE);
+                        startActivity(browser);
+                    } catch (ActivityNotFoundException error) {
+                        showNetworkError("No browser is available to open Public securely.");
+                    }
+                }
+                // All other off-host navigation and all untrusted URL schemes
+                // remain prohibited; no API secrets are appended to URLs.
+                return true;
             }
             @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 if (allowed(request.getUrl())) return null;
