@@ -177,3 +177,34 @@ real provider permission, authenticated production Public accounts or
 production-grade recovery. See TWO_DEVICE_SYNTHETIC_ACCEPTANCE_RUNBOOK.md
 before declaring this stage complete.
 
+
+## November 10, 2026 — First owner-controlled stable signed APK verified
+
+The operator created a 4096-bit RSA JKS signing identity in private Termux
+storage, verified the signing certificate, GPG AES-256-encrypted a backup,
+successfully checked decryption against the original, and stored the sealed
+backup in their own Google Drive. Five required GitHub Actions signing
+secrets were configured privately, and the signing password was verified
+against the unchanged keystore before both password secrets were updated.
+
+Manual signing workflow #42888113943 ran on main at
+45ecaf82d0f1c3d648c2e6ab0a17d18817823e73. Attempt 1 failed the
+certificate-pin check and produced NO artifact. The expected public
+certificate fingerprint was recalculated from the actual JKS and corrected.
+Attempt 2 PASSED compile, apksigner signature + fingerprint checks and
+private artifact upload. Artifact:
+EdgePilot-v0.19.17-private-stable-signed-test
+(expires 2026-11-17; no binary in the source repository).
+
+This satisfies the signed-artifact CI precondition but NOT Android
+installation, authenticated Digital Asset Links, passkey/biometric
+enrollment or sign-in, verified two-physical-device tenant isolation,
+provider-permitted real accounts, production database recovery or active
+tenant monitor workers. The existing debug-signed APK may not update in
+place to the stable signature; DO NOT advise uninstalling without
+checking local session/recovery state. Continue from the real-device
+signer/Digital Asset Links verification stage. No production trading
+or transfers have been enabled.
+
+See ANDROID_PRIVATE_SIGNING_RUNBOOK.md and APK_TESTING.md for the exact
+GitHub run and safe installation limitations.

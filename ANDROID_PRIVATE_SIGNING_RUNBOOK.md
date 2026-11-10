@@ -22,6 +22,40 @@ The existing automatic PR/debug APK workflow stays unchanged. Neither
 workflow enables Public access, biometric login, tenant flags, trading,
 funds transfers or any operational production change.
 
+## Verified private signing milestone — November 10, 2026
+
+An authorized operator created a permanent JKS signing key outside GitHub,
+verified its X.509 certificate, encrypted an offline recovery copy with
+GnuPG AES-256 and verified byte-for-byte decryption against the original.
+An encrypted backup was then saved to Google Drive. The five GitHub Actions
+signing secrets were configured; secret names are visible, but secret values
+are not returned to the project or included in this document.
+
+[GitHub Actions run #42888113943](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/42888113943)
+ran on `main` against commit `45ecaf82d0f1c3d648c2e6ab0a17d18817823e73`.
+Attempt 1 failed closed at the certificate-pinning check because the configured
+expected SHA-256 did not match the actual JKS signing certificate.
+The operator recalculated SHA-256 directly from the existing JKS X.509 DER
+certificate and updated that *public fingerprint configuration only*.
+Attempt 2 completed successfully: unsigned release assembly, APK signing,
+`apksigner verify`, independent expected-certificate comparison, package
+and version checks, and private artifact upload all passed.
+
+Verified artifact name:
+`EdgePilot-v0.19.17-private-stable-signed-test`
+(contains `EdgePilot-private-signed-test.apk`). It was retained for 7 days,
+through November 17, 2026. The test artifact is a privately signed
+development build, not a publicly distributed or Play Store release.
+
+No certificate private key, keystore passwords, backup decryption password
+or GitHub authentication token was committed to the repository. Never
+recreate a different JKS for future updates of this signing identity.
+
+**Outstanding:** physical-device APK installation; matching website Digital
+Asset Links; device-backed WebAuthn/biometric enrollment and sign-in;
+independent two-device identities and real allowed provider integration.
+Do not claim these have passed on the basis of a signed CI artifact.
+
 ## One-time trusted signing prerequisites
 
 A trusted operator must generate a long-lived Android release signing
@@ -98,9 +132,10 @@ as a side effect of a signed Android build.
 `backend/tests/test_android_private_signing_v0238.py` checks the signing
 preflight against mismatched/multiple signer reports and audits the
 manual-only workflow, secret-handling boundaries and ignored keystore
-files. Standard backend CI runs those tests, but a real signed APK build
-cannot be exercised without an operator-controlled keystore. That
-limitation is an explicit open acceptance item.
+files. Standard backend CI runs those tests. A real signed test APK
+was exercised with owner-controlled signing inputs in the successful
+November 10, 2026 GitHub Actions retry, but real-device passkeys and the
+website certificate association remain open acceptance items.
 
 For Google's documentation see:
 https://developer.android.com/build/building-cmdline
