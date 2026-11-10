@@ -232,8 +232,10 @@ class AccountSessionIsolationTests(unittest.TestCase):
     def test_inactive_modules_not_connected_to_http_or_live_worker(self):
         app=(ROOT/"backend/app.py").read_text()
         worker=(ROOT/"backend/engine/automation_worker.py").read_text()
+        self.assertNotIn("tenant_api_gateway",app)
+        self.assertIn("tenant_monitor_blueprint",app)
+        self.assertIn("EDGE_TENANT_MONITOR_PREVIEW_ENABLED','false'",app)
         for module in ("tenant_api_gateway","tenant_monitor_blueprint"):
-            self.assertNotIn(module,app)
             self.assertNotIn(module,worker)
         self.assertIn("'liveTradingAvailable':False",app)
 
