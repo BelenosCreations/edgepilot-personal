@@ -9,7 +9,7 @@ from urllib.parse import quote
 import requests
 from flask import Flask, jsonify, request, send_from_directory, g
 from dotenv import load_dotenv
-from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, tenant_password_change, tenant_registration, tenant_passkeys, account_scope, tenant_monitor_blueprint, tenant_watchlist, tenant_public_vault, tenant_public_live_readonly
+from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, tenant_password_change, tenant_session_controls, tenant_registration, tenant_passkeys, account_scope, tenant_monitor_blueprint, tenant_watchlist, tenant_public_vault, tenant_public_live_readonly
 ROOT=Path(__file__).parent; load_dotenv(ROOT/'.env'); DB=Path(os.getenv('EDGE_DB_PATH',str(ROOT/'edgepilot.db'))); DB.parent.mkdir(parents=True,exist_ok=True)
 app=Flask(__name__,static_folder='static',static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # CSV/history research limit
@@ -48,6 +48,7 @@ credential_vault.setup()
 tenant_schema_enabled=os.getenv('EDGE_TENANT_SCHEMA_PREPARE','false').lower()=='true'
 identity_auth_enabled=os.getenv('EDGE_IDENTITY_AUTH_ENABLED','false').lower()=='true'
 tenant_password_change_enabled=os.getenv('EDGE_TENANT_PASSWORD_CHANGE_ENABLED','false').lower()=='true'
+tenant_session_controls_enabled=os.getenv('EDGE_TENANT_SESSION_CONTROLS_ENABLED','false').lower()=='true'
 tenant_signup_enabled=os.getenv('EDGE_TENANT_SIGNUP_ENABLED','false').lower()=='true'
 tenant_passkeys_enabled=os.getenv('EDGE_TENANT_PASSKEYS_ENABLED','false').lower()=='true'
 tenant_read_enabled=os.getenv('EDGE_TENANT_ACCOUNT_READS_ENABLED','false').lower()=='true'
@@ -59,6 +60,8 @@ if identity_auth_enabled and not tenant_schema_enabled:
     raise RuntimeError('Identity subsystem requires the prepared tenant schema')
 if tenant_password_change_enabled and not identity_auth_enabled:
     raise RuntimeError('Password management requires identity authentication')
+if tenant_session_controls_enabled and not identity_auth_enabled:
+    raise RuntimeError('Tenant session controls require identity authentication')
 if tenant_signup_enabled and not identity_auth_enabled:
     raise RuntimeError('Tenant registration requires identity authentication')
 if tenant_passkeys_enabled and not identity_auth_enabled:
@@ -75,6 +78,7 @@ if tenant_public_read_enabled and not (tenant_public_vault_enabled and tenant_re
     raise RuntimeError('Tenant Public read-only API requires vault and tenant account reads')
 identity_store=None
 tenant_password_manager=None
+tenant_session_manager=None
 tenant_registration_store=None
 tenant_passkey_store=None
 tenant_account_store=None
@@ -90,6 +94,9 @@ if tenant_schema_enabled:
         if tenant_password_change_enabled:
             tenant_password_change.setup(str(DB))
             tenant_password_manager=tenant_password_change.TenantPasswordChange(str(DB),identity_store)
+        if tenant_session_controls_enabled:
+            tenant_session_controls.setup(str(DB))
+            tenant_session_manager=tenant_session_controls.TenantSessionControls(str(DB),identity_store)
         if tenant_signup_enabled:
             tenant_registration.setup(str(DB))
             tenant_registration_store=tenant_registration.TenantRegistration(str(DB))
@@ -142,6 +149,8 @@ def authenticate():
         return fail('Same-origin request required',403)
     if request.path.startswith('/api/identity/'):
         # Identity account reads require a second independently enabled gate.
+        if request.path.startswith('/api/identity/sessions') and not tenant_session_controls_enabled:
+            return fail('Not found',404)
         if request.path=='/api/identity/password/change' and not tenant_password_change_enabled:
             return fail('Not found',404)
         if request.path.startswith('/api/identity/accounts') and not tenant_read_enabled:
@@ -377,6 +386,35 @@ def identity_password_change():
     return response
 
 
+# Independently gated identity-only session controls. No device fingerprint
+# data, IP address, credential hash or bearer token is exposed to the browser.
+@app.get('/api/identity/sessions')
+def identity_list_sessions():
+    if not tenant_session_controls_enabled:
+        return fail('Not found',404)
+    try:
+        return tenant_session_manager.list_sessions(
+            request.cookies.get(identity_auth.COOKIE_NAME,''),
+            request.headers.get('X-Edge-Identity-CSRF',''))
+    except tenant_session_controls.SessionControlDenied:
+        return fail('Session management unavailable',403)
+
+
+@app.delete('/api/identity/sessions/<session_id>')
+def identity_revoke_other_session(session_id):
+    if not tenant_session_controls_enabled:
+        return fail('Not found',404)
+    try:
+        return tenant_session_manager.revoke_other(
+            request.cookies.get(identity_auth.COOKIE_NAME,''),
+            request.headers.get('X-Edge-Identity-CSRF',''),
+            session_id)
+    except tenant_session_controls.SessionTargetDenied:
+        return fail('Other session unavailable',404)
+    except tenant_session_controls.SessionControlDenied:
+        return fail('Session management unavailable',403)
+
+
 # Read-only tenant-account metadata and persisted research data.
 # Requires a verified identity cookie, account ownership and an additional
 # feature flag. These endpoints never call Public or the legacy global worker.
@@ -607,7 +645,7 @@ def healthz():
     return {'ok':True}
 
 @app.get('/api/health')
-def health(): return {'ok':True,'version':'0.2.36-account-password-change-opt-in','time':datetime.now(timezone.utc).isoformat()}
+def health(): return {'ok':True,'version':'0.2.37-device-session-controls-opt-in','time':datetime.now(timezone.utc).isoformat()}
 def token():
     global cached_token,expires
     with lock:

@@ -15,7 +15,9 @@ class TenantBoundaryAuditTests(unittest.TestCase):
 
     def test_current_legacy_api_worker_are_explicitly_cutover_blockers(self):
         audit=tenant_route_audit.inspect_sources(self.app,self.worker)
-        self.assertEqual(audit["identityRoutesReviewed"],22)
+        self.assertEqual(audit["identityRoutesReviewed"],24)
+        self.assertTrue(audit["tenantSessionControlsDefaultOff"])
+        self.assertTrue(audit["tenantSessionControlsOtherDeviceOnly"])
         self.assertTrue(audit["tenantPasswordChangeDefaultOff"])
         self.assertTrue(audit["tenantPasswordChangeSessionRevocation"])
         self.assertTrue(audit["tenantWatchlistEditDefaultOff"])
@@ -57,7 +59,7 @@ class TenantBoundaryAuditTests(unittest.TestCase):
         with self.assertRaises(tenant_route_audit.ApiBoundaryError):
             tenant_route_audit.inspect_sources(
                 self.app + "\nfrom engine import tenant_api_gateway\n",self.worker)
-        for name in ("tenant_api_gateway","tenant_monitor_blueprint","tenant_watchlist","tenant_password_change"):
+        for name in ("tenant_api_gateway","tenant_monitor_blueprint","tenant_watchlist","tenant_password_change","tenant_session_controls"):
             with self.assertRaises(tenant_route_audit.ApiBoundaryError):
                 tenant_route_audit.inspect_sources(
                     self.app,self.worker + "\nfrom engine import "+name+"\n")

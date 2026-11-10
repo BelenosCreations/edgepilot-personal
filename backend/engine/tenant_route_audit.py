@@ -11,6 +11,8 @@ from pathlib import Path
 IDENTITY_ROUTES=frozenset((
     ("POST","/api/identity/login"),
     ("POST","/api/identity/password/change"),
+    ("GET","/api/identity/sessions"),
+    ("DELETE","/api/identity/sessions/<session_id>"),
     ("POST","/api/identity/register"),
     ("POST","/api/identity/passkeys/register/options"),
     ("POST","/api/identity/passkeys/register/finish"),
@@ -77,6 +79,10 @@ def inspect_sources(app_source,worker_source):
         "return fail('Not authenticated',401)",
         "tenant_public_vault_enabled",
         "tenant_password_change_enabled",
+        "tenant_session_controls_enabled",
+        "EDGE_TENANT_SESSION_CONTROLS_ENABLED','false'",
+        "tenant_session_manager.list_sessions(",
+        "tenant_session_manager.revoke_other(",
         "EDGE_TENANT_PASSWORD_CHANGE_ENABLED','false'",
         "request.path=='/api/identity/password/change'",
         "tenant_password_manager.change(",
@@ -126,6 +132,7 @@ def inspect_sources(app_source,worker_source):
             "tenant_monitor_blueprint" in worker_source or
             "tenant_watchlist" in worker_source or
             "tenant_password_change" in worker_source or
+            "tenant_session_controls" in worker_source or
             "tenant_request_boundary" in worker_source or
             "tenant_worker_boundary" in worker_source or
             "tenant_test_http" in worker_source or
@@ -181,6 +188,8 @@ def inspect_sources(app_source,worker_source):
         "passkeyIdentityActivatedInProduction":False,
         "passkeyIdentityDefaultOff":True,
         "tenantPasswordChangeDefaultOff":True,
+        "tenantSessionControlsDefaultOff":True,
+        "tenantSessionControlsOtherDeviceOnly":True,
         "tenantPasswordChangeSessionRevocation":True,
         "passkeyAuthRequiresVerifiedWebAuthn":True,
         "tenantSignupDefaultOff":True,

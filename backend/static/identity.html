@@ -89,6 +89,14 @@
         <button id="changeEdgePilotPassword" type="submit">Change password and sign out devices</button>
         <small>This requires your current password; forgotten-password recovery is not available yet. Never enter a Public API key here.</small>
       </form>
+      <section id="deviceSessionsPane" class="panel">
+        <h2>Signed-in devices and sessions</h2>
+        <p class="muted">Review active EdgePilot sessions. Only your own sessions are shown. An unfamiliar session can be signed out without changing your Public brokerage account or your current device.</p>
+        <button id="refreshDeviceSessions" type="button">Refresh my sessions</button>
+        <p id="deviceSessionStatus" class="muted" aria-live="polite"></p>
+        <ul id="deviceSessions" aria-label="Your EdgePilot identity sessions"></ul>
+        <small>Sessions expire automatically. EdgePilot does not track device fingerprints or locations, so session timestamps may be the only way to distinguish devices. For a lost device, changing your password also signs out every session.</small>
+      </section>
       <form id="publicKeyForm" class="panel">
         <h2>Your Public connection</h2>
         <p class="muted">Connect your own Public brokerage account. Your API secret is encrypted separately on the server and is never displayed after saving.</p>
