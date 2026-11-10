@@ -4,7 +4,9 @@ Introduced a separate synthetic-only private temp-directory SQLite safety fixtur
 It demonstrates an emergency latch surviving a distinct Python process restart,
 serialized per-account/global quotas across competing processes, revision-fenced
 fake leases, stale/revoked-account denial, manual offline pause recovery and a
-secret-free audit. Unsafe, missing or corrupt fixture state fails closed.
+secret-free audit. Unsafe, missing or corrupt fixture state fails closed. Explicit scratch-root
+validation rejects redirected TMPDIR, Render /data and nonstandard mounts;
+read-only redacted incident summaries remain available after a fixture stop.
 No live app, credential, provider, account, production DB, worker, trader, bank
 transfer or Android APK uses this module. Static route audit prohibits live
 imports. A single local disk is NOT a replicated production emergency stop;
