@@ -1,26 +1,69 @@
-# EdgePilot v0.19.12 — private Android APK prototype
+# EdgePilot Android test shell — v0.19.16
 
-This is a **debug-signed test APK**, not a Play Store release. It is a minimal Android WebView wrapper around the existing secure Flask web app. The server still runs on Render; an Android app does not provide autonomous trading when the phone is offline.
+This is a **debug-signed, private test APK**, not a Play Store release or
+production-signed build. It runs the hosted EdgePilot web application through
+an HTTPS-only Android WebView. Server research and Observe/Paper workers run
+in Render; no trading worker operates on the phone.
 
-## Get the APK from GitHub (phone only)
+## Install on Android
 
-1. Open the private GitHub repository → **Actions** → **EdgePilot Android test APK**.
-2. Open the successful workflow run and scroll to **Artifacts**.
-3. Download `EdgePilot-v0.19.12-debug-apk.zip`, extract `app-debug.apk` from it using your phone's file manager, and install it.
-4. Android may request permission to install apps from the application you used to open the APK. Only allow this for a download you verified came from your own private repository.
-5. Launch the EdgePilot icon. The app opens **https://edgepilot.belenoscreations.biz/**. Use your existing EdgePilot access token to sign in; never use your Public key in the app's token field.
+1. Open the private GitHub repository, then **Actions** > **EdgePilot Android
+   test APK**, and select a successful run matching the desired commit.
+2. Under Artifacts, download
+   **EdgePilot-v0.19.16-webview-passkey-debug-apk.zip**.
+3. Extract app-debug.apk and install it using your Android file manager.
+   Android may request permission for that installer to install apps.
+   Enable that only when you have verified your own private repository.
+4. Launch EdgePilot. The default page is
+   **https://edgepilot.belenoscreations.biz/**. Sign in with the existing
+   personal EdgePilot access token in the personal dashboard, NOT a Public
+   API secret.
+5. The separate **/account** web page provides a development-stage shared
+   account interface for invitation signup, password login, passkey flows
+   and per-user Public key entry. The server gates are intentionally OFF
+   in the default deployed configuration.
 
-The APK has no keys or brokerage credentials embedded. It only loads the trusted HTTPS hostname, blocks outside domains and plaintext URLs, disallows local file access and mixed content, and uses WebView's first-party cookie jar for the server's HttpOnly session. A Chrome login does not automatically carry over to the APK.
+## Passkeys are not yet proven on real devices
 
-## Limitations and security
+This APK includes AndroidX WebKit's native Web Authentication feature
+(on devices and WebView versions that support it) and stable Credential
+Manager dependencies. The passkey credential remains in the Android
+credential provider. The backend verifies signed WebAuthn challenges;
+EdgePilot never saves fingerprint/face templates.
 
-- Debug APKs are **test-only** and signed by a transient GitHub runner debug key. A future build may require uninstalling this copy, which loses local app preferences and cookie sessions; database settings remain on Render.
-- There is no background Android trading worker, push notifications, biometric login, MFA, offline trading or Play Store publishing yet.
-- The native shell executes the existing remote website. Until the web UI receives stricter CSP/XSS defenses and private access protections, do not configure the Public brokerage secret.
-- API endpoints remain protected by the server session, and production broker order execution remains disabled.
-- HTTPS must be valid; the app deliberately blocks SSL errors rather than ignoring them.
-- Debug artifacts are visible only to authorized GitHub users and retained for 14 days. Do not share them publicly.
+**Do not infer this build has working biometric login.** An Android app
+and website must be linked through a Digital Asset Links response containing
+the SHA-256 fingerprint of the certificate that signed the *installed* APK.
+GitHub debug APKs use transient debug signing keys, so a future build may
+have a different fingerprint. Stable signed release builds and verified
+Digital Asset Links must be established before claiming supported
+biometric login or allowing multi-user real-account acceptance.
 
-## Source build
+The backend publishes /.well-known/assetlinks.json only if
+EDGE_ANDROID_CERT_SHA256 contains a valid signing certificate fingerprint.
+Without configuration it returns 404. See
+TENANT_PASSKEY_MOBILE_RUNBOOK.md for the verification process.
 
-The Android Gradle Plugin is `8.7.3`, Gradle is `8.9`, and Java is `17`. In the `android` directory, the command is `gradle :app:assembleDebug`. The GitHub Actions workflow performs the build with an Android SDK installed; no desktop is necessary.
+## Existing security boundaries
+
+- The wrapper opens only the approved HTTPS EdgePilot host; off-host
+  navigation, file access, third-party cookies, mixed content and invalid
+  TLS certificates remain blocked. WebView debugging stays disabled.
+- Neither Public credentials nor the owner access token are embedded in APK
+  source. Browser and Android session cookies are separate.
+- Real brokerage orders, autonomous live execution and funds transfers
+  remain disabled.
+- No Android offline trading, push-notification engine, automatic trusted
+  release signing or Play Store delivery is implemented.
+- APK artifacts are available only to authorized repository users and
+  expire after the private workflow retention period (currently 14 days).
+- The debug signing identity can change between GitHub runners. Installing a
+  new debug build may require uninstalling the previous one, losing local
+  phone preferences and cookies; server data is unaffected.
+
+## Build
+
+Gradle 8.9, Java 17 and the Android SDK are used by the GitHub workflow.
+Build locally with `gradle -p android :app:assembleDebug` when the Android
+SDK and compatible Gradle installation are present. A successful compile
+does not establish trusted Digital Asset Links or real biometric login.
