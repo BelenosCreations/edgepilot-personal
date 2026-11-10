@@ -14,6 +14,10 @@ IDENTITY_ROUTES=frozenset((
     ("GET","/api/identity/session"),
     ("GET","/api/identity/accounts"),
     ("GET","/api/identity/accounts/<account_id>/summary"),
+    ("GET","/api/identity/public/connections"),
+    ("POST","/api/identity/public/connections"),
+    ("POST","/api/identity/public/connections/<connection_id>/rotate"),
+    ("DELETE","/api/identity/public/connections/<connection_id>"),
 ))
 HTTP={"get":"GET","post":"POST","put":"PUT","delete":"DELETE",
       "patch":"PATCH"}
@@ -58,9 +62,13 @@ def inspect_sources(app_source,worker_source):
         "identity_store.principal(token)",
         "request.headers.get('X-Edge-Identity-CSRF'",
         "return fail('Not authenticated',401)",
+        "tenant_public_vault_enabled",
+        "request.path.startswith('/api/identity/public/connections')",
     )
     if not all(value in app_source for value in required_guard):
         raise ApiBoundaryError("Legacy/identity authorization boundary has changed")
+    if "_credential_for_provider_only" in app_source:
+        raise ApiBoundaryError("Internal decrypted Public key exposed to legacy API")
     if any(name in app_source for name in (
         "from engine import tenant_history_details",
         "from engine import tenant_history,",
