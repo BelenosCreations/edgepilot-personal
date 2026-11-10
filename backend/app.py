@@ -1,7 +1,7 @@
 """EdgePilot single-user personal backend. Prototype: no broker orders without explicit armed state.
 Never expose this server directly to the internet; use TLS and an authenticated private tunnel.
 """
-import os, time, secrets, hmac, sqlite3, json, uuid, threading
+import os, time, secrets, hmac, sqlite3, json, uuid, threading, re
 from decimal import Decimal, InvalidOperation, ROUND_DOWN
 from datetime import datetime, timezone
 from pathlib import Path
@@ -484,6 +484,27 @@ def logout():
     return response
 @app.get('/')
 def index(): return send_from_directory(ROOT/'static','index.html')
+
+@app.get('/account')
+def identity_account_page():
+    # Unprivileged same-origin UI; every API operation still requires verified
+    # server-side identity/session/CSRF and independent feature gates.
+    return send_from_directory(ROOT/'static','identity.html')
+
+@app.get('/.well-known/assetlinks.json')
+def android_passkey_asset_links():
+    # Only a verified, configured app signing certificate may claim this
+    # website for Android passkeys. Debug builds use per-run keys and are NOT
+    # automatically trusted. A missing fingerprint never serves a fake link.
+    fingerprint=os.getenv('EDGE_ANDROID_CERT_SHA256','').upper().strip()
+    if not re.fullmatch(r'(?:[0-9A-F]{2}:){31}[0-9A-F]{2}',fingerprint):
+        return fail('Not found',404)
+    return jsonify([{
+      'relation':['delegate_permission/common.get_login_creds'],
+      'target':{'namespace':'android_app',
+                'package_name':'com.edgepilot.mobile',
+                'sha256_cert_fingerprints':[fingerprint]}
+    }])
 @app.get('/icon-192.png')
 @app.get('/icon-512.png')
 @app.get('/icon-maskable-512.png')
@@ -500,7 +521,7 @@ def healthz():
     return {'ok':True}
 
 @app.get('/api/health')
-def health(): return {'ok':True,'version':'0.2.29-passkeys-http-opt-in','time':datetime.now(timezone.utc).isoformat()}
+def health(): return {'ok':True,'version':'0.2.30-android-passkey-account-preview-opt-in','time':datetime.now(timezone.utc).isoformat()}
 def token():
     global cached_token,expires
     with lock:

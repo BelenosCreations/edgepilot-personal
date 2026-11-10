@@ -16,6 +16,8 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import androidx.webkit.WebSettingsCompat;
+import androidx.webkit.WebViewFeature;
 import android.net.http.SslError;
 import android.widget.Button;
 import android.widget.FrameLayout;
@@ -59,6 +61,13 @@ public final class MainActivity extends Activity {
         settings.setSupportMultipleWindows(false);
         settings.setSaveFormData(false);
         settings.setGeolocationEnabled(false);
+        // WebAuthn remains bound to the verified EdgePilot HTTPS origin and
+        // Android Digital Asset Links. No JavaScript bridge, fake biometric
+        // proof or credential interception is introduced.
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_AUTHENTICATION)) {
+            WebSettingsCompat.setWebAuthenticationSupport(
+                    settings, WebSettingsCompat.WEB_AUTHENTICATION_SUPPORT_FOR_APP);
+        }
         CookieManager manager = CookieManager.getInstance();
         manager.setAcceptCookie(true); // Required for v0.19.11 HttpOnly session cookie.
         manager.setAcceptThirdPartyCookies(webView, false);

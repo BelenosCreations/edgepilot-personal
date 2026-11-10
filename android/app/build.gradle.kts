@@ -7,11 +7,19 @@ android {
         applicationId = "com.edgepilot.mobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1915
-        versionName = "0.19.15"
+        versionCode = 1916
+        versionName = "0.19.16"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+}
+
+// WebView forwards real WebAuthn to Android Credential Manager on supported
+// versions only. Device biometrics and passkeys stay inside credential providers.
+dependencies {
+    implementation("androidx.webkit:webkit:1.16.0")
+    implementation("androidx.credentials:credentials:1.6.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.6.0")
 }

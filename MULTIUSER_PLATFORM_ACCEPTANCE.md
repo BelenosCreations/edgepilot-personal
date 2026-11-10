@@ -50,22 +50,25 @@ another real person's key. Live orders and funds transfers stay disabled.
 
 ## Existing implementation and current blockers
 
-- Existing `identity_auth.py` has dormant Argon2id identity sessions but no
-  self-registration route. Its sessions deliberately cannot access legacy
-  brokerage endpoints.
-- Existing `tenant_passkeys.py` implements dormant WebAuthn ceremonies and
-  cryptographic verification. It is not wired to the live Flask app or the
-  Android UI. An Android Credential Manager / verified origin integration
-  and end-to-end on-device testing are still required.
-- Existing `tenant_public_vault.py` has tenant-aware credential storage,
-  behind feature flags. The legacy `broker_credentials.py` is globally
-  keyed by provider and must never be used for multiple users.
+- Identity sessions use Argon2id, and invitation-only member registration
+  exists behind an independent default-off feature flag. Identity sessions
+  deliberately cannot access legacy owner/trading endpoints.
+- WebAuthn registration/authentication is wired into six independently gated
+  Flask endpoints. A separate /account web interface requests WebAuthn;
+  Android WebView enables native Web Authentication when supported. Verified
+  Digital Asset Links, stable app-signing and end-to-end device tests remain
+  outstanding; the server stores no biometric information.
+- The tenant-owned encrypted Public credential vault and read-only verified
+  account adapter are independently feature-gated, and remain separate from
+  the legacy global broker_credentials module. The global credential
+  repository must never be used to serve multiple users.
 - Existing `tenant_public_live_readonly.py` is feature-flagged; all legacy
   portfolio/settings/worker paths still use single-owner state. The
   `tenant_route_audit.py` inventory explicitly blocks multi-user cutover.
-- Android `MainActivity.java` currently opens one hard-coded HTTPS site;
-  this is compatible with **one shared multi-user backend**. Do not replace
-  it with a per-user server picker.
+- Android MainActivity.java opens the approved HTTPS host and enables
+  WebView WebAuthn conditionally. The shared backend is still the intended
+  architecture; do not replace it with per-user server URLs. The separate
+  /account page is optional and the existing legacy login is unchanged.
 - The personal-use legacy login and existing Render service remain in place
   until a verified migration. Do not auto-enable dormant identity, passkey
   or Public flags simply because code exists.
