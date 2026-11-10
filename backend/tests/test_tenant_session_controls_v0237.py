@@ -242,5 +242,34 @@ class SessionsDisabledDefaultTests(unittest.TestCase):
         importlib.reload(app)
 
 
+class SessionControlUiChecks(unittest.TestCase):
+    def test_devices_list_never_stores_secrets_or_revokes_current_device(self):
+        from pathlib import Path
+        root=Path(__file__).resolve().parents[2]
+        js=(root/"backend/static/assets/identity.js").read_text(encoding="utf-8")
+        html=(root/"backend/static/identity.html").read_text(encoding="utf-8")
+        for field in ("deviceSessionsPane","refreshDeviceSessions",
+                      "deviceSessions","deviceSessionStatus"):
+            self.assertIn('id="'+field+'"',html)
+        for marker in (
+            '"/sessions", "GET", undefined, true',
+            '"/sessions/" + encodeURIComponent(session.sessionId)',
+            '"DELETE", undefined, true',
+            'if (!session.current)',
+            'requestGeneration !== identityViewGeneration',
+            'generation !== identityViewGeneration',
+            'revoked.otherSessionRevoked !== true',
+            'revoked.currentSessionRevoked !== false',
+            'revoked.otherUserAffected !== false',
+            'revoked.publicConnectionChanged !== false',
+            'el("deviceSessions").replaceChildren()',
+            'window.confirm("Sign out this other EdgePilot session?")',
+        ):
+            self.assertIn(marker,js)
+        for forbidden in ("localStorage","sessionStorage","document.cookie","innerHTML"):
+            self.assertNotIn(forbidden,js)
+        self.assertIn("does not track device fingerprints or locations",html)
+
+
 if __name__=="__main__":
     unittest.main()
