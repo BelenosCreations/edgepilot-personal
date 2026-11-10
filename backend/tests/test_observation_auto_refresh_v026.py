@@ -36,7 +36,7 @@ class ObservationRefreshTests(unittest.TestCase):
         self.assertNotIn("api('automation/auto/start'",interval)
         self.assertNotIn("api('funds/",interval)
         self.assertIn("'liveTradingAvailable':False",APP)
-        self.assertIn("0.2.17-dormant-request-worker-boundaries",APP)
+        self.assertIn("0.2.18-isolated-http-orchestrator-inactive",APP)
 
 
 if __name__=='__main__':
