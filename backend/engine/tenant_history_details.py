@@ -229,7 +229,7 @@ def stage(con, *, user_id,account_id, expected_references):
         if not _REQUIRED[table].issubset(columns):
             unsupported+=1
             continue
-        source=con.execute("SELECT * FROM "+'"'+table+'"'+
+        source=con.execute("SELECT rowid AS _shadow_source_rowid, * FROM "+'"'+table+'"'+
                            " WHERE rowid=?",(ref["source_rowid"],)).fetchone()
         if source is None:
             raise DetailSafetyError("Source history missing")
