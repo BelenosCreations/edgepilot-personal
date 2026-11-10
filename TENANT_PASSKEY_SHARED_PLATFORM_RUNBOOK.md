@@ -41,7 +41,7 @@ maintained py_webauthn library, not a custom signature implementation.
   signed response is validated cryptographically for challenge, origin,
   relying-party domain, user verification, credential ID, user handle and
   monotonic signature counter before issuing an identity-only session.
-- Registration and revocation check the authenticated user's ownership.
+- Registration and revocation check the authenticated user's ownership. Revoking one passkey invalidates all sessions belonging to that user, but not other users' sessions.
   Passkey sessions cannot authenticate the legacy owner brokerage or worker.
 - Neither Flask nor the Observe worker imports the module. Static route audit
   rejects accidental wiring. Production never executes passkey table setup.
