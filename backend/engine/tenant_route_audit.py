@@ -10,6 +10,7 @@ from pathlib import Path
 
 IDENTITY_ROUTES=frozenset((
     ("POST","/api/identity/login"),
+    ("POST","/api/identity/register"),
     ("POST","/api/identity/logout"),
     ("GET","/api/identity/session"),
     ("GET","/api/identity/accounts"),
@@ -66,6 +67,9 @@ def inspect_sources(app_source,worker_source):
         "request.headers.get('X-Edge-Identity-CSRF'",
         "return fail('Not authenticated',401)",
         "tenant_public_vault_enabled",
+        "tenant_signup_enabled",
+        "EDGE_TENANT_SIGNUP_ENABLED','false'",
+        "request.path=='/api/identity/register'",
         "request.path.startswith('/api/identity/public/connections')",
         "request.path.startswith('/api/identity/public/read/')",
         "tenant_public_read_enabled",
@@ -146,6 +150,8 @@ def inspect_sources(app_source,worker_source):
         "publicSafetyAndConsentActiveInProduction":False,
         "offlineSyntheticWorkGateMountedInProduction":False,
         "passkeyIdentityActivatedInProduction":False,
+        "tenantSignupDefaultOff":True,
+        "tenantRegistrationRequiresOneUseInvite":True,
         "productionKillSwitchDeployed":False,
         "productionPublicRotationEnabled":False,
         "realPublicAuthorizationGranted":False,
