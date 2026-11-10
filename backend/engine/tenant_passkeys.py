@@ -329,7 +329,17 @@ class TenantPasskeyStore:
                 (now,bytes(credential_id),principal["user_id"])).rowcount
             if changed != 1:
                 raise PasskeyDenied("Passkey revocation unavailable")
-        return {"revoked":True,"otherUsersUnaffected":True}
+            # Any session previously obtained with a compromised passkey
+            # must not outlive the explicit revocation. This also logs out
+            # this user on their other devices, without touching any tenant
+            # other than the verified session principal.
+            db.execute("""UPDATE tenant_identities
+                SET credential_version=credential_version+1 WHERE user_id=?""",
+                (principal["user_id"],))
+            db.execute("DELETE FROM tenant_identity_sessions WHERE user_id=?",
+                       (principal["user_id"],))
+        return {"revoked":True,"otherUsersUnaffected":True,
+                "identitySessionsRevoked":True}
 
     def redacted_own_status(self, identity_token, identity_csrf, *, now=None):
         now = _now(now)
