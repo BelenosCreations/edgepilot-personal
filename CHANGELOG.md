@@ -1,3 +1,6 @@
+### Post-merge CI reliability correction — 2026-11-10
+Clarified the v0.2.23 synthetic multi-process quota regression: under genuine SQLite lock contention, a denied attempt may fail closed as STATE_UNAVAILABLE rather than BUDGET_EXHAUSTED. The regression now still enforces exactly two admissions, six denials, and exactly two durable usage/audit entries. No live path or credential handling changed.
+
 ## v0.2.35 — 2026-11-10 — Self-managed encrypted Public key lifecycle (opt-in)
 **Added:** The separate EdgePilot account screen now exposes selected-connection key replacement and disconnection with explicit user confirmations. Sensitive replacement inputs clear immediately after every attempt, and account/portfolio/monitor displays are cleared and reloaded after success.
 **Security:** The vault now rechecks current identity session and CSRF *inside* the same SQLite write transaction as credential rotation or revocation, preventing a stale preflight from authorizing a post-logout mutation. Rotation or disconnection disables that user's existing linked account bindings and records an append-only secret-free audit event. Neither action touches another user's key or closes the brokerage account.
