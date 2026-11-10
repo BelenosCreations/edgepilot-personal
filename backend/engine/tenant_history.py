@@ -81,6 +81,7 @@ def prepare(con):
         record_state TEXT NOT NULL DEFAULT 'REFERENCE_ONLY'
             CHECK(record_state='REFERENCE_ONLY'),
         UNIQUE(account_id,user_id,source_table,source_rowid),
+        UNIQUE(reference_id,user_id,account_id),
         FOREIGN KEY(batch_id,user_id,account_id)
             REFERENCES tenant_history_batches(batch_id,user_id,account_id),
         FOREIGN KEY(account_id,user_id)
