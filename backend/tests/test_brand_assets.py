@@ -44,8 +44,8 @@ class BrandAssetsTests(unittest.TestCase):
 
     def test_release_version_and_unmodified_trading_guard(self):
         self.assertEqual((BASE/'VERSION').read_text().strip(),'0.2.33')
-        self.assertIn('versionCode = 1916',(BASE/'android/app/build.gradle.kts').read_text())
-        self.assertIn('versionName = "0.19.16"',(BASE/'android/app/build.gradle.kts').read_text())
+        self.assertIn('versionCode = 1917',(BASE/'android/app/build.gradle.kts').read_text())
+        self.assertIn('versionName = "0.19.17"',(BASE/'android/app/build.gradle.kts').read_text())
         app=(BASE/'backend/app.py').read_text()
         self.assertIn('0.2.33-account-watchlist-edit-opt-in',app)
         self.assertIn("@app.post('/api/order/submit')",app)
