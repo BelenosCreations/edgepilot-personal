@@ -22,6 +22,7 @@ IDENTITY_ROUTES=frozenset((
     ("GET","/api/identity/accounts"),
     ("GET","/api/identity/accounts/<account_id>/summary"),
     ("GET","/api/identity/accounts/<account_id>/monitor/preview"),
+    ("PUT","/api/identity/accounts/<account_id>/monitor/watchlist"),
     ("GET","/api/identity/public/connections"),
     ("POST","/api/identity/public/connections"),
     ("POST","/api/identity/public/connections/<connection_id>/rotate"),
@@ -75,6 +76,9 @@ def inspect_sources(app_source,worker_source):
         "return fail('Not authenticated',401)",
         "tenant_public_vault_enabled",
         "tenant_monitor_preview_enabled",
+        "tenant_watchlist_edit_enabled",
+        "EDGE_TENANT_WATCHLIST_EDIT_ENABLED','false'",
+        "tenant_watchlist_editor.replace(",
         "EDGE_TENANT_MONITOR_PREVIEW_ENABLED','false'",
         "tenant_monitor_planner.plan_for(principal['user_id'],account_id)",
         "tenant_signup_enabled",
@@ -115,6 +119,7 @@ def inspect_sources(app_source,worker_source):
             "tenant_history_details" in worker_source or
             "tenant_api_gateway" in worker_source or
             "tenant_monitor_blueprint" in worker_source or
+            "tenant_watchlist" in worker_source or
             "tenant_request_boundary" in worker_source or
             "tenant_worker_boundary" in worker_source or
             "tenant_test_http" in worker_source or
@@ -151,6 +156,8 @@ def inspect_sources(app_source,worker_source):
         "tenantMonitorPlannerWiredToWorker":False,
         "tenantMonitorPreviewDefaultOff":True,
         "tenantMonitorPlannerWiredToReadOnlyHttp":True,
+        "tenantWatchlistEditDefaultOff":True,
+        "tenantWatchlistEditSessionAndCsrfRequired":True,
         "tenantRequestBoundaryWiredToHttp":False,
         "tenantWorkerBoundaryWiredToLiveWorker":False,
         "tenantTestHttpMountedOnProduction":False,
