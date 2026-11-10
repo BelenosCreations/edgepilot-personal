@@ -9,7 +9,7 @@ from urllib.parse import quote
 import requests
 from flask import Flask, jsonify, request, send_from_directory, g
 from dotenv import load_dotenv
-from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, tenant_registration, account_scope, tenant_public_vault, tenant_public_live_readonly
+from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, tenant_registration, tenant_passkeys, account_scope, tenant_public_vault, tenant_public_live_readonly
 ROOT=Path(__file__).parent; load_dotenv(ROOT/'.env'); DB=Path(os.getenv('EDGE_DB_PATH',str(ROOT/'edgepilot.db'))); DB.parent.mkdir(parents=True,exist_ok=True)
 app=Flask(__name__,static_folder='static',static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # CSV/history research limit
@@ -48,6 +48,7 @@ credential_vault.setup()
 tenant_schema_enabled=os.getenv('EDGE_TENANT_SCHEMA_PREPARE','false').lower()=='true'
 identity_auth_enabled=os.getenv('EDGE_IDENTITY_AUTH_ENABLED','false').lower()=='true'
 tenant_signup_enabled=os.getenv('EDGE_TENANT_SIGNUP_ENABLED','false').lower()=='true'
+tenant_passkeys_enabled=os.getenv('EDGE_TENANT_PASSKEYS_ENABLED','false').lower()=='true'
 tenant_read_enabled=os.getenv('EDGE_TENANT_ACCOUNT_READS_ENABLED','false').lower()=='true'
 tenant_public_vault_enabled=os.getenv('EDGE_TENANT_PUBLIC_VAULT_ENABLED','false').lower()=='true'
 tenant_public_read_enabled=os.getenv('EDGE_TENANT_PUBLIC_READONLY_ENABLED','false').lower()=='true'
@@ -55,6 +56,8 @@ if identity_auth_enabled and not tenant_schema_enabled:
     raise RuntimeError('Identity subsystem requires the prepared tenant schema')
 if tenant_signup_enabled and not identity_auth_enabled:
     raise RuntimeError('Tenant registration requires identity authentication')
+if tenant_passkeys_enabled and not identity_auth_enabled:
+    raise RuntimeError('Passkeys require identity authentication')
 if tenant_read_enabled and not identity_auth_enabled:
     raise RuntimeError('Tenant account reads require identity authentication')
 if tenant_public_vault_enabled and not identity_auth_enabled:
@@ -63,6 +66,7 @@ if tenant_public_read_enabled and not (tenant_public_vault_enabled and tenant_re
     raise RuntimeError('Tenant Public read-only API requires vault and tenant account reads')
 identity_store=None
 tenant_registration_store=None
+tenant_passkey_store=None
 tenant_account_store=None
 tenant_connection_vault=None
 tenant_public_reader=None
@@ -74,6 +78,12 @@ if tenant_schema_enabled:
         if tenant_signup_enabled:
             tenant_registration.setup(str(DB))
             tenant_registration_store=tenant_registration.TenantRegistration(str(DB))
+        if tenant_passkeys_enabled:
+            tenant_passkeys.setup(str(DB))
+            tenant_passkey_store=tenant_passkeys.TenantPasskeyStore(
+                str(DB),identity_store,
+                rp_id=os.getenv('EDGE_WEBAUTHN_RP_ID',''),
+                expected_origin=os.getenv('EDGE_WEBAUTHN_ORIGIN',''))
         if tenant_read_enabled:
             account_scope.setup(str(DB))
             tenant_account_store=account_scope.AccountScopeStore(str(DB),identity_store)
@@ -115,6 +125,8 @@ def authenticate():
         # Identity account reads require a second independently enabled gate.
         if request.path.startswith('/api/identity/accounts') and not tenant_read_enabled:
             return fail('Not found',404)
+        if request.path.startswith('/api/identity/passkeys') and not tenant_passkeys_enabled:
+            return fail('Not found',404)
         if request.path.startswith('/api/identity/public/connections') and not tenant_public_vault_enabled:
             return fail('Not found',404)
         if request.path.startswith('/api/identity/public/read/') and not tenant_public_read_enabled:
@@ -128,6 +140,9 @@ def authenticate():
         if request.path=='/api/identity/register' and request.method=='POST':
             if not tenant_signup_enabled:
                 return fail('Not found',404)
+            return
+        if request.path in ('/api/identity/passkeys/authenticate/options',
+                            '/api/identity/passkeys/authenticate/finish') and request.method=='POST':
             return
         token=request.cookies.get(identity_auth.COOKIE_NAME,'')
         principal=identity_store.principal(token)
@@ -228,6 +243,91 @@ def identity_register():
         return fail('Registration temporarily unavailable',429)
     except tenant_registration.RegistrationDenied:
         return fail('Registration unavailable',400)
+
+
+# Optional verified WebAuthn ceremonies. All four routes are separately
+# disabled by default and use a fixed HTTPS relying party, never request.host.
+@app.post('/api/identity/passkeys/register/options')
+def identity_passkey_register_options():
+    if request.get_json(silent=True)!={}:
+        return fail('Passkey request unavailable',400)
+    try:
+        return tenant_passkey_store.begin_registration(
+            request.cookies.get(identity_auth.COOKIE_NAME,''),
+            request.headers.get('X-Edge-Identity-CSRF',''))
+    except tenant_passkeys.PasskeyDenied:
+        return fail('Passkey request unavailable',400)
+
+
+@app.post('/api/identity/passkeys/register/finish')
+def identity_passkey_register_finish():
+    body=request.get_json(silent=True)
+    if not isinstance(body,dict) or set(body)!={'requestId','credential'}:
+        return fail('Passkey verification failed',400)
+    try:
+        return tenant_passkey_store.finish_registration(
+            request.cookies.get(identity_auth.COOKIE_NAME,''),
+            request.headers.get('X-Edge-Identity-CSRF',''),
+            body['requestId'],body['credential'])
+    except tenant_passkeys.PasskeyDenied:
+        return fail('Passkey verification failed',400)
+
+
+@app.post('/api/identity/passkeys/authenticate/options')
+def identity_passkey_auth_options():
+    if request.get_json(silent=True)!={}:
+        return fail('Passkey request unavailable',400)
+    try:
+        return tenant_passkey_store.begin_authentication()
+    except tenant_passkeys.PasskeyDenied:
+        return fail('Passkey request unavailable',400)
+
+
+@app.post('/api/identity/passkeys/authenticate/finish')
+def identity_passkey_auth_finish():
+    body=request.get_json(silent=True)
+    if not isinstance(body,dict) or set(body)!={'requestId','credential'}:
+        return fail('Passkey verification failed',400)
+    try:
+        issued=tenant_passkey_store.finish_authentication(
+            body['requestId'],body['credential'])
+    except tenant_passkeys.PasskeyDenied:
+        return fail('Passkey verification failed',400)
+    resp=jsonify({'ok':True,'csrf':issued['csrf'],
+        'expiresAt':datetime.fromtimestamp(issued['expires_at'],timezone.utc).isoformat(),
+        'scope':'identity_only_no_legacy_access'})
+    resp.set_cookie(identity_auth.COOKIE_NAME,issued['token'],
+        max_age=identity_auth.SESSION_SECONDS,
+        secure=True,httponly=True,samesite='Strict',path='/')
+    return resp
+
+
+@app.get('/api/identity/passkeys')
+def identity_passkey_status():
+    try:
+        return tenant_passkey_store.redacted_own_status(
+            request.cookies.get(identity_auth.COOKIE_NAME,''),
+            request.headers.get('X-Edge-Identity-CSRF',''))
+    except tenant_passkeys.PasskeyDenied:
+        return fail('Passkey status unavailable',404)
+
+
+@app.delete('/api/identity/passkeys/<credential_id>')
+def identity_passkey_revoke(credential_id):
+    try:
+        from webauthn import base64url_to_bytes
+        if not isinstance(credential_id,str) or not 20<=len(credential_id)<=2750:
+            return fail('Passkey unavailable',404)
+        result=tenant_passkey_store.revoke_for_user(
+            request.cookies.get(identity_auth.COOKIE_NAME,''),
+            request.headers.get('X-Edge-Identity-CSRF',''),
+            base64url_to_bytes(credential_id))
+    except (tenant_passkeys.PasskeyDenied,ValueError,TypeError):
+        return fail('Passkey unavailable',404)
+    response=jsonify(result)
+    response.delete_cookie(identity_auth.COOKIE_NAME,path='/',
+        secure=True,httponly=True,samesite='Strict')
+    return response
 
 
 # Read-only tenant-account metadata and persisted research data.
@@ -400,7 +500,7 @@ def healthz():
     return {'ok':True}
 
 @app.get('/api/health')
-def health(): return {'ok':True,'version':'0.2.28-invite-registration-opt-in','time':datetime.now(timezone.utc).isoformat()}
+def health(): return {'ok':True,'version':'0.2.29-passkeys-http-opt-in','time':datetime.now(timezone.utc).isoformat()}
 def token():
     global cached_token,expires
     with lock:

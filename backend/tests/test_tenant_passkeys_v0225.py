@@ -217,12 +217,13 @@ class TenantPasskeyTests(unittest.TestCase):
         app=(ROOT/"backend/app.py").read_text()
         worker=(ROOT/"backend/engine/automation_worker.py").read_text()
         module="tenant_passkeys"
-        self.assertNotIn(module,app)
+        self.assertIn(module,app)
+        self.assertIn("EDGE_TENANT_PASSKEYS_ENABLED\u0027,\u0027false\u0027",app)
         self.assertNotIn(module,worker)
         self.assertFalse(tenant_route_audit.inspect_sources(app,worker)["crossAccountProductionCutoverAllowed"])
         with self.assertRaises(tenant_route_audit.ApiBoundaryError):
             tenant_route_audit.inspect_sources(
-                app+"\nfrom engine import tenant_passkeys\n",worker)
+                app,worker+"\nfrom engine import tenant_passkeys\n")
 
 
 if __name__=="__main__":
