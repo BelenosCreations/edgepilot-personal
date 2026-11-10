@@ -80,7 +80,8 @@ class IsolatedFlaskAndOrchestratorTests(unittest.TestCase):
         return client
 
     def get(self,client,path,**kwargs):
-        return client.get(path,base_url=ORIGIN,**kwargs)
+        base_url=kwargs.pop("base_url",ORIGIN)
+        return client.get(path,base_url=base_url,**kwargs)
 
     def post(self,client,path,body,csrf,origin=ORIGIN,**kwargs):
         hdr={"Origin":origin,"X-Edge-Identity-CSRF":csrf,"Sec-Fetch-Site":"same-origin"}
