@@ -286,6 +286,7 @@ def rehearse_owner_shadow(source_db, *, credential_key, phrase):
     try:
         path, ram_root=shadow_storage.require_isolated_source(source_db)
         boundary_report=tenant_route_audit.inspect_repo()
+        source_bytes_before=hashlib.sha256(path.read_bytes()).digest()
         before=migration_preflight.inspect_database(path)
         with closing(_conn(path,readonly=True)) as original:
             source_fingerprint=historical_reconciliation.source_content_fingerprint(
@@ -316,7 +317,8 @@ def rehearse_owner_shadow(source_db, *, credential_key, phrase):
             with closing(_conn(path,readonly=True)) as original:
                 final_fingerprint=historical_reconciliation.source_content_fingerprint(
                     original,before["tableCounts"])
-            if after!=before or final_fingerprint!=source_fingerprint:
+            if (after!=before or final_fingerprint!=source_fingerprint or
+                    hashlib.sha256(path.read_bytes()).digest()!=source_bytes_before):
                 raise ShadowMigrationError("Isolated source changed during rehearsal")
         # Reaching this point proves temporary files were cleaned up.
         if Path(root).exists():
@@ -324,6 +326,7 @@ def rehearse_owner_shadow(source_db, *, credential_key, phrase):
         return {**report,"routeAndWorkerBoundaryAudit":boundary_report,
             "sourceLogicalInventoryUnchanged":True,
             "sourceContentsUnchanged":True,
+            "sourceFileBytesUnchanged":True,
             "sourceToCopyContentsMatched":True,
             "historicalRowFingerprintsVerified":True,
             "disposableWorkingCopyRemoved":True,
