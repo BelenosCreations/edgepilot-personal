@@ -9,7 +9,7 @@ from urllib.parse import quote
 import requests
 from flask import Flask, jsonify, request, send_from_directory, g
 from dotenv import load_dotenv
-from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, account_scope
+from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, account_scope, tenant_public_vault
 ROOT=Path(__file__).parent; load_dotenv(ROOT/'.env'); DB=Path(os.getenv('EDGE_DB_PATH',str(ROOT/'edgepilot.db'))); DB.parent.mkdir(parents=True,exist_ok=True)
 app=Flask(__name__,static_folder='static',static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # CSV/history research limit
@@ -48,12 +48,16 @@ credential_vault.setup()
 tenant_schema_enabled=os.getenv('EDGE_TENANT_SCHEMA_PREPARE','false').lower()=='true'
 identity_auth_enabled=os.getenv('EDGE_IDENTITY_AUTH_ENABLED','false').lower()=='true'
 tenant_read_enabled=os.getenv('EDGE_TENANT_ACCOUNT_READS_ENABLED','false').lower()=='true'
+tenant_public_vault_enabled=os.getenv('EDGE_TENANT_PUBLIC_VAULT_ENABLED','false').lower()=='true'
 if identity_auth_enabled and not tenant_schema_enabled:
     raise RuntimeError('Identity subsystem requires the prepared tenant schema')
 if tenant_read_enabled and not identity_auth_enabled:
     raise RuntimeError('Tenant account reads require identity authentication')
+if tenant_public_vault_enabled and not identity_auth_enabled:
+    raise RuntimeError('Tenant Public vault requires identity authentication')
 identity_store=None
 tenant_account_store=None
+tenant_connection_vault=None
 if tenant_schema_enabled:
     tenant_foundation.setup(str(DB))
     if identity_auth_enabled:
@@ -62,6 +66,9 @@ if tenant_schema_enabled:
         if tenant_read_enabled:
             account_scope.setup(str(DB))
             tenant_account_store=account_scope.AccountScopeStore(str(DB),identity_store)
+        if tenant_public_vault_enabled:
+            tenant_public_vault.setup(str(DB))
+            tenant_connection_vault=tenant_public_vault.TenantPublicVault(str(DB),identity_store)
 def settings():
     with database() as c: return {r['k']:r['v'] for r in c.execute('SELECT * FROM settings')}
 def put(k,v):
@@ -92,6 +99,8 @@ def authenticate():
     if request.path.startswith('/api/identity/'):
         # Identity account reads require a second independently enabled gate.
         if request.path.startswith('/api/identity/accounts') and not tenant_read_enabled:
+            return fail('Not found',404)
+        if request.path.startswith('/api/identity/public/connections') and not tenant_public_vault_enabled:
             return fail('Not found',404)
         # Identity sessions cannot authenticate any existing broker, settings,
         # monitoring or order API. All routes here remain disabled by default.
@@ -208,6 +217,55 @@ def identity_account_summary(account_id):
         return fail('Account unavailable',404)
 
 
+# Identity-only Public key storage. Never sends a broker request and never
+# returns plaintext or encrypted credentials to the client.
+@app.get('/api/identity/public/connections')
+def identity_public_connections():
+    try:
+        token=request.cookies.get(identity_auth.COOKIE_NAME,'')
+        return tenant_connection_vault.list_connections(token)
+    except tenant_public_vault.TenantVaultDenied:
+        return fail('Connection unavailable',404)
+
+
+@app.post('/api/identity/public/connections')
+def identity_public_save_connection():
+    body=request.get_json(silent=True)
+    if not isinstance(body,dict) or set(body)!={'secret'}:
+        return fail('Provide only the Public API secret',400)
+    try:
+        token=request.cookies.get(identity_auth.COOKIE_NAME,'')
+        result=tenant_connection_vault.save(
+            token,request.headers.get('X-Edge-Identity-CSRF',''),body['secret'])
+        return jsonify(result),201
+    except tenant_public_vault.TenantVaultDenied:
+        return fail('Credential not accepted securely',400)
+
+
+@app.post('/api/identity/public/connections/<connection_id>/rotate')
+def identity_public_rotate_connection(connection_id):
+    body=request.get_json(silent=True)
+    if not isinstance(body,dict) or set(body)!={'secret'}:
+        return fail('Provide only the replacement Public API secret',400)
+    try:
+        token=request.cookies.get(identity_auth.COOKIE_NAME,'')
+        return tenant_connection_vault.rotate(
+            token,request.headers.get('X-Edge-Identity-CSRF',''),
+            connection_id,body['secret'])
+    except tenant_public_vault.TenantVaultDenied:
+        return fail('Connection unavailable',404)
+
+
+@app.delete('/api/identity/public/connections/<connection_id>')
+def identity_public_delete_connection(connection_id):
+    try:
+        token=request.cookies.get(identity_auth.COOKIE_NAME,'')
+        return tenant_connection_vault.disconnect(
+            token,request.headers.get('X-Edge-Identity-CSRF',''),connection_id)
+    except tenant_public_vault.TenantVaultDenied:
+        return fail('Connection unavailable',404)
+
+
 @app.get('/api/identity/session')
 def identity_session():
     token=request.cookies.get(identity_auth.COOKIE_NAME,'')
@@ -263,7 +321,7 @@ def healthz():
     return {'ok':True}
 
 @app.get('/api/health')
-def health(): return {'ok':True,'version':'0.2.25-passkey-tenant-foundation-inactive','time':datetime.now(timezone.utc).isoformat()}
+def health(): return {'ok':True,'version':'0.2.26-tenant-public-credential-vault-opt-in','time':datetime.now(timezone.utc).isoformat()}
 def token():
     global cached_token,expires
     with lock:

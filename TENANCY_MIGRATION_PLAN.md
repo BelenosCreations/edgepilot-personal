@@ -1,3 +1,17 @@
+## Phase 20 (v0.2.26): Independently encrypted Public secrets per identity, opt-in
+
+Introduced an identity-only server vault and four gated lifecycle HTTP routes.
+No public credential is assigned by a client-supplied user ID; the verified
+session determines ownership. Encrypted keys are stored in tenant_connections
+and are rotated/revoked only for the same identity; rotating or disconnecting
+one invalidates its account bindings and writes an event-only append-only audit.
+The existing single-owner Public key remains in a completely separate
+broker_credentials table. No real Public API traffic, live trading, transfers,
+tenant worker activation or automatic owner migration. All new routes 404
+unless the tenant schema, identity auth and dedicated Public vault flags are
+independently enabled. Two-device fake key tests check access isolation.
+See TENANT_PUBLIC_VAULT_RUNBOOK.md.
+
 ## Phase 19 (v0.2.25): Shared tenant account architecture and passkey identity (inactive)
 
 Confirmed product objective: a single EdgePilot service, separate sign-in
