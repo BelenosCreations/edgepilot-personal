@@ -149,6 +149,8 @@ class TenantPublicVault:
                 "realOrdersEnabled":False}
 
     def rotate(self, identity_token, csrf, connection_id, secret):
+        # A missing/null rotation secret is invalid, never a disconnect.
+        self._secret(secret)
         return self._rotate_or_revoke(identity_token,csrf,connection_id,secret)
 
     def disconnect(self, identity_token, csrf, connection_id):
