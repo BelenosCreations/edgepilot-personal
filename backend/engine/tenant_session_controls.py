@@ -98,6 +98,10 @@ class TenantSessionControls:
         moment = self._now(now)
         try:
             with closing(identity_auth._db(self.path)) as con:
+                # Linearize read-only session inspection with password
+                # changes and revocations, so a revoked cookie cannot race
+                # its own listing between separate SQL statements.
+                con.execute("BEGIN IMMEDIATE")
                 user_id, token_hash = self._verify(con, token, csrf, moment)
                 rows = con.execute("""SELECT token_hash,issued_at,expires_at
                     FROM tenant_identity_sessions
