@@ -128,6 +128,20 @@ class SessionControlRepositoryTests(unittest.TestCase):
             self.manager.list_sessions(self.a1["token"],self.a1["csrf"])
         self.assertIsNotNone(self.identity.principal(self.b1["token"]))
 
+    def test_disabled_member_cannot_view_or_revoke_and_bob_is_unaffected(self):
+        view=self.manager.list_sessions(self.a1["token"],self.a1["csrf"])
+        target=next(s["sessionId"] for s in view["sessions"] if not s["current"])
+        with sqlite3.connect(self.path) as con:
+            con.execute("UPDATE tenant_users SET disabled_at='2026-11-10' WHERE user_id=?",
+                        (self.alice,))
+        with self.assertRaises(tenant_session_controls.SessionControlDenied):
+            self.manager.list_sessions(self.a1["token"],self.a1["csrf"])
+        with self.assertRaises(tenant_session_controls.SessionControlDenied):
+            self.manager.revoke_other(self.a1["token"],self.a1["csrf"],target)
+        self.assertIsNotNone(self.identity.principal(self.b1["token"]))
+        self.assertEqual(self.manager.list_sessions(
+            self.b1["token"],self.b1["csrf"])["count"],1)
+
     def test_schema_disabled_requires_tenant_identities(self):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(RuntimeError):
