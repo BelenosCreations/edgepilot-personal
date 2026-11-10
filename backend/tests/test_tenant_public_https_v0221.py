@@ -258,7 +258,9 @@ class PublicHTTPSWiringTests(unittest.TestCase):
 
     def test_revoked_credentials_abort_between_token_and_account_list(self):
         def revoke(method):
-            if method=="GET":
+            # Revoke after the initial account check but before the POST.
+            # No account-list GET may follow a now-revoked connection.
+            if method=="POST":
                 with account_scope._db(self.path) as con:
                     con.execute("UPDATE tenant_connections SET revoked_at='2026-11-09' WHERE connection_id=?",
                                 (self.conn_a,))
