@@ -153,7 +153,7 @@ cd backend
 python -m unittest discover -s tests -v
 ~~~
 
-CI additionally checks Python compilation and the legacy and account-login JavaScript syntax. Android changes are independently built as a debug APK in a separate workflow. The inactive multi-user and broker-safety modules have separate synthetic/negative tests to exercise isolation, malformed requests, revoked access, stale operations, and failure handling. Passing automated tests does not replace real brokerage-contract verification or mobile-device acceptance testing.
+CI additionally checks Python compilation and the legacy and account-login JavaScript syntax. Android changes are independently built as a debug APK in a separate workflow. The inactive multi-user and broker-safety modules have separate synthetic/negative tests to exercise isolation, malformed requests, revoked access, stale operations, and failure handling. The offline SQLite contention rehearsal treats both rate-limit rejections and unavailable/locked state as safe denials; its tests verify that no extra simulated admission survives. Passing automated tests does not replace real brokerage-contract verification or mobile-device acceptance testing.
 
 The included **render.yaml** and **backend/Dockerfile** describe the private hosted service. Deployment requires HTTPS, durable data storage, and securely configured server environment variables. Do not put live credentials in the repository or use sample configuration as a security guarantee. See [PHONE_DEPLOYMENT.md](PHONE_DEPLOYMENT.md) for the historical phone-oriented setup guide; some of its steps describe earlier versions and should be checked against current security requirements before use.
 
