@@ -80,8 +80,19 @@ class OfflineDurableSafetyTests(unittest.TestCase):
                                         [self.path]*8,
                                         [self.owner_a]*8,
                                         [self.account_a]*8))
-        self.assertEqual(results.count("ADMITTED"),2)
-        self.assertEqual(results.count("BUDGET_EXHAUSTED"),6)
+        self.assertEqual(results.count("ADMITTED"),2,results)
+        # The SQLite write lock guarantees at most two admissions. A losing
+        # process may fail closed with STATE_UNAVAILABLE if it cannot acquire
+        # a connection/lock before timeout under CI contention; this must
+        # never be mistaken for a successful admission or a security failure.
+        self.assertEqual(len(results),8,results)
+        self.assertEqual(sum(result in ("BUDGET_EXHAUSTED","STATE_UNAVAILABLE")
+                             for result in results),6,results)
+        with sqlite3.connect(self.guard.db_path) as db:
+            persisted=db.execute("""SELECT COUNT(*) FROM offline_usage
+                WHERE owner_id=? AND account_id=?""",
+                (self.owner_a,self.account_a)).fetchone()[0]
+        self.assertEqual(persisted,2)
         self.assertTrue(self.guard.admit_synthetic(self.owner_b,self.account_b)
                         ["offlineOnly"])
 

@@ -1,3 +1,8 @@
+## v0.2.35.1 — 2026-11-10 — Offline contention test hardening
+**Fixed:** The disconnected synthetic SQLite safety test distinguishes legitimate fail-closed lock/fixture contention (STATE_UNAVAILABLE) from successful admissions under concurrent load. It asserts exactly two admitted operations and exactly two persisted usage records. Unexpected errors and a third admission still fail.
+**Reason:** The v0.2.35 post-merge CI encountered intermittent fail-closed SQLite contention in an older rehearsal test. The safety mechanism itself is unchanged, and no budget is raised or ignored.
+**Testing:** Full PR and post-merge Python/Flask/JavaScript checks required. All real Public, identity, trading, funds and Android behaviors remain unchanged.
+
 ## v0.2.35 — 2026-11-10 — Self-managed encrypted Public key lifecycle (opt-in)
 **Added:** The separate EdgePilot account screen now exposes selected-connection key replacement and disconnection with explicit user confirmations. Sensitive replacement inputs clear immediately after every attempt, and account/portfolio/monitor displays are cleared and reloaded after success.
 **Security:** The vault now rechecks current identity session and CSRF *inside* the same SQLite write transaction as credential rotation or revocation, preventing a stale preflight from authorizing a post-logout mutation. Rotation or disconnection disables that user's existing linked account bindings and records an append-only secret-free audit event. Neither action touches another user's key or closes the brokerage account.
