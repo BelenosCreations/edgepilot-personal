@@ -66,6 +66,7 @@ def inspect_sources(app_source,worker_source):
         "from engine import tenant_history,",
         "tenant_api_gateway", "tenant_monitor_blueprint",
         "tenant_request_boundary", "tenant_worker_boundary",
+        "tenant_test_http", "tenant_test_orchestrator",
     )):
         raise ApiBoundaryError("Dormant historical store exposed in legacy HTTP app")
     if ("appmod.selected_account()" not in worker_source or
@@ -74,7 +75,9 @@ def inspect_sources(app_source,worker_source):
             "tenant_api_gateway" in worker_source or
             "tenant_monitor_blueprint" in worker_source or
             "tenant_request_boundary" in worker_source or
-            "tenant_worker_boundary" in worker_source):
+            "tenant_worker_boundary" in worker_source or
+            "tenant_test_http" in worker_source or
+            "tenant_test_orchestrator" in worker_source):
         raise ApiBoundaryError("Legacy worker authorization surface changed")
     legacy={r for r in routes if r not in identity}
     if not legacy:
@@ -90,6 +93,9 @@ def inspect_sources(app_source,worker_source):
         "tenantMonitorPlannerWiredToWorker":False,
         "tenantRequestBoundaryWiredToHttp":False,
         "tenantWorkerBoundaryWiredToLiveWorker":False,
+        "tenantTestHttpMountedOnProduction":False,
+        "tenantBatchOrchestratorActivated":False,
+        "httpIntegrationOnlyInIsolatedFixture":True,
         "legacyApiStillGlobalSingleOwner":True,
         "sessionScopedSelectionCannotReplaceLegacyAccountYet":True,
         "historyImportEndpointEnabled":False,
