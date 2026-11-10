@@ -81,6 +81,17 @@
     el("loginPassword").value = "";
     el("newPassword").value = "";
     el("publicSecret").value = "";
+    clearReadOnly();
+  }
+  function clearReadOnly() {
+    el("connections").replaceChildren();
+    el("connectionChoice").replaceChildren();
+    el("discoveredAccounts").replaceChildren();
+    el("linkedAccounts").replaceChildren();
+    el("holdings").replaceChildren();
+    el("discoveryInfo").textContent = "";
+    el("portfolioSummary").textContent = "";
+    el("connectionInfo").textContent = "";
   }
   async function showSession() {
     const data = await api("/session");
@@ -89,24 +100,120 @@
     el("accountPane").hidden = false;
     el("welcome").textContent = "Welcome, " + (data.user && data.user.label || "EdgePilot user");
     el("addPasskey").disabled = !supported();
+    clearReadOnly();
     status("Secure EdgePilot account session active. Brokerage execution remains disabled.");
     await loadConnections();
+    await loadLinkedAccounts();
   }
   async function loadConnections() {
+    const items = el("connections");
+    const select = el("connectionChoice");
+    items.replaceChildren();
+    select.replaceChildren();
+    const blank = document.createElement("option");
+    blank.value = "";
+    blank.textContent = "Choose your connection";
+    select.appendChild(blank);
     try {
       const data = await api("/public/connections");
-      const items = el("connections");
-      items.replaceChildren();
-      for (const item of data.connections || []) {
+      if (!Array.isArray(data.connections) || data.secretsReturned !== false) {
+        throw new Error("Unexpected connection response");
+      }
+      for (const item of data.connections) {
+        const id = String(item.connectionId || "");
         const entry = document.createElement("li");
-        entry.textContent = "Public connection " + String(item.connectionId) + " — " + String(item.status);
+        entry.textContent = "Encrypted Public connection ending " + id.slice(-6) + " — " + String(item.status);
         items.appendChild(entry);
+        if (item.status !== "revoked") {
+          const option = document.createElement("option");
+          option.value = id;
+          option.textContent = "Public connection ending " + id.slice(-6);
+          select.appendChild(option);
+        }
       }
       el("connectionInfo").textContent = items.children.length ?
         "Encrypted connections belonging to your account:" : "No Public key saved for this account.";
     } catch (error) {
-      el("connections").replaceChildren();
+      items.replaceChildren();
       el("connectionInfo").textContent = "Public key setup is not enabled for this account yet.";
+    }
+  }
+  async function loadLinkedAccounts() {
+    const items = el("linkedAccounts");
+    items.replaceChildren();
+    el("holdings").replaceChildren();
+    el("portfolioSummary").textContent = "";
+    try {
+      const data = await api("/accounts");
+      if (!Array.isArray(data.accounts)) throw new Error("Invalid account list");
+      if (data.accounts.length === 0) {
+        el("portfolioSummary").textContent = "No verified Public accounts are linked yet.";
+      }
+      for (const account of data.accounts) {
+        const id = String(account.accountId);
+        const li = document.createElement("li");
+        li.appendChild(document.createTextNode(String(account.label || "Public account") + " "));
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = "View read-only portfolio";
+        button.addEventListener("click", () => action(async () => {
+          const portfolio = await api("/public/read/accounts/" + encodeURIComponent(id) + "/portfolio");
+          if (portfolio.readOnly !== true || portfolio.ordersEnabled !== false ||
+              portfolio.transfersEnabled !== false || portfolio.accountId !== id ||
+              !Array.isArray(portfolio.holdings)) {
+            throw new Error("Portfolio response rejected");
+          }
+          el("portfolioSummary").textContent = String(account.label || "Public account") +
+            " · Public-reported value: " + String(portfolio.balance) +
+            " · read-only, no orders or transfers";
+          const holdings = el("holdings");
+          holdings.replaceChildren();
+          for (const position of portfolio.holdings) {
+            const item = document.createElement("li");
+            item.textContent = String(position.symbol) + " · " + String(position.quantity) +
+              " shares · value " + String(position.currentValue);
+            holdings.appendChild(item);
+          }
+        }));
+        li.appendChild(button);
+        items.appendChild(li);
+      }
+    } catch (error) {
+      el("portfolioSummary").textContent = "Read-only Public account viewing is not enabled for this user yet.";
+    }
+  }
+  async function discoverPublicAccounts() {
+    const connectionId = el("connectionChoice").value;
+    if (!connectionId) throw new Error("Choose one of your encrypted Public connections first.");
+    el("discoveredAccounts").replaceChildren();
+    const discovered = await api("/public/read/connections/" +
+      encodeURIComponent(connectionId) + "/accounts");
+    if (discovered.readOnly !== true || discovered.ordersEnabled !== false ||
+        discovered.connectionId !== connectionId || !Array.isArray(discovered.accounts)) {
+      throw new Error("Public account discovery response rejected");
+    }
+    el("discoveryInfo").textContent = discovered.accounts.length ?
+      "Select an account to verify and link read-only:" : "Public reported no accounts for this key.";
+    for (const account of discovered.accounts) {
+      const providerId = String(account.accountId);
+      const type = String(account.accountType || "Public");
+      const li = document.createElement("li");
+      li.appendChild(document.createTextNode(type + " account ending " + providerId.slice(-4) + " "));
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = "Link read-only";
+      button.addEventListener("click", () => action(async () => {
+        const label = ("Public " + type).slice(0,64);
+        const result = await api("/public/read/connections/" +
+          encodeURIComponent(connectionId) + "/accounts","POST",
+          {accountId:providerId,label},true);
+        if (result.verifiedByPublic !== true || result.readOnly !== true ||
+            result.ordersEnabled !== false) throw new Error("Public account link not verified");
+        status("Your Public account was verified and linked read-only.");
+        await loadLinkedAccounts();
+      }));
+      li.appendChild(button);
+      el("discoveredAccounts").appendChild(li);
     }
   }
   async function action(work) {
@@ -186,6 +293,9 @@
       } finally { el("publicSecret").value = ""; }
     });
   });
+  el("findPublicAccounts").addEventListener("click", () => action(async () => {
+    await discoverPublicAccounts();
+  }));
   el("signOut").addEventListener("click", () => action(async () => {
     try { await api("/logout","POST",{},true); }
     finally { showLoggedOut(); }
