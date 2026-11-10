@@ -29,8 +29,9 @@ import java.io.ByteArrayInputStream;
 
 /** Private EdgePilot Android test shell. The backend and all trading logic run in Render. */
 public final class MainActivity extends Activity {
-    private static final String SITE = "https://edgepilot.belenoscreations.biz/";
-    private static final String HOST = "edgepilot.belenoscreations.biz";
+    // Compile-time pinned per APK variant: production never trusts a user-editable URL.
+    private static final String HOST = BuildConfig.EDGE_HOST;
+    private static final String SITE = "https://" + HOST + "/";
     private WebView webView;
     private View offlinePanel;
     private boolean pageFailed;
