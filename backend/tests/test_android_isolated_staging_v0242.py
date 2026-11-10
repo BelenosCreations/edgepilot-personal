@@ -28,14 +28,18 @@ class StagingAndroidIsolation(unittest.TestCase):
             "EDGE_WEBAUTHN_ORIGIN":"https://"+STAGE,
             "EDGE_APP_TOKEN":"",
             "PUBLIC_API_SECRET":"",
+            "EDGE_CREDENTIAL_KEY":"",
+            "EDGE_TENANT_ACCOUNT_READS_ENABLED":"false",
+            "EDGE_TENANT_MONITOR_PREVIEW_ENABLED":"false",
+            "EDGE_TENANT_WATCHLIST_EDIT_ENABLED":"false",
             "EDGE_AUTOMATION_WORKER_ENABLED":"false",
             "ENABLE_LIVE_ORDERS":"false",
             "EDGE_TENANT_PUBLIC_VAULT_ENABLED":"false",
             "EDGE_TENANT_PUBLIC_READONLY_ENABLED":"false",
-            "EDGE_TENANT_SCHEMA_PREPARE":"false",
-            "EDGE_IDENTITY_AUTH_ENABLED":"false",
-            "EDGE_TENANT_PASSKEYS_ENABLED":"false",
-            "EDGE_TENANT_SIGNUP_ENABLED":"false",
+            "EDGE_TENANT_SCHEMA_PREPARE":"true",
+            "EDGE_IDENTITY_AUTH_ENABLED":"true",
+            "EDGE_TENANT_PASSKEYS_ENABLED":"true",
+            "EDGE_TENANT_SIGNUP_ENABLED":"true",
         })
         self.env.start()
         import app
@@ -80,6 +84,39 @@ class StagingAndroidIsolation(unittest.TestCase):
                 with self.subTest(setting=key,value=value):
                     with patch.dict(os.environ,{key:value}):
                         self.assertEqual(self.get().status_code,404)
+
+    def test_isolated_staging_process_startup_refuses_unsafe_settings(self):
+        from engine import staging_isolation
+        good=dict(os.environ)
+        self.assertTrue(staging_isolation.validate(good))
+        unsafe={
+            "EDGE_ISOLATED_STAGING":["maybe"],
+            "EDGE_ANDROID_ASSOCIATION_PACKAGE":["com.edgepilot.mobile",""],
+            "EDGE_WEBAUTHN_RP_ID":[OWNER,"example.invalid"],
+            "EDGE_DB_PATH":["/data/edgepilot.db","/tmp/../data/edgepilot.db"],
+            "EDGE_APP_TOKEN":["fake"],
+            "PUBLIC_API_SECRET":["fake"],
+            "EDGE_CREDENTIAL_KEY":["fake"],
+            "EDGE_AUTOMATION_WORKER_ENABLED":["true"],
+            "ENABLE_LIVE_ORDERS":["true"],
+            "EDGE_TENANT_ACCOUNT_READS_ENABLED":["true"],
+            "EDGE_TENANT_MONITOR_PREVIEW_ENABLED":["true"],
+            "EDGE_TENANT_WATCHLIST_EDIT_ENABLED":["true"],
+            "EDGE_TENANT_PUBLIC_VAULT_ENABLED":["true"],
+            "EDGE_TENANT_PUBLIC_READONLY_ENABLED":["true"],
+            "EDGE_TENANT_SCHEMA_PREPARE":["false"],
+            "EDGE_IDENTITY_AUTH_ENABLED":["false"],
+            "EDGE_TENANT_SIGNUP_ENABLED":["false"],
+            "EDGE_TENANT_PASSKEYS_ENABLED":["false"],
+            "EDGE_ANDROID_CERT_SHA256":["malformed"],
+        }
+        for name,values in unsafe.items():
+            for value in values:
+                with self.subTest(name=name,value=value):
+                    with self.assertRaises(staging_isolation.StagingIsolationDenied):
+                        staging_isolation.validate({**good,name:value})
+        self.assertFalse(staging_isolation.validate({
+            **good,"EDGE_ISOLATED_STAGING":"false"}))
 
     def test_default_owner_site_remains_bound_to_original_package(self):
         with patch.dict(os.environ,{
