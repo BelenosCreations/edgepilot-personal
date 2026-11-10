@@ -1,3 +1,16 @@
+## Phase 16 (v0.2.22): Offline-only consent, fake credential rotation and persisted test safety state
+
+New synthetic modules model two-step verified session consent, encrypted
+fake credential rotation across all accounts linked to one connection,
+atomic per-account request budgets, account pauses and a global
+emergency stop stored in a disposable memory-backed SQLite fixture.
+The stop survives new controller instances on that fixture but is NOT
+a production-durable control. Connection readiness checks still
+explicitly deny real Public connections and trading. No live worker,
+legacy route, broker credential or production data is modified. See
+TENANT_PUBLIC_AUTHORIZATION_AND_SAFETY_RUNBOOK.md for details.
+
+
 # EdgePilot v0.2.21 — Hardened Public HTTPS adapter groundwork
 
 **Release status: INACTIVE. No real Public connection is authorized or possible
