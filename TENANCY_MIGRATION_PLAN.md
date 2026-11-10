@@ -1,3 +1,16 @@
+## Phase 17 (v0.2.23): Disconnected disk-backed multi-process safety rehearsal (inactive)
+
+Introduced a separate synthetic-only private temp-directory SQLite safety fixture.
+It demonstrates an emergency latch surviving a distinct Python process restart,
+serialized per-account/global quotas across competing processes, revision-fenced
+fake leases, stale/revoked-account denial, manual offline pause recovery and a
+secret-free audit. Unsafe, missing or corrupt fixture state fails closed.
+No live app, credential, provider, account, production DB, worker, trader, bank
+transfer or Android APK uses this module. Static route audit prohibits live
+imports. A single local disk is NOT a replicated production emergency stop;
+post-check races, execution-side cancellation and global migration/ownership
+gates remain blockers. See TENANT_PUBLIC_DURABLE_SAFETY_REHEARSAL_RUNBOOK.md.
+
 ## Phase 16 (v0.2.22): Offline-only consent, fake credential rotation and persisted test safety state
 
 New synthetic modules model two-step verified session consent, encrypted
