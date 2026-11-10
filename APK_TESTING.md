@@ -80,6 +80,23 @@ See ANDROID_PRIVATE_SIGNING_RUNBOOK.md. Signing a test APK does not activate
 EdgePilot multi-user credentials, Android passkeys, live brokerage requests,
 market scanners, orders or transfers.
 
+## Separate EdgePilot Staging Android package (prepared, not installed)
+
+The main release and debug APKs remain package `com.edgepilot.mobile` and
+continue to use the production HTTPS host. A separate unsigned staging
+variant now builds with package `com.edgepilot.mobile.staging`, visible
+label `EdgePilot Staging`, and a compile-time owned test hostname. Its
+default unconfigured host uses a deliberately nonfunctional `.invalid`
+address. The ordinary Android PR workflow compiles it but uploads only
+the usual debug APK; no staging signed artifact has been generated yet.
+
+A separate manual-only staging signing workflow, protected by the existing
+certificate verifier and strict host/package checks, is available once an
+independent HTTPS staging backend has been explicitly provisioned. Do not
+create a second service, distribute this APK, or enable dormant tenant
+identity/passkey flags merely because this source compiles. The regular
+installed EdgePilot app stays unchanged. See ANDROID_ISOLATED_STAGING_RUNBOOK.md.
+
 ## Passkeys are not yet proven on real devices
 
 This APK includes AndroidX WebKit's native Web Authentication feature
