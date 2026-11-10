@@ -84,6 +84,19 @@ cryptography tested separately. No real brokerage keys/accounts or
 production worker jobs are involved. Physical Android and permitted
 real-account acceptance criteria below are still outstanding.
 
+## Permanent Android signing artifact — CI verified November 10, 2026
+
+The privately signed Android v0.19.17 test APK completed its manual workflow
+run #42888113943 on the second attempt after the owner's certificate
+fingerprint configuration was corrected. GitHub independently verified
+the APK signer and uploaded the private artifact with seven-day retention.
+This satisfies ONLY the **stable signed APK CI artifact** precondition.
+Digital Asset Links association with the runtime host, real-device
+WebAuthn passkey/biometric registration and login, and two independent
+physical-device user acceptance are still unverified. The current
+debug-signed APK may require uninstall/reinstall to change signatures,
+so no installation instruction should claim safe in-place updates.
+
 ## Milestone acceptance criteria — not complete until verified
 
 - Two separately provisioned EdgePilot users can register and sign in from
