@@ -91,6 +91,8 @@ class RecordedPublicTransport:
             token=response.payload.get("accessToken")
             # Tokens are synthetic and are not logged or exposed to callers.
             if isinstance(token,str) and token.startswith("SYNTHETIC-TOKEN-"):
+                if token in self._access and self._access[token]!=secret:
+                    raise PublicPreflightDenied("BAD_PROVIDER_RESPONSE")
                 self._access[token]=secret
         return response
 
