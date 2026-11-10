@@ -11,6 +11,12 @@ from pathlib import Path
 IDENTITY_ROUTES=frozenset((
     ("POST","/api/identity/login"),
     ("POST","/api/identity/register"),
+    ("POST","/api/identity/passkeys/register/options"),
+    ("POST","/api/identity/passkeys/register/finish"),
+    ("POST","/api/identity/passkeys/authenticate/options"),
+    ("POST","/api/identity/passkeys/authenticate/finish"),
+    ("GET","/api/identity/passkeys"),
+    ("DELETE","/api/identity/passkeys/<credential_id>"),
     ("POST","/api/identity/logout"),
     ("GET","/api/identity/session"),
     ("GET","/api/identity/accounts"),
@@ -68,6 +74,11 @@ def inspect_sources(app_source,worker_source):
         "return fail('Not authenticated',401)",
         "tenant_public_vault_enabled",
         "tenant_signup_enabled",
+        "tenant_passkeys_enabled",
+        "EDGE_TENANT_PASSKEYS_ENABLED','false'",
+        "request.path.startswith('/api/identity/passkeys')",
+        "identity_store.principal(token)",
+        "tenant_passkey_store.finish_authentication(",
         "EDGE_TENANT_SIGNUP_ENABLED','false'",
         "request.path=='/api/identity/register'",
         "request.path.startswith('/api/identity/public/connections')",
@@ -93,7 +104,6 @@ def inspect_sources(app_source,worker_source):
         "tenant_public_synthetic_rotation", "tenant_public_connection_readiness",
         "tenant_public_durable_safety_rehearsal",
         "tenant_public_offline_work_gate",
-        "tenant_passkeys",
     )):
         raise ApiBoundaryError("Dormant historical store exposed in legacy HTTP app")
     if ("appmod.selected_account()" not in worker_source or
@@ -150,6 +160,8 @@ def inspect_sources(app_source,worker_source):
         "publicSafetyAndConsentActiveInProduction":False,
         "offlineSyntheticWorkGateMountedInProduction":False,
         "passkeyIdentityActivatedInProduction":False,
+        "passkeyIdentityDefaultOff":True,
+        "passkeyAuthRequiresVerifiedWebAuthn":True,
         "tenantSignupDefaultOff":True,
         "tenantRegistrationRequiresOneUseInvite":True,
         "productionKillSwitchDeployed":False,
