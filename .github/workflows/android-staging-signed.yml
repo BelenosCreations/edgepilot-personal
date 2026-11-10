@@ -1,0 +1,98 @@
+name: EdgePilot isolated staging Android test APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      staging_host:
+        description: 'Owned isolated HTTPS staging hostname'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: edgepilot-isolated-staging-signed-android
+  cancel-in-progress: false
+
+jobs:
+  sign-staging-test:
+    name: Sign isolated staging APK with pinned certificate
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify distinct owned staging hostname
+        shell: bash
+        env:
+          EDGE_STAGING_HOST: ${{ inputs.staging_host }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$EDGE_STAGING_HOST" =~ ^([a-z0-9]+(-[a-z0-9]+)*\.)+belenoscreations\.biz$ ]] || \
+             [[ "$EDGE_STAGING_HOST" == "edgepilot.belenoscreations.biz" ]]; then
+            echo "::error::A different owned staging HTTPS hostname is required"
+            exit 1
+          fi
+      - name: Use JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Configure Android SDK
+        uses: android-actions/setup-android@v4
+      - name: Install Android API 35
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Assemble unsigned isolated staging APK
+        env:
+          EDGE_STAGING_HOST: ${{ inputs.staging_host }}
+        run: gradle --no-daemon -p android :app:assembleStaging "-PedgePilotStagingHost=$EDGE_STAGING_HOST"
+      - name: Sign, verify, and pin staging-only test APK
+        shell: bash
+        env:
+          EDGE_ANDROID_SIGNING_JKS_B64: ${{ secrets.EDGE_ANDROID_SIGNING_JKS_B64 }}
+          EDGE_ANDROID_SIGNING_STORE_PASS: ${{ secrets.EDGE_ANDROID_SIGNING_STORE_PASS }}
+          EDGE_ANDROID_SIGNING_KEY_PASS: ${{ secrets.EDGE_ANDROID_SIGNING_KEY_PASS }}
+          EDGE_ANDROID_SIGNING_ALIAS: ${{ secrets.EDGE_ANDROID_SIGNING_ALIAS }}
+          EDGE_ANDROID_EXPECTED_CERT_SHA256: ${{ secrets.EDGE_ANDROID_EXPECTED_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          for name in EDGE_ANDROID_SIGNING_JKS_B64 EDGE_ANDROID_SIGNING_STORE_PASS EDGE_ANDROID_SIGNING_KEY_PASS EDGE_ANDROID_SIGNING_ALIAS EDGE_ANDROID_EXPECTED_CERT_SHA256; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Required signing input is unavailable"
+              exit 1
+            fi
+          done
+          umask 077
+          keyfile="$RUNNER_TEMP/edgepilot-staging-private-signing.jks"
+          alignment="$RUNNER_TEMP/edgepilot-staging-aligned-unsigned.apk"
+          certificate_report="$RUNNER_TEMP/edgepilot-staging-cert-report.txt"
+          signed="$RUNNER_TEMP/EdgePilot-isolated-staging-signed-test.apk"
+          trap 'rm -f "$keyfile" "$alignment" "$certificate_report"' EXIT
+          printf '%s' "$EDGE_ANDROID_SIGNING_JKS_B64" | base64 --decode > "$keyfile"
+          tools="${ANDROID_HOME}/build-tools/35.0.0"
+          "$tools/zipalign" -p -f 4 android/app/build/outputs/apk/staging/app-staging-unsigned.apk "$alignment"
+          "$tools/apksigner" sign \
+            --ks "$keyfile" \
+            --ks-type JKS \
+            --ks-key-alias "$EDGE_ANDROID_SIGNING_ALIAS" \
+            --ks-pass env:EDGE_ANDROID_SIGNING_STORE_PASS \
+            --key-pass env:EDGE_ANDROID_SIGNING_KEY_PASS \
+            --out "$signed" "$alignment"
+          "$tools/apksigner" verify --min-sdk-version 26 --verbose --print-certs "$signed" > "$certificate_report"
+          python3 android/tools/verify_signed_apk_cert.py "$certificate_report"
+          "$tools/zipalign" -c -v 4 "$signed" >/dev/null
+          "$tools/aapt" dump badging "$signed" | grep -Eq "^package: name='com[.]edgepilot[.]mobile[.]staging' versionCode='1917' "
+          mkdir -p android/app/build/outputs/staging-signed
+          cp "$signed" android/app/build/outputs/staging-signed/EdgePilot-isolated-staging-signed-test.apk
+      - name: Upload isolated staging signed APK only
+        uses: actions/upload-artifact@v4
+        with:
+          name: EdgePilot-v0.19.17-isolated-staging-signed-test
+          path: android/app/build/outputs/staging-signed/EdgePilot-isolated-staging-signed-test.apk
+          if-no-files-found: error
+          retention-days: 7
