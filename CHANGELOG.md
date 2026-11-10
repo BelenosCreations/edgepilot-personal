@@ -1,3 +1,7 @@
+## Operational verification — 2026-11-10 — Android website association JSON is served correctly
+**Verified by owner:** After the certificate-only Render deployment, refreshing the real Android Chrome URL `https://edgepilot.belenoscreations.biz/.well-known/assetlinks.json` returned a JSON array containing the app package `com.edgepilot.mobile`, relation `delegate_permission/common.get_login_creds`, namespace `android_app`, and the previously verified public signing certificate SHA-256. This replaces the prior intentional 404 response.
+**Boundary:** HTTP association content is visible on one phone, but Android OS verification, Credential Manager passkey creation/authentication, separate user enrollment and actual two-device/two-account acceptance remain untested. No brokerage/identity feature flags were enabled by this observation.
+
 ## Operational Android website association configuration — 2026-11-10
 **Observed:** Owner's first real-phone HTTPS check returned `{"error":"Not found"}` from EdgePilot's intended fail-closed Digital Asset Links route.
 **Configured:** Extracted and cross-checked the public signing certificate in both v2 and v3 APK signing blocks of the privately verified APK. Updated only Render's `EDGE_ANDROID_CERT_SHA256` variable through a merge operation; deployment `dep-dbppig56e07s73b34d1g` reported `live`.
