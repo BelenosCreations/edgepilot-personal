@@ -9,7 +9,7 @@ from urllib.parse import quote
 import requests
 from flask import Flask, jsonify, request, send_from_directory, g
 from dotenv import load_dotenv
-from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, account_scope, tenant_public_vault, tenant_public_live_readonly
+from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, tenant_registration, account_scope, tenant_public_vault, tenant_public_live_readonly
 ROOT=Path(__file__).parent; load_dotenv(ROOT/'.env'); DB=Path(os.getenv('EDGE_DB_PATH',str(ROOT/'edgepilot.db'))); DB.parent.mkdir(parents=True,exist_ok=True)
 app=Flask(__name__,static_folder='static',static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # CSV/history research limit
@@ -47,11 +47,14 @@ credential_vault.setup()
 # Activation requires BOTH separate flags and an explicit migration review.
 tenant_schema_enabled=os.getenv('EDGE_TENANT_SCHEMA_PREPARE','false').lower()=='true'
 identity_auth_enabled=os.getenv('EDGE_IDENTITY_AUTH_ENABLED','false').lower()=='true'
+tenant_signup_enabled=os.getenv('EDGE_TENANT_SIGNUP_ENABLED','false').lower()=='true'
 tenant_read_enabled=os.getenv('EDGE_TENANT_ACCOUNT_READS_ENABLED','false').lower()=='true'
 tenant_public_vault_enabled=os.getenv('EDGE_TENANT_PUBLIC_VAULT_ENABLED','false').lower()=='true'
 tenant_public_read_enabled=os.getenv('EDGE_TENANT_PUBLIC_READONLY_ENABLED','false').lower()=='true'
 if identity_auth_enabled and not tenant_schema_enabled:
     raise RuntimeError('Identity subsystem requires the prepared tenant schema')
+if tenant_signup_enabled and not identity_auth_enabled:
+    raise RuntimeError('Tenant registration requires identity authentication')
 if tenant_read_enabled and not identity_auth_enabled:
     raise RuntimeError('Tenant account reads require identity authentication')
 if tenant_public_vault_enabled and not identity_auth_enabled:
@@ -59,6 +62,7 @@ if tenant_public_vault_enabled and not identity_auth_enabled:
 if tenant_public_read_enabled and not (tenant_public_vault_enabled and tenant_read_enabled):
     raise RuntimeError('Tenant Public read-only API requires vault and tenant account reads')
 identity_store=None
+tenant_registration_store=None
 tenant_account_store=None
 tenant_connection_vault=None
 tenant_public_reader=None
@@ -67,6 +71,9 @@ if tenant_schema_enabled:
     if identity_auth_enabled:
         identity_auth.setup(str(DB))
         identity_store=identity_auth.IdentityStore(str(DB))
+        if tenant_signup_enabled:
+            tenant_registration.setup(str(DB))
+            tenant_registration_store=tenant_registration.TenantRegistration(str(DB))
         if tenant_read_enabled:
             account_scope.setup(str(DB))
             tenant_account_store=account_scope.AccountScopeStore(str(DB),identity_store)
@@ -117,6 +124,10 @@ def authenticate():
         if not identity_auth_enabled:
             return fail('Not found',404)
         if request.path=='/api/identity/login' and request.method=='POST':
+            return
+        if request.path=='/api/identity/register' and request.method=='POST':
+            if not tenant_signup_enabled:
+                return fail('Not found',404)
             return
         token=request.cookies.get(identity_auth.COOKIE_NAME,'')
         principal=identity_store.principal(token)
@@ -197,6 +208,26 @@ def identity_login():
         max_age=identity_auth.SESSION_SECONDS,
         secure=True,httponly=True,samesite='Strict',path='/')
     return response
+
+
+# Invitation-only user creation. Never auto-logs in, selects a broker
+# account, enables provider access, or assigns owner/operator permissions.
+@app.post('/api/identity/register')
+def identity_register():
+    if not tenant_signup_enabled:
+        return fail('Not found',404)
+    payload=request.get_json(silent=True)
+    if not isinstance(payload,dict) or set(payload)!={'invitation','username','password','displayName'}:
+        return fail('Registration unavailable',400)
+    try:
+        result=tenant_registration_store.register(
+            payload['invitation'],payload['username'],payload['password'],
+            payload['displayName'],source=request.remote_addr or 'unknown')
+        return jsonify(result),201
+    except tenant_registration.RegistrationRateLimited:
+        return fail('Registration temporarily unavailable',429)
+    except tenant_registration.RegistrationDenied:
+        return fail('Registration unavailable',400)
 
 
 # Read-only tenant-account metadata and persisted research data.
