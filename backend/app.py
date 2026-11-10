@@ -50,6 +50,7 @@ identity_auth_enabled=os.getenv('EDGE_IDENTITY_AUTH_ENABLED','false').lower()=='
 tenant_read_enabled=os.getenv('EDGE_TENANT_ACCOUNT_READS_ENABLED','false').lower()=='true'
 tenant_public_vault_enabled=os.getenv('EDGE_TENANT_PUBLIC_VAULT_ENABLED','false').lower()=='true'
 tenant_public_read_enabled=os.getenv('EDGE_TENANT_PUBLIC_READONLY_ENABLED','false').lower()=='true'
+tenant_portal_enabled=os.getenv('EDGE_TENANT_PORTAL_ENABLED','false').lower()=='true'
 if identity_auth_enabled and not tenant_schema_enabled:
     raise RuntimeError('Identity subsystem requires the prepared tenant schema')
 if tenant_read_enabled and not identity_auth_enabled:
@@ -58,6 +59,8 @@ if tenant_public_vault_enabled and not identity_auth_enabled:
     raise RuntimeError('Tenant Public vault requires identity authentication')
 if tenant_public_read_enabled and not (tenant_public_vault_enabled and tenant_read_enabled):
     raise RuntimeError('Tenant Public read-only API requires vault and tenant account reads')
+if tenant_portal_enabled and not tenant_public_read_enabled:
+    raise RuntimeError('Tenant portal requires identity-scoped Public read-only API')
 identity_store=None
 tenant_account_store=None
 tenant_connection_vault=None
@@ -353,6 +356,14 @@ def logout():
     return response
 @app.get('/')
 def index(): return send_from_directory(ROOT/'static','index.html')
+
+@app.get('/users')
+def tenant_portal():
+    # A separate preview never grants access to the legacy owner's dashboard.
+    # All data still requires identity authentication and ownership in /api.
+    if not tenant_portal_enabled:
+        return '',404
+    return send_from_directory(ROOT/'static','users.html')
 @app.get('/icon-192.png')
 @app.get('/icon-512.png')
 @app.get('/icon-maskable-512.png')
