@@ -1,3 +1,15 @@
+## Phase 22 (v0.2.32): Identity-scoped inactive monitor preview
+
+A new default-off identity endpoint uses the server-verified principal and
+linked account ID to return only a validated monitor watchlist and explicit
+inactive/safety flags. The legacy Observe worker stays global and unchanged;
+no scheduling, Public call or execution is triggered. Fake two-user HTTP
+tests exercise revoked/disabled account and cross-owner denial. A separate
+/account screen action previews the plan and rejects any claim of active
+monitoring or orders. DEVELOPMENT_CONTINUITY.md now provides a durable
+handoff for new ChatGPT conversations as the development project grows.
+See TENANT_MONITOR_PREVIEW_RUNBOOK.md.
+
 ## Phase 21 (v0.2.27): Real read-only Public adapter behind user-scoped gates
 
 A separately flagged HTTPS adapter can authenticate with a per-user encrypted
