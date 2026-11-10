@@ -70,11 +70,22 @@ class OfflineDurableSafetyRehearsal:
             tmp = Path(tempfile.gettempdir()).resolve(strict=True)
             real = root.resolve(strict=True)
             info = root.lstat()
+            # The temporary directory can be redirected with TMPDIR. Never
+            # accept /data (Render persistent volume) or a custom disk root.
+            # The rehearsal runs on Linux and is intentionally limited to
+            # the standard scratch roots, independently of TMPDIR.
+            scratch_roots = (Path("/tmp").resolve(strict=True),
+                             Path("/var/tmp").resolve(strict=True))
+            approved_scratch = any(
+                real != base and real.is_relative_to(base)
+                for base in scratch_roots
+            )
             if (root.is_symlink() or not stat.S_ISDIR(info.st_mode) or
-                os.path.commonpath((str(real), str(tmp))) != str(tmp) or
-                real == tmp or info.st_uid != os.geteuid() or
-                stat.S_IMODE(info.st_mode) != 0o700 or
-                not real.is_relative_to(tmp)):
+                not approved_scratch or
+                not real.is_relative_to(tmp) or real == tmp or
+                real == Path("/data") or real.is_relative_to(Path("/data")) or
+                info.st_uid != os.geteuid() or
+                stat.S_IMODE(info.st_mode) != 0o700):
                 raise OfflineSafetyDenied("STATE_UNAVAILABLE")
         except (OSError, RuntimeError, ValueError):
             raise OfflineSafetyDenied("STATE_UNAVAILABLE") from None
@@ -376,9 +387,20 @@ class OfflineDurableSafetyRehearsal:
             return row["revision"]
 
     def audit_summary(self):
+        """Redacted diagnostic even after STOP; never authorizes unstop.
+
+        Incident analysis must remain possible while the guard is stopped.
+        All accounts and identifiers are deliberately excluded from output.
+        SQLite errors and missing guard/audit state still fail closed.
+        """
         with self._connection() as con:
-            self._guard(con)
+            row = con.execute("""SELECT stopped,revision
+                FROM offline_guard WHERE id=1""").fetchone()
+            if row is None:
+                raise OfflineSafetyDenied("STATE_UNAVAILABLE")
             counts = con.execute("""SELECT event,COUNT(*) AS n
                 FROM offline_audit GROUP BY event""").fetchall()
             return {"offlineOnly":True,"productionIntegrated":False,
+                    "emergencyStopped":bool(row["stopped"]),
+                    "safetyRevision":row["revision"],
                     "eventCounts":{r["event"]:r["n"] for r in counts}}
