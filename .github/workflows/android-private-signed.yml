@@ -60,6 +60,7 @@ jobs:
           "$tools/zipalign" -p -f 4 android/app/build/outputs/apk/release/app-release-unsigned.apk "$alignment"
           "$tools/apksigner" sign \
             --ks "$keyfile" \
+            --ks-type JKS \
             --ks-key-alias "$EDGE_ANDROID_SIGNING_ALIAS" \
             --ks-pass env:EDGE_ANDROID_SIGNING_STORE_PASS \
             --key-pass env:EDGE_ANDROID_SIGNING_KEY_PASS \
