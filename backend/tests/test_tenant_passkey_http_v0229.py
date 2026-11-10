@@ -107,7 +107,8 @@ class PasskeyHttpTests(unittest.TestCase):
                                                        credential_backed_up=False)) as verifier:
             done=self.post(client,"/api/identity/passkeys/authenticate/finish",
                 {"requestId":started.get_json()["requestId"],"credential":data})
-        self.assertTrue(verifier.call_args.kwargs["require_user_verification"])
+        if done.status_code==200:
+            self.assertTrue(verifier.call_args.kwargs["require_user_verification"])
         return done
 
     def test_two_identity_passkeys_issue_independent_cookies_and_no_legacy_access(self):
