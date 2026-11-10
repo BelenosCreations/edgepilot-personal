@@ -21,8 +21,10 @@ prohibits accidental production imports.
 ## Strict synthetic fixture rules
 
 - Only an explicitly created **empty**, mode-0700 owner-controlled temporary
-  directory under the OS temporary root is eligible. It never uses Render's
-  persistent /data, the real EdgePilot database or a brokerage credential store.
+  directory under Linux /tmp or /var/tmp, also inside the configured OS
+  temporary root, is eligible. Redirecting TMPDIR to /data or a nonstandard
+  mount fails closed. It never uses Render's persistent /data, the real
+  EdgePilot database or a brokerage credential store.
 - The database and synthetic-only sentinel are mode-0600 owner files.
   Symlinks, absent files, changed ownership/mode, missing sentinel, missing
   SQLite schema, invalid state or corrupted SQLite all fail closed.
@@ -51,6 +53,8 @@ only with an exact test phrase plus the current expected revision. Revocation
 has no un-revoke method. A stopped fixture is one-way through the public class
 API and through test SQLite triggers; audit records also reject deletion or
 rewrites. Auditing stores only event type and integer timestamp, not identifiers.
+A stopped fixture remains available for a redacted read-only incident summary;
+this does not permit resumption or network access.
 
 **Important race limitation:** an admission or revalidation can finish before
 a concurrent stop. This does NOT ensure that a network request is cancelled
