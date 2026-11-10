@@ -81,6 +81,8 @@
     el("passkeySignIn").disabled = !supported();
     el("loginPassword").value = "";
     el("newPassword").value = "";
+    el("currentEdgePilotPassword").value = "";
+    el("replacementEdgePilotPassword").value = "";
     el("publicSecret").value = "";
     el("replacementSecret").value = "";
     clearReadOnly();
@@ -432,6 +434,37 @@
     await refreshAfterCredentialChange();
     status("Public connection disconnected from this EdgePilot account. Your Public brokerage account remains open.");
   }));
+  el("passwordChangeForm").addEventListener("submit", event => {
+    event.preventDefault();
+    action(async () => {
+      const currentPassword=el("currentEdgePilotPassword").value;
+      const newPassword=el("replacementEdgePilotPassword").value;
+      const generation=identityViewGeneration;
+      try {
+        if (!currentPassword || newPassword.length < 14 || newPassword.length > 128 ||
+            currentPassword === newPassword) {
+          throw new Error("Enter your current password and a different new password of 14–128 characters.");
+        }
+        if (!window.confirm("Change your EdgePilot password and sign out all EdgePilot devices?")) return;
+        const changed=await api("/password/change","POST",
+          {currentPassword,newPassword},true);
+        if (generation !== identityViewGeneration) return;
+        if (changed.passwordChanged !== true ||
+            changed.allIdentitySessionsRevoked !== true ||
+            changed.mustSignInAgain !== true ||
+            changed.publicCredentialChanged !== false ||
+            changed.liveTradingEnabled !== false ||
+            changed.fundTransfersEnabled !== false) {
+          throw new Error("Password change response rejected");
+        }
+        showLoggedOut();
+        status("EdgePilot password changed. All devices are signed out. Sign in again.");
+      } finally {
+        el("currentEdgePilotPassword").value = "";
+        el("replacementEdgePilotPassword").value = "";
+      }
+    });
+  });
   el("findPublicAccounts").addEventListener("click", () => action(async () => {
     await discoverPublicAccounts();
   }));
