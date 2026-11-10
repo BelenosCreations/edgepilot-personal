@@ -174,6 +174,13 @@
         }
         const li = document.createElement("li");
         li.appendChild(document.createTextNode(String(account.label || "Public account") + " "));
+        const listInput = document.createElement("input");
+        listInput.type = "text";
+        listInput.maxLength = 512;
+        listInput.autocomplete = "off";
+        listInput.autocapitalize = "characters";
+        listInput.placeholder = "Symbols: SPY,QQQ (max 25)";
+        listInput.setAttribute("aria-label", "Watchlist symbols for " + String(account.label || "Public account"));
         const button = document.createElement("button");
         button.type = "button";
         button.textContent = "View read-only portfolio";
@@ -216,8 +223,38 @@
           el("monitorPlanInfo").textContent = String(account.label || "Public account") +
             " · watchlist: " + (plan.watchlist.join(", ") || "none") +
             " · inactive preview only; no scans, broker requests or orders";
+          listInput.value = plan.watchlist.join(", ");
         }));
         li.appendChild(previewButton);
+        li.appendChild(listInput);
+        const saveWatchlist = document.createElement("button");
+        saveWatchlist.type = "button";
+        saveWatchlist.textContent = "Save account watchlist";
+        saveWatchlist.addEventListener("click", () => action(async () => {
+          const requestGeneration = identityViewGeneration;
+          const raw = listInput.value.trim();
+          const symbols = raw === "" ? [] : raw.split(",").map(s => s.trim().toUpperCase());
+          if (symbols.length > 25 || symbols.some(s => !/^[A-Z][A-Z0-9.-]{0,14}$/.test(s)) ||
+              new Set(symbols).size !== symbols.length) {
+            throw new Error("Use up to 25 unique comma-separated ticker symbols.");
+          }
+          const saved = await api("/accounts/" + encodeURIComponent(id) + "/monitor/watchlist",
+            "PUT", {symbols}, true);
+          if (requestGeneration !== identityViewGeneration) return;
+          if (saved.accountId !== id || saved.saved !== true ||
+              saved.readOnlyMonitoring !== true || saved.workerActive !== false ||
+              saved.brokerRequestsAllowed !== false || saved.paperEnabled !== false ||
+              saved.liveTradingEnabled !== false || saved.fundTransfersEnabled !== false ||
+              !Array.isArray(saved.watchlist)) {
+            throw new Error("Watchlist update response rejected");
+          }
+          listInput.value = saved.watchlist.join(", ");
+          el("monitorPlanInfo").textContent = String(account.label || "Public account") +
+            " · watchlist saved for inactive monitoring only: " +
+            (saved.watchlist.join(", ") || "none");
+          status("Watchlist saved for your selected EdgePilot account. No scans or orders started.");
+        }));
+        li.appendChild(saveWatchlist);
         items.appendChild(li);
       }
     } catch (error) {
