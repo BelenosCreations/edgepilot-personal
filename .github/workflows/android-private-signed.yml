@@ -1,0 +1,79 @@
+name: EdgePilot manually signed Android test APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: edgepilot-private-signed-android
+  cancel-in-progress: false
+
+jobs:
+  sign-private-test:
+    name: Sign private test APK with a pinned certificate
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Configure Android SDK
+        uses: android-actions/setup-android@v4
+      - name: Install Android API 35
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Assemble unsigned release APK
+        run: gradle --no-daemon -p android :app:assembleRelease
+      - name: Sign, verify, and pin private test APK
+        shell: bash
+        env:
+          EDGE_ANDROID_SIGNING_JKS_B64: ${{ secrets.EDGE_ANDROID_SIGNING_JKS_B64 }}
+          EDGE_ANDROID_SIGNING_STORE_PASS: ${{ secrets.EDGE_ANDROID_SIGNING_STORE_PASS }}
+          EDGE_ANDROID_SIGNING_KEY_PASS: ${{ secrets.EDGE_ANDROID_SIGNING_KEY_PASS }}
+          EDGE_ANDROID_SIGNING_ALIAS: ${{ secrets.EDGE_ANDROID_SIGNING_ALIAS }}
+          EDGE_ANDROID_EXPECTED_CERT_SHA256: ${{ secrets.EDGE_ANDROID_EXPECTED_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          for name in EDGE_ANDROID_SIGNING_JKS_B64 EDGE_ANDROID_SIGNING_STORE_PASS EDGE_ANDROID_SIGNING_KEY_PASS EDGE_ANDROID_SIGNING_ALIAS EDGE_ANDROID_EXPECTED_CERT_SHA256; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Required signing input is unavailable"
+              exit 1
+            fi
+          done
+          umask 077
+          keyfile="$RUNNER_TEMP/edgepilot-private-signing.jks"
+          alignment="$RUNNER_TEMP/edgepilot-aligned-unsigned.apk"
+          certificate_report="$RUNNER_TEMP/edgepilot-cert-report.txt"
+          signed="$RUNNER_TEMP/EdgePilot-private-signed-test.apk"
+          trap 'rm -f "$keyfile" "$alignment" "$certificate_report"' EXIT
+          printf '%s' "$EDGE_ANDROID_SIGNING_JKS_B64" | base64 --decode > "$keyfile"
+          tools="${ANDROID_HOME}/build-tools/35.0.0"
+          "$tools/zipalign" -p -f 4 android/app/build/outputs/apk/release/app-release-unsigned.apk "$alignment"
+          "$tools/apksigner" sign \
+            --ks "$keyfile" \
+            --ks-key-alias "$EDGE_ANDROID_SIGNING_ALIAS" \
+            --ks-pass env:EDGE_ANDROID_SIGNING_STORE_PASS \
+            --key-pass env:EDGE_ANDROID_SIGNING_KEY_PASS \
+            --out "$signed" "$alignment"
+          "$tools/apksigner" verify --min-sdk-version 26 --verbose --print-certs "$signed" > "$certificate_report"
+          python3 android/tools/verify_signed_apk_cert.py "$certificate_report"
+          "$tools/zipalign" -c -v 4 "$signed" >/dev/null
+          "$tools/aapt" dump badging "$signed" | grep -Eq "^package: name='com[.]edgepilot[.]mobile' versionCode='1917' "
+          mkdir -p android/app/build/outputs/private-signed
+          cp "$signed" android/app/build/outputs/private-signed/EdgePilot-private-signed-test.apk
+      - name: Upload private signed APK only
+        uses: actions/upload-artifact@v4
+        with:
+          name: EdgePilot-v0.19.17-private-stable-signed-test
+          path: android/app/build/outputs/private-signed/EdgePilot-private-signed-test.apk
+          if-no-files-found: error
+          retention-days: 7
