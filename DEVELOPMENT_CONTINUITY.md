@@ -45,11 +45,17 @@ alone do not satisfy this acceptance criterion.
 ## Implemented code areas and still-incomplete items
 
 The repository includes account identity sessions, one-use invitation signup,
+official Public signup and API-key instructions from the /account screen,
 a user-owned encrypted Public credential vault, gated Public read-only
 account discovery/linking and portfolio retrieval, WebAuthn passkey server
 verification, a mobile-ready separate /account interface, an Android WebView
 Web Authentication capability check, a fail-closed Digital Asset Links
 endpoint, and synthetic monitor/worker fencing and emergency-stop tests.
+
+The Android debug wrapper can open two exact Public-owned signup/key-help
+URLs only on a deliberate user click, outside the EdgePilot authenticated
+WebView. Android build 0.19.17 compiles this code but external navigation and
+device passkeys still require physical-device verification.
 
 The legacy owner app and Observe/Paper worker still use global single-owner
 state, and cannot be called by tenant sessions. Account-specific monitoring

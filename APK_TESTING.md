@@ -1,4 +1,4 @@
-# EdgePilot Android test shell — v0.19.16
+# EdgePilot Android test shell — v0.19.17
 
 This is a **debug-signed, private test APK**, not a Play Store release or
 production-signed build. It runs the hosted EdgePilot web application through
@@ -10,7 +10,7 @@ in Render; no trading worker operates on the phone.
 1. Open the private GitHub repository, then **Actions** > **EdgePilot Android
    test APK**, and select a successful run matching the desired commit.
 2. Under Artifacts, download
-   **EdgePilot-v0.19.16-webview-passkey-debug-apk.zip**.
+   **EdgePilot-v0.19.17-public-onboarding-debug-apk.zip**.
 3. Extract app-debug.apk and install it using your Android file manager.
    Android may request permission for that installer to install apps.
    Enable that only when you have verified your own private repository.
@@ -22,6 +22,20 @@ in Render; no trading worker operates on the phone.
    account interface for invitation signup, password login, passkey flows
    and per-user Public key entry. The server gates are intentionally OFF
    in the default deployed configuration.
+
+## Official Public account onboarding
+
+From the EdgePilot personal login screen, follow the link to create or sign
+in to a separate EdgePilot identity. Under Your Public connection, users may
+follow Public's official **Sign Up for Public** page or the official API
+quickstart/key instructions. The Android shell opens these two HTTPS pages
+externally after a deliberate click; it never loads Public's site into
+the EdgePilot authenticated WebView.
+
+After generating the secret key in Public's Settings > Security > API,
+return to EdgePilot and paste it into the individual-account connection
+field, not the legacy personal access-token input. Features are still
+default-off in production and the two-device integration remains unverified.
 
 ## Passkeys are not yet proven on real devices
 

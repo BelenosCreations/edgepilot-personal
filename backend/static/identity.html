@@ -81,8 +81,16 @@
       </div>
       <form id="publicKeyForm" class="panel">
         <h2>Your Public connection</h2>
-        <p class="muted">Your API key is encrypted separately on the server. Never enter it in the legacy personal app login or share it with another user.</p>
-        <label for="publicSecret">Your Public API key</label>
+        <p class="muted">Connect your own Public brokerage account. Your API secret is encrypted separately on the server and is never displayed after saving.</p>
+        <div id="publicOnboarding">
+          <h3>Don't have a Public account?</h3>
+          <p><a href="https://public.com/signup" rel="noopener noreferrer">Sign Up for Public</a></p>
+          <p class="muted">Public handles brokerage signup outside EdgePilot. After creating your account, return here to add your own API key.</p>
+          <h3>Already have Public?</h3>
+          <p><a href="https://public.com/api/docs/quickstart" rel="noopener noreferrer">Get your Public API key — official instructions</a></p>
+          <p class="muted">In your Public account, open Settings &gt; Security &gt; API, generate a secret key, then return to EdgePilot and paste it below. Don't paste a login password or a temporary access token.</p>
+        </div>
+        <label for="publicSecret">Your Public API secret key</label>
         <input id="publicSecret" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" minlength="20" maxlength="2048">
         <button type="submit">Save encrypted key</button>
         <small>This does not enable trading, and your key is never displayed again.</small>
