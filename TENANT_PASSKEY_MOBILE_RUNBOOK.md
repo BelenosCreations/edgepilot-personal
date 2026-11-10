@@ -53,10 +53,7 @@ independently checked and shown to contain the same public X.509 signing
 certificate. Only `EDGE_ANDROID_CERT_SHA256` was configured in Render;
 deployment `dep-dbppig56e07s73b34d1g` reported `live`.
 
-**Outstanding external test:** Reload the exact HTTPS association URL
-and verify it responds with a JSON array using
-`delegate_permission/common.get_login_creds`, package
-`com.edgepilot.mobile`, and the same SHA-256 as the installed APK.
+**Website test completed on November 10, 2026:** The owner reloaded the exact HTTPS association URL on their Android phone and supplied a screenshot of the JSON array containing `delegate_permission/common.get_login_creds`, package `com.edgepilot.mobile`, namespace `android_app`, and the configured signer SHA-256. This confirms public HTTP response content but does **not** confirm the OS has validated the link or that a passkey works.
 This is a prerequisite, not proof of passkey support or functioning
 Android Credential Manager. The tenant identity/passkey routes are still
 disabled by default and must not be enabled broadly on the legacy
