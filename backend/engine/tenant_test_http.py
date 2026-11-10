@@ -106,9 +106,11 @@ def create_isolated_test_app(path, identity_store, *, origin=TEST_ORIGIN):
                 payload=None
                 if request.get_data(cache=False) or request.content_length not in (None,0):
                     raise TenantRequestDenied("Invalid tenant request")
-            params=request.args.to_dict(flat=True)
-            if len(params)!=len(request.args):
+            # MultiDict's len() counts distinct keys, not duplicates.
+            # Reject repeated query keys before collapsing any values.
+            if any(len(request.args.getlist(key)) != 1 for key in request.args.keys()):
                 raise TenantRequestDenied("Invalid tenant request")
+            params=request.args.to_dict(flat=True)
             if "before_id" in params:
                 before=params["before_id"]
                 if not before.isascii() or not before.isdecimal() or len(before)>18:
