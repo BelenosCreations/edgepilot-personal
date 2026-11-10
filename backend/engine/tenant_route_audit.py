@@ -61,12 +61,17 @@ def inspect_sources(app_source,worker_source):
     )
     if not all(value in app_source for value in required_guard):
         raise ApiBoundaryError("Legacy/identity authorization boundary has changed")
-    if any(name in app_source for name in ("from engine import tenant_history_details",
-                                           "from engine import tenant_history,")):
+    if any(name in app_source for name in (
+        "from engine import tenant_history_details",
+        "from engine import tenant_history,",
+        "tenant_api_gateway", "tenant_monitor_blueprint",
+    )):
         raise ApiBoundaryError("Dormant historical store exposed in legacy HTTP app")
     if ("appmod.selected_account()" not in worker_source or
             "EDGE_AUTOMATION_WORKER_ENABLED" not in worker_source or
-            "tenant_history_details" in worker_source):
+            "tenant_history_details" in worker_source or
+            "tenant_api_gateway" in worker_source or
+            "tenant_monitor_blueprint" in worker_source):
         raise ApiBoundaryError("Legacy worker authorization surface changed")
     legacy={r for r in routes if r not in identity}
     if not legacy:
@@ -78,6 +83,9 @@ def inspect_sources(app_source,worker_source):
         "legacyRoutesConvertedToTenantScope":0,
         "legacyWorkerUsesGlobalSelectedAccount":True,
         "tenantHistoryDetailsExposedByApi":False,
+        "dormantAccountSwitcherExposedByApi":False,
+        "tenantMonitorPlannerWiredToWorker":False,
+        "sessionScopedSelectionCannotReplaceLegacyAccountYet":True,
         "historyImportEndpointEnabled":False,
         "crossAccountProductionCutoverAllowed":False,
         "fullRouteAndWorkerRefactorRequired":True,

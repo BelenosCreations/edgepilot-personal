@@ -36,7 +36,7 @@ class ObservationRefreshTests(unittest.TestCase):
         self.assertNotIn("api('automation/auto/start'",interval)
         self.assertNotIn("api('funds/",interval)
         self.assertIn("'liveTradingAvailable':False",APP)
-        self.assertIn("0.2.15-dormant-history-summaries-inactive",APP)
+        self.assertIn("0.2.16-dormant-session-monitor-isolation",APP)
 
 
 if __name__=='__main__':

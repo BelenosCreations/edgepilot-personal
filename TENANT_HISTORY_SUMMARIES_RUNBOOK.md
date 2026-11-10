@@ -1,3 +1,16 @@
+## Phase 10 (v0.2.16): Dormant per-device account choice and monitoring isolation
+
+The new backend/engine/tenant_api_gateway.py stores a future account
+selection **per verified identity session** rather than changing the
+legacy global selected account. The disabled-only
+backend/engine/tenant_monitor_blueprint.py produces explicit per-account
+watchlist plans and supports RAM-only zero-quote synthetic observation
+replays for tests. No HTTP endpoint or live worker imports either module.
+The static tenant route audit still blocks multi-account production
+cutover. See TENANT_SESSION_MONITOR_RUNBOOK.md for limitations,
+diagnostics, security tests and future authorization requirements.
+
+
 # EdgePilot v0.2.15 — Dormant scoped historical summaries and reversible migration gates
 
 **STATUS: INACTIVE.** This release does NOT perform a production migration,
