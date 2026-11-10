@@ -45,7 +45,7 @@ jobs:
           test -s "$release"
           test -s "$staging"
           "$tools/aapt" dump badging "$owner" | grep -Eq "^package: name='com[.]edgepilot[.]mobile' versionCode='1917' "
-          "$tools/aapt" dump badging "$release" | grep -Eq "^package: name=\'com[.]edgepilot[.]mobile\' versionCode=\'1917\' "
+          "$tools/aapt" dump badging "$release" | grep -Eq "^package: name='com[.]edgepilot[.]mobile' versionCode='1917' "
           "$tools/aapt" dump badging "$staging" | grep -Eq "^package: name='com[.]edgepilot[.]mobile[.]staging' versionCode='1917' "
       - name: Upload privately to workflow artifacts
         uses: actions/upload-artifact@v4
