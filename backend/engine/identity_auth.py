@@ -19,6 +19,8 @@ COOKIE_NAME = "__Host-edgepilot_identity"
 SESSION_SECONDS = 4 * 3600
 FAILURE_WINDOW_SECONDS = 10 * 60
 MAX_FAILURES = 12
+MAX_SECURITY_ATTEMPTS = 8
+SECURITY_ATTEMPT_WINDOW_SECONDS = 10 * 60
 PASSWORD_MIN_LENGTH = 14
 PASSWORD_MAX_LENGTH = 128
 
@@ -89,6 +91,26 @@ def setup(path):
         )""")
         con.execute("CREATE INDEX IF NOT EXISTS idx_tenant_auth_failures_source ON tenant_auth_failures(source_hash,attempted_at)")
         con.execute("CREATE INDEX IF NOT EXISTS idx_tenant_auth_failures_login ON tenant_auth_failures(login_hash,attempted_at)")
+        con.execute("""CREATE TABLE IF NOT EXISTS tenant_identity_security_attempts(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL REFERENCES tenant_users(user_id),
+            attempted_at INTEGER NOT NULL
+        )""")
+        con.execute("""CREATE INDEX IF NOT EXISTS idx_identity_security_attempts
+            ON tenant_identity_security_attempts(user_id,attempted_at)""")
+        con.execute("""CREATE TABLE IF NOT EXISTS tenant_identity_security_events(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL REFERENCES tenant_users(user_id),
+            action TEXT NOT NULL CHECK(action IN
+                ('PASSWORD_CHANGED','SESSIONS_REVOKED')),
+            happened_at INTEGER NOT NULL
+        )""")
+        con.execute("""CREATE TRIGGER IF NOT EXISTS no_identity_security_event_update
+            BEFORE UPDATE ON tenant_identity_security_events
+            BEGIN SELECT RAISE(ABORT,'security audit immutable'); END""")
+        con.execute("""CREATE TRIGGER IF NOT EXISTS no_identity_security_event_delete
+            BEFORE DELETE ON tenant_identity_security_events
+            BEGIN SELECT RAISE(ABORT,'security audit immutable'); END""")
 
 
 class IdentityStore:
@@ -238,3 +260,99 @@ class IdentityStore:
             if updated!=1:
                 raise PermissionError("Credentials changed; retry securely")
             con.execute("DELETE FROM tenant_identity_sessions WHERE user_id=?",(user_id,))
+
+
+    def _verify_password_for_security_action(self, token, csrf, current_password):
+        """Step-up with the current password; throttle attempts per identity."""
+        moment=int(time.time())
+        principal=self.principal(token, csrf, now=moment)
+        if principal is None:
+            raise PermissionError("Security confirmation unavailable")
+        owner=principal["user_id"]
+        if not isinstance(current_password,str) or not 0<len(current_password)<=512:
+            raise PermissionError("Security confirmation unavailable")
+        with _db(self.path) as con:
+            con.execute("BEGIN IMMEDIATE")
+            con.execute("""DELETE FROM tenant_identity_security_attempts
+                WHERE attempted_at<?""",(moment-SECURITY_ATTEMPT_WINDOW_SECONDS,))
+            count=con.execute("""SELECT COUNT(*) FROM tenant_identity_security_attempts
+                WHERE user_id=? AND attempted_at>=?""",
+                (owner,moment-SECURITY_ATTEMPT_WINDOW_SECONDS)).fetchone()[0]
+            if count>=MAX_SECURITY_ATTEMPTS:
+                raise PermissionError("Security confirmation unavailable")
+            con.execute("""INSERT INTO tenant_identity_security_attempts
+                (user_id,attempted_at) VALUES(?,?)""",(owner,moment))
+            row=con.execute("""SELECT password_hash FROM tenant_identities
+                WHERE user_id=?""",(owner,)).fetchone()
+        if row is None:
+            raise PermissionError("Security confirmation unavailable")
+        try:
+            verified=_HASHER.verify(row["password_hash"],current_password)
+        except (exceptions.VerifyMismatchError,exceptions.VerificationError,
+                exceptions.InvalidHashError,TypeError):
+            verified=False
+        if not verified:
+            raise PermissionError("Security confirmation unavailable")
+        return owner,row["password_hash"]
+
+    @staticmethod
+    def _checked_security_identity(con, token, csrf, owner, expected_hash):
+        """Recheck identity, CSRF, revocation and credential version under lock."""
+        if (not isinstance(token,str) or not 25<len(token)<256 or
+            not isinstance(csrf,str) or not 20<len(csrf)<256):
+            raise PermissionError("Security confirmation unavailable")
+        row=con.execute("""SELECT s.user_id,s.csrf_hash,i.password_hash
+            FROM tenant_identity_sessions s
+            JOIN tenant_identities i ON i.user_id=s.user_id
+            JOIN tenant_users u ON u.user_id=s.user_id
+            WHERE s.token_hash=? AND s.expires_at>?
+            AND s.credential_version=i.credential_version
+            AND u.disabled_at IS NULL""",(_digest(token),int(time.time()))).fetchone()
+        if (row is None or row["user_id"]!=owner or
+            row["password_hash"]!=expected_hash or
+            not hmac.compare_digest(row["csrf_hash"],_digest(csrf))):
+            raise PermissionError("Security confirmation unavailable")
+
+    def _complete_security_action(self, token, csrf, owner, old_hash,
+                                  *, new_hash=None):
+        with _db(self.path) as con:
+            con.execute("BEGIN IMMEDIATE")
+            self._checked_security_identity(con,token,csrf,owner,old_hash)
+            if new_hash is None:
+                changed=con.execute("""UPDATE tenant_identities
+                    SET credential_version=credential_version+1
+                    WHERE user_id=? AND password_hash=?""",(owner,old_hash)).rowcount
+                action="SESSIONS_REVOKED"
+            else:
+                changed=con.execute("""UPDATE tenant_identities SET
+                    password_hash=?,credential_version=credential_version+1
+                    WHERE user_id=? AND password_hash=?""",
+                    (new_hash,owner,old_hash)).rowcount
+                action="PASSWORD_CHANGED"
+            if changed!=1:
+                raise PermissionError("Security confirmation unavailable")
+            con.execute("DELETE FROM tenant_identity_sessions WHERE user_id=?",
+                        (owner,))
+            con.execute("""INSERT INTO tenant_identity_security_events
+                (user_id,action,happened_at) VALUES(?,?,?)""",
+                (owner,action,int(time.time())))
+        return {"ok":True,"allSessionsSignedOut":True,"passkeysRevoked":False,
+                "publicConnectionsChanged":False,"tradingEnabled":False,
+                "fundTransfersEnabled":False}
+
+    def change_password_from_session(self, token, csrf, current_password, new_password):
+        """Authenticated, password-stepped-up change invalidates ALL sessions."""
+        _validate_password(new_password)
+        if current_password==new_password:
+            raise ValueError("Choose a different password")
+        owner,old_hash=self._verify_password_for_security_action(
+            token,csrf,current_password)
+        new_hash=_HASHER.hash(new_password)
+        return self._complete_security_action(
+            token,csrf,owner,old_hash,new_hash=new_hash)
+
+    def sign_out_everywhere_from_session(self, token, csrf, current_password):
+        """Revoke every active session for this owner, not their passkeys."""
+        owner,old_hash=self._verify_password_for_security_action(
+            token,csrf,current_password)
+        return self._complete_security_action(token,csrf,owner,old_hash)
