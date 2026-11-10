@@ -53,6 +53,20 @@ def setup(path):
         );
         CREATE INDEX IF NOT EXISTS idx_tenant_session_selection_user
             ON tenant_session_account_selection(user_id,account_id);
+        CREATE TRIGGER IF NOT EXISTS tenant_selection_session_owner_insert
+        BEFORE INSERT ON tenant_session_account_selection
+        WHEN NOT EXISTS (
+            SELECT 1 FROM tenant_identity_sessions
+            WHERE token_hash=NEW.token_hash AND user_id=NEW.user_id
+        )
+        BEGIN SELECT RAISE(ABORT,'Session owner mismatch'); END;
+        CREATE TRIGGER IF NOT EXISTS tenant_selection_session_owner_update
+        BEFORE UPDATE ON tenant_session_account_selection
+        WHEN NOT EXISTS (
+            SELECT 1 FROM tenant_identity_sessions
+            WHERE token_hash=NEW.token_hash AND user_id=NEW.user_id
+        )
+        BEGIN SELECT RAISE(ABORT,'Session owner mismatch'); END;
         """)
 
 
