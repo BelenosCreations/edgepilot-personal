@@ -17,6 +17,7 @@ import sqlite3
 import tempfile
 import uuid
 from datetime import datetime, timezone
+from contextlib import closing
 from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -286,33 +287,33 @@ def rehearse_owner_shadow(source_db, *, credential_key, phrase):
         path, ram_root=shadow_storage.require_isolated_source(source_db)
         boundary_report=tenant_route_audit.inspect_repo()
         before=migration_preflight.inspect_database(path)
-        with _conn(path,readonly=True) as original:
+        with closing(_conn(path,readonly=True)) as original:
             source_fingerprint=historical_reconciliation.source_content_fingerprint(
                 original,before["tableCounts"])
         with tempfile.TemporaryDirectory(
                 prefix="edgepilot-shadow-rehearsal-",dir=str(ram_root)) as root:
             work=Path(root)/"shadow.db"
-            with _conn(path,readonly=True) as src, _conn(work) as dest:
+            with closing(_conn(path,readonly=True)) as src, closing(_conn(work)) as dest:
                 src.backup(dest)
             os.chmod(work,0o600)
             snapshot_report=migration_preflight.inspect_database(work)
             if before!=snapshot_report:
                 raise ShadowMigrationError("Isolated source changed during snapshot")
-            with _conn(work,readonly=True) as staged_copy:
+            with closing(_conn(work,readonly=True)) as staged_copy:
                 copy_fingerprint=historical_reconciliation.source_content_fingerprint(
                     staged_copy,before["tableCounts"])
             if copy_fingerprint!=source_fingerprint:
                 raise ShadowMigrationError("Source and shadow contents do not match")
-            with _conn(work) as stage:
+            with closing(_conn(work)) as stage:
                 report=_stage(stage,credential_key,before)
             shadow=migration_preflight.inspect_database(work)
             if shadow["integrity"]!="ok" or shadow["foreignKeys"]!="ok":
                 raise ShadowMigrationError("Shadow database failed integrity validation")
-            with _conn(work,readonly=True) as archived:
+            with closing(_conn(work,readonly=True)) as archived:
                 historical_reconciliation.verify_shadow_index(
                     archived,before["tableCounts"])
             after=migration_preflight.inspect_database(path)
-            with _conn(path,readonly=True) as original:
+            with closing(_conn(path,readonly=True)) as original:
                 final_fingerprint=historical_reconciliation.source_content_fingerprint(
                     original,before["tableCounts"])
             if after!=before or final_fingerprint!=source_fingerprint:
