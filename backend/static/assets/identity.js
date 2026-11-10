@@ -145,12 +145,21 @@
     el("portfolioSummary").textContent = "";
     try {
       const data = await api("/accounts");
-      if (!Array.isArray(data.accounts)) throw new Error("Invalid account list");
+      if (data.readOnly !== true || !Array.isArray(data.accounts)) {
+        throw new Error("Invalid read-only account list");
+      }
       if (data.accounts.length === 0) {
         el("portfolioSummary").textContent = "No verified Public accounts are linked yet.";
       }
       for (const account of data.accounts) {
-        const id = String(account.accountId);
+        // The existing tenant storage endpoint returns account_id. The
+        // provider read-only endpoint uses accountId. Never infer an account
+        // from the legacy global selected-account value.
+        const id = account.accountId || account.account_id;
+        if (typeof id !== "string" ||
+            !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) {
+          throw new Error("Invalid scoped account identifier");
+        }
         const li = document.createElement("li");
         li.appendChild(document.createTextNode(String(account.label || "Public account") + " "));
         const button = document.createElement("button");
