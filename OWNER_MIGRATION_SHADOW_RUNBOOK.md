@@ -1,3 +1,15 @@
+## Phase 8 (v0.2.14): Account-specific dormant historical references
+
+Introduces backend/engine/tenant_history.py, used **only** in the
+memory-backed disposable owner migration rehearsal. Explicitly
+account-labeled legacy rows get scoped reference records under the verified
+owner's inactive tenant account and are reconciled with source-row hashes.
+All remaining history stays quarantined. A future-only reader proves
+session/account isolation without exposing raw trade payloads. No live
+migration or new user activation occurs. Review
+TENANT_HISTORY_ISOLATION_RUNBOOK.md before any follow-up work.
+
+
 ## Phase 7 (v0.2.13): Verified memory-backed rehearsal and quarantine review (inactive)
 
 Phase 6 now reports audited evidence-based review groups within historicalReconciliation.quarantineReview, including every quarantined row. Global watchlists/risk configurations, paper simulation, market observations, session tokens and credentials are never silently attributed or activated. Matching timestamps, SPY symbols, or a single selected account do not provide proof of record ownership.
