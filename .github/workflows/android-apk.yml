@@ -29,6 +29,8 @@ jobs:
           gradle-version: '8.9'
       - name: Assemble Android test APK
         run: gradle --no-daemon --stacktrace -p android :app:assembleDebug
+      - name: Compile separate unsigned staging package (no artifact)
+        run: gradle --no-daemon --stacktrace -p android :app:assembleStaging "-PedgePilotStagingHost=ci-only.belenoscreations.biz"
       - name: Upload privately to workflow artifacts
         uses: actions/upload-artifact@v4
         with:
