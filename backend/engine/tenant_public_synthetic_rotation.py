@@ -7,6 +7,8 @@ No real Public key rotation, provider revocation, external calls or live use.
 """
 from __future__ import annotations
 
+import hashlib
+
 from cryptography.fernet import Fernet, InvalidToken
 
 from . import account_scope, shadow_storage
@@ -128,6 +130,12 @@ class OfflineCredentialRotation:
             current=self._context(con,user_id,account_id)
             if current["connection_id"]!=context["connection_id"]:
                 raise SyntheticRotationDenied("CONNECTION_UNAVAILABLE")
+            current_accounts={r["account_id"] for r in con.execute("""
+                SELECT account_id FROM tenant_accounts
+                WHERE user_id=? AND connection_id=?""",
+                (user_id,current["connection_id"]))}
+            if current_accounts!=set(accounts):
+                raise SyntheticRotationDenied("MISSING_ACCOUNT_APPROVAL")
             row=con.execute("""SELECT generation FROM tenant_test_connection_generation
                 WHERE connection_id=? AND user_id=?""",
                 (current["connection_id"],user_id)).fetchone()
@@ -141,7 +149,7 @@ class OfflineCredentialRotation:
                       AND token_hash=? AND state='CONFIRMED_OFFLINE'
                       AND expires_at>?""",(
                     approval_ids[aid],user_id,aid,
-                    __import__("hashlib").sha256(token.encode()).hexdigest(),
+                    hashlib.sha256(token.encode()).hexdigest(),
                     self.consents._now())).fetchone()
                 if approved is None:
                     raise SyntheticRotationDenied("MISSING_ACCOUNT_APPROVAL")
