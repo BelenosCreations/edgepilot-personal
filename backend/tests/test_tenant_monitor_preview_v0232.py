@@ -172,5 +172,26 @@ class TenantMonitorPreviewDisabledTests(unittest.TestCase):
         importlib.reload(app)
 
 
+class TenantMonitorPreviewClientChecks(unittest.TestCase):
+    def test_preview_is_inactive_and_discards_stale_account_responses(self):
+        from pathlib import Path
+        root=Path(__file__).resolve().parents[2]
+        js=(root/"backend/static/assets/identity.js").read_text()
+        html=(root/"backend/static/identity.html").read_text()
+        self.assertIn('id="monitorPlanInfo"',html)
+        self.assertIn('"/monitor/preview"',js)
+        for invariant in ("plan.accountId !== id",
+                          "plan.simulatedPlanOnly !== true",
+                          "plan.scheduled !== false",
+                          "plan.workerActive !== false",
+                          "plan.brokerRequestsAllowed !== false",
+                          "plan.paperEnabled !== false",
+                          "plan.liveTradingEnabled !== false",
+                          "requestGeneration !== identityViewGeneration"):
+            self.assertIn(invariant,js)
+        self.assertIn('el("monitorPlanInfo").textContent',js)
+        self.assertNotIn("innerHTML",js)
+
+
 if __name__=="__main__":
     unittest.main()
