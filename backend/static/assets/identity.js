@@ -83,6 +83,9 @@
     el("newPassword").value = "";
     el("publicSecret").value = "";
     el("replacementSecret").value = "";
+    el("securityCurrentPassword").value = "";
+    el("securityNewPassword").value = "";
+    el("securitySignOutPassword").value = "";
     clearReadOnly();
   }
   function clearReadOnly() {
@@ -340,6 +343,55 @@
         identityCsrf = result.csrf;
         await showSession();
       } finally { el("loginPassword").value = ""; }
+    });
+  });
+  function verifiedSecurityResponse(result) {
+    if (result.ok !== true || result.allSessionsSignedOut !== true ||
+        result.passkeysRevoked !== false ||
+        result.publicConnectionsChanged !== false ||
+        result.tradingEnabled !== false || result.fundTransfersEnabled !== false) {
+      throw new Error("Account security response rejected");
+    }
+  }
+  el("changeIdentityPasswordForm").addEventListener("submit", event => {
+    event.preventDefault();
+    action(async () => {
+      const generation = identityViewGeneration;
+      const currentPassword = el("securityCurrentPassword").value;
+      const newPassword = el("securityNewPassword").value;
+      try {
+        if (newPassword.length < 14 || newPassword.length > 128 ||
+            newPassword === currentPassword) {
+          throw new Error("Choose a different EdgePilot password with 14–128 characters.");
+        }
+        const result = await api("/security/change-password", "POST",
+          {currentPassword,newPassword}, true);
+        if (generation !== identityViewGeneration) return;
+        verifiedSecurityResponse(result);
+        showLoggedOut();
+        status("EdgePilot password changed. All devices have been signed out; sign in again.");
+      } finally {
+        el("securityCurrentPassword").value = "";
+        el("securityNewPassword").value = "";
+      }
+    });
+  });
+  el("signOutEverywhereForm").addEventListener("submit", event => {
+    event.preventDefault();
+    action(async () => {
+      const generation = identityViewGeneration;
+      const currentPassword = el("securitySignOutPassword").value;
+      try {
+        if (!window.confirm("Sign out all devices from this EdgePilot account? Passkeys remain registered.")) return;
+        const result = await api("/security/sign-out-everywhere", "POST",
+          {currentPassword}, true);
+        if (generation !== identityViewGeneration) return;
+        verifiedSecurityResponse(result);
+        showLoggedOut();
+        status("All EdgePilot sessions for this account were signed out. Passkeys remain registered.");
+      } finally {
+        el("securitySignOutPassword").value = "";
+      }
     });
   });
   el("registerForm").addEventListener("submit", event => {
