@@ -1,3 +1,15 @@
+## Phase 14 (v0.2.20): Recorded read-only Public API contract and isolated account recovery
+
+Introduced a gated synthetic-only Public token exchange and account-list
+response parser modeled on official Public documentation. A test-only
+credential handler decrypts encrypted fake secrets after verifying
+owner/account/connection scope. Recorded failures pause only that account,
+and manual synthetic review is required before another preflight.
+**No real Public network requests, access-token exchange or legal ownership
+verification occur.** Existing production API, worker and Public account
+remain untouched. See TENANT_PUBLIC_READONLY_PREFLIGHT_RUNBOOK.md.
+
+
 ## Phase 13 (v0.2.19): Controlled fake Public binding, isolated recovery and legacy inventory
 
 The verified-memory-only tests now model explicit account-to-connection
