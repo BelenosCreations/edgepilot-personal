@@ -107,3 +107,11 @@ and limitations. Physical two-device biometric login and actual two-account
 Public validation remain uncompleted. Always verify current GitHub VERSION,
 PR status and exact-head CI before announcing release completion.
 
+
+## v0.2.35.1 maintenance checkpoint
+
+v0.2.35 merged with passing PR CI, but post-merge CI exposed an intermittent
+STATE_UNAVAILABLE denial in the disconnected multi-process SQLite rehearsal.
+The patch retains exactly two durable admissions and checks fail-closed
+denial types. Verify v0.2.35.1 PR and post-merge CI before continuing.
+No production broker or Android behavior changed.
