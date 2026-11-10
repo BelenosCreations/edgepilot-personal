@@ -23,6 +23,13 @@ class AccountScopedReadOnlyUiTests(unittest.TestCase):
             self.assertIn(flag,js)
         self.assertIn("encodeURIComponent(connectionId)",js)
         self.assertIn("encodeURIComponent(id)",js)
+        # The existing tenant storage list returns snake_case account_id,
+        # whereas Public adapter returns camelCase accountId.
+        account_scope=(ROOT/"backend/engine/account_scope.py").read_text(encoding="utf-8")
+        self.assertIn("SELECT a.account_id,a.label,a.provider",account_scope)
+        self.assertIn("account.accountId || account.account_id",js)
+        self.assertIn("data.readOnly !== true",js)
+        self.assertIn("Invalid scoped account identifier",js)
         self.assertIn('document.createElement("li")',js)
         self.assertIn('document.createTextNode(',js)
         self.assertIn("textContent",js)
