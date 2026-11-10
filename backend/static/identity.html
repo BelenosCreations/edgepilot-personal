@@ -104,6 +104,13 @@
         <select id="connectionChoice" aria-label="Select your own Public connection">
           <option value="">No connection selected</option>
         </select>
+        <div id="connectionManagement">
+          <label for="replacementSecret">Replace API secret for the selected connection</label>
+          <input id="replacementSecret" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" minlength="20" maxlength="2048" placeholder="New Public API secret">
+          <button id="rotatePublicSecret" type="button">Replace saved key</button>
+          <button id="disconnectPublicConnection" type="button">Disconnect selected account</button>
+          <small>Replacing the API secret or disconnecting removes the previous verification of linked Public accounts. This does not close your Public brokerage account.</small>
+        </div>
         <button id="findPublicAccounts" type="button">Find my Public accounts</button>
         <p id="discoveryInfo" class="muted"></p>
         <ul id="discoveredAccounts" aria-label="Discovered Public accounts"></ul>

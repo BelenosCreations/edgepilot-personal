@@ -98,6 +98,34 @@ class TenantPublicVaultUnitTests(unittest.TestCase):
         with self.assertRaises(tenant_public_vault.TenantVaultDenied):
             self.vault.disconnect(self.a["token"],self.a["csrf"],conn_a)
 
+    def test_logout_between_authorization_and_write_cannot_rotate_or_disconnect(self):
+        conn=self.vault.save(self.a["token"],self.a["csrf"],KEY_A)["connectionId"]
+        initial=self.vault._principal
+        def revoke_after_preflight(token,csrf=None):
+            owner=initial(token,csrf)
+            self.identities.revoke(token)
+            return owner
+        for action in ("rotate","disconnect"):
+            # Replace a session after each attempt to exercise both operations.
+            self.a=self.identities.authenticate(
+                "first_login","some-safe-long-password-A","phone-a")
+            with patch.object(self.vault,"_principal",side_effect=revoke_after_preflight):
+                with self.assertRaises(tenant_public_vault.TenantVaultDenied):
+                    if action=="rotate":
+                        self.vault.rotate(self.a["token"],self.a["csrf"],conn,KEY_A_NEW)
+                    else:
+                        self.vault.disconnect(self.a["token"],self.a["csrf"],conn)
+            fresh=self.identities.authenticate(
+                "first_login","some-safe-long-password-A","phone-a")
+            self.assertEqual(
+                self.vault._credential_for_provider_only(fresh["token"],conn),KEY_A)
+        with sqlite3.connect(self.path) as db:
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM tenant_public_vault_events").fetchone()[0],0)
+            self.assertIsNone(db.execute(
+                "SELECT revoked_at FROM tenant_connections WHERE connection_id=?",
+                (conn,)).fetchone()[0])
+
     def test_missing_or_wrong_key_never_overwrites_encrypted_credential(self):
         conn=self.vault.save(self.a["token"],self.a["csrf"],KEY_A)["connectionId"]
         vault_without_key=tenant_public_vault.TenantPublicVault(self.path,self.identities,

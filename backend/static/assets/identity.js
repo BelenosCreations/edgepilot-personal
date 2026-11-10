@@ -82,6 +82,7 @@
     el("loginPassword").value = "";
     el("newPassword").value = "";
     el("publicSecret").value = "";
+    el("replacementSecret").value = "";
     clearReadOnly();
   }
   function clearReadOnly() {
@@ -96,6 +97,7 @@
     el("portfolioSummary").textContent = "";
     el("monitorPlanInfo").textContent = "";
     el("connectionInfo").textContent = "";
+    el("replacementSecret").value = "";
   }
   async function showSession() {
     const startedGeneration = identityViewGeneration;
@@ -300,6 +302,18 @@
       el("discoveredAccounts").appendChild(li);
     }
   }
+  function chosenConnectionId() {
+    const id = el("connectionChoice").value;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) {
+      throw new Error("Choose your own saved Public connection first.");
+    }
+    return id;
+  }
+  async function refreshAfterCredentialChange() {
+    clearReadOnly();
+    await loadConnections();
+    await loadLinkedAccounts();
+  }
   async function action(work) {
     if (busy) return;
     busy = true;
@@ -379,6 +393,45 @@
       } finally { el("publicSecret").value = ""; }
     });
   });
+  el("rotatePublicSecret").addEventListener("click", () => action(async () => {
+    const connectionId = chosenConnectionId();
+    const generation = identityViewGeneration;
+    const secret = el("replacementSecret").value;
+    try {
+      if (secret.length < 20 || secret.length > 2048 ||
+          /[\r\n\x00]/.test(secret)) {
+        throw new Error("Enter a valid replacement Public API secret.");
+      }
+      if (!window.confirm("Replace the saved secret for this connection? Existing linked Public accounts will need verification again.")) return;
+      const result = await api("/public/connections/" +
+        encodeURIComponent(connectionId) + "/rotate", "POST", {secret}, true);
+      if (generation !== identityViewGeneration) return;
+      if (result.status !== "stored_unverified" ||
+          result.boundAccountsDisabled !== true ||
+          result.secretsReturned !== false || result.realOrdersEnabled !== false) {
+        throw new Error("Credential replacement response rejected");
+      }
+      await refreshAfterCredentialChange();
+      status("Public API secret replaced for this EdgePilot account. Linked accounts must be verified again; trading remains disabled.");
+    } finally {
+      el("replacementSecret").value = "";
+    }
+  }));
+  el("disconnectPublicConnection").addEventListener("click", () => action(async () => {
+    const connectionId = chosenConnectionId();
+    const generation = identityViewGeneration;
+    if (!window.confirm("Disconnect this encrypted Public connection from EdgePilot? Linked accounts will become unavailable. Your brokerage account will not be closed.")) return;
+    const result = await api("/public/connections/" +
+      encodeURIComponent(connectionId), "DELETE", undefined, true);
+    if (generation !== identityViewGeneration) return;
+    if (result.status !== "revoked" ||
+        result.boundAccountsDisabled !== true ||
+        result.secretsReturned !== false || result.realOrdersEnabled !== false) {
+      throw new Error("Disconnection response rejected");
+    }
+    await refreshAfterCredentialChange();
+    status("Public connection disconnected from this EdgePilot account. Your Public brokerage account remains open.");
+  }));
   el("findPublicAccounts").addEventListener("click", () => action(async () => {
     await discoverPublicAccounts();
   }));
