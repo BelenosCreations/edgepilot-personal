@@ -109,6 +109,16 @@ Credential Manager passkey login, two separate tenant identities or
 independent Public connections. The full multi-user acceptance gate
 remains open.
 
+## Android Digital Asset Links HTTPS response — owner-confirmed November 10, 2026
+
+The owner captured the actual association JSON returned by the EdgePilot
+HTTPS domain on an Android phone, after the verified permanent APK signer
+was configured in Render. The JSON advertises the correct package,
+certificate fingerprint and credential-sharing relation. This validates
+the public endpoint's content, not the operating system's credential
+association or passkey enrollment. All two-device identity and Public
+account acceptance gates below remain open.
+
 ## Milestone acceptance criteria — not complete until verified
 
 - Two separately provisioned EdgePilot users can register and sign in from

@@ -249,3 +249,24 @@ package and certificate. An installed app's Android Credential Manager
 association and tenant biometric authentication remain completely
 unverified. Do not turn on dormant multiuser/tenant/passkey/Public flags
 or enable orders or transfers as an implied consequence of this deploy.
+
+## November 10, 2026 — Public Digital Asset Links JSON confirmed on Android
+
+After Render deployment `dep-dbppig56e07s73b34d1g` was live, the owner
+reloaded https://edgepilot.belenoscreations.biz/.well-known/assetlinks.json
+on their current Android phone. The supplied screenshot displayed a
+JSON array containing relation
+`delegate_permission/common.get_login_creds`, target namespace
+`android_app`, package `com.edgepilot.mobile`, and the configured
+SHA-256 certificate fingerprint matching the verified permanent-signed APK.
+This resolves the prior 404 and validates **public HTTPS association
+response content** from the owner's phone. It is not OS-level Digital
+Asset Links verification and does not demonstrate credential sharing,
+Android Credential Manager availability, or a functioning passkey.
+
+Next: determine a controlled isolated test deployment and user enrollment
+method before turning on currently default-off identity, signup, or
+passkey flags. Do not activate those on the personal live service simply
+because the public association file is available. Test account recovery,
+passkey registration and login on an actual Android device, then use a
+second independent user/device. Live orders/transfers stay disabled.
