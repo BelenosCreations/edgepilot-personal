@@ -17,6 +17,8 @@
     .panel { background:#131f31; border:1px solid #314158; border-radius:14px; padding:20px; margin:14px 0; }
     .muted { color:#b8c7d5; line-height:1.55; }
     label { display:block; margin:12px 0 4px; font-weight:600; font-size:.92rem; }
+    select { display:block; width:100%; border:1px solid #596a7a; background:#0b1526; color:#f1f7fc;
+             padding:12px; border-radius:8px; font-size:16px; }
     input { display:block; width:100%; border:1px solid #596a7a; background:#0b1526; color:#f1f7fc;
             padding:12px; border-radius:8px; font-size:16px; }
     button { background:#245b66; color:white; border:1px solid #4e8791; border-radius:8px; padding:12px 18px;
@@ -87,6 +89,22 @@
         <p id="connectionInfo" class="muted"></p>
         <ul id="connections" aria-label="Your Public connections"></ul>
       </form>
+      <section class="panel" id="portfolioPane">
+        <h2>Your Public accounts (read-only)</h2>
+        <p class="muted">Discover accounts only through your own saved Public connection. Linking verifies ownership with Public before the account can be viewed. There are no trading or transfer controls here.</p>
+        <label for="connectionChoice">Encrypted Public connection</label>
+        <select id="connectionChoice" aria-label="Select your own Public connection">
+          <option value="">No connection selected</option>
+        </select>
+        <button id="findPublicAccounts" type="button">Find my Public accounts</button>
+        <p id="discoveryInfo" class="muted"></p>
+        <ul id="discoveredAccounts" aria-label="Discovered Public accounts"></ul>
+        <h3>Linked accounts</h3>
+        <ul id="linkedAccounts" aria-label="Verified linked accounts"></ul>
+        <div id="portfolioSummary" class="muted" role="status" aria-live="polite"></div>
+        <ul id="holdings" aria-label="Portfolio holdings"></ul>
+        <small>Displayed values come from the current user-scoped read-only Public API response, not simulated gains or an execution approval.</small>
+      </section>
     </section>
   </main>
 </body>

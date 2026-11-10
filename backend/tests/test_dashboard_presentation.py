@@ -50,7 +50,7 @@ class DashboardPresentationTests(unittest.TestCase):
     def test_no_new_order_execution_or_secret_fields(self):
         app=APP.read_text(encoding='utf-8')
         self.assertIn("'liveTradingAvailable':False",app)
-        self.assertIn('0.2.30-android-passkey-account-preview-opt-in',app)
+        self.assertIn('0.2.31-account-scoped-readonly-ui-opt-in',app)
         html=HTML.read_text(encoding='utf-8')
         self.assertNotIn('value="0.15"',html)
 
