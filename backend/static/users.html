@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="referrer" content="no-referrer">
+<title>EdgePilot | Private Account</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#0c1423;color:#f4f7fa}
+*{box-sizing:border-box}body{margin:0;min-height:100vh}header{padding:16px 18px;border-bottom:1px solid #314154;display:flex;align-items:center;justify-content:space-between;gap:12px;background:#101e30}
+.brand{font-size:1.15rem;font-weight:800;letter-spacing:.04em;color:#e0af64}main{max-width:780px;margin:0 auto;padding:22px 14px 72px}
+h1{font-size:1.55rem;margin:0 0 8px}h2{font-size:1.14rem;margin:0 0 12px}p{line-height:1.5}.muted{color:#b6c8d5}
+.panel{background:#132339;border:1px solid #314154;border-radius:16px;padding:20px;margin-bottom:17px}
+label{display:block;font-size:.91rem;font-weight:600;margin:13px 0 6px}
+input,select{font:inherit;min-height:44px;width:100%;border:1px solid #52677e;background:#0c1726;color:#fff;border-radius:9px;padding:10px}
+button{font:inherit;font-weight:650;color:#fff;min-height:44px;border:1px solid #507484;border-radius:10px;background:#264d5c;padding:9px 15px;cursor:pointer}
+button.primary{background:#167f7d;border-color:#1b9995}button.danger{background:#5e2a3a;border-color:#985362}
+button:disabled{opacity:.6;cursor:not-allowed}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.row>*{flex:1 1 auto}
+.hidden{display:none!important}.notice{border-radius:10px;padding:11px 13px;background:#1a314a;margin:12px 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.warn{color:#f2c47e}.good{color:#8fe0ba}
+.cards{display:grid;gap:12px}.item{padding:13px 14px;background:#0e1c2f;border:1px solid #33485f;border-radius:10px}
+.item strong{display:block;margin-bottom:5px}small{color:#bdcbd6}svg{vertical-align:middle}
+:focus-visible{outline:3px solid #f0bd71;outline-offset:2px}
+@media(min-width:600px){main{padding-top:32px} .cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style></head><body>
+<header><span class="brand">EdgePilot</span><span class="muted" id="sessionLabel">Private account</span></header>
+<main>
+<section id="signIn" class="panel">
+  <h1>Sign in to EdgePilot</h1>
+  <p class="muted">Use your own EdgePilot account. Your Public API key is entered separately after sign-in.</p>
+  <form id="loginForm">
+    <label for="username">Username</label><input id="username" name="username" autocomplete="username" maxlength="64" required>
+    <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" maxlength="128" required>
+    <p><button type="submit" class="primary">Sign in securely</button></p>
+  </form>
+  <p class="muted" id="signupNotice">Account creation and biometric sign-in are being prepared. Only pre-approved test accounts can sign in during this phase.</p>
+  <p class="notice" id="loginMessage" role="status" aria-live="polite">Your login stays in a secure session cookie.</p>
+</section>
+<section id="dashboard" class="hidden">
+  <div class="panel">
+    <h1>Your private EdgePilot</h1>
+    <p id="welcome" class="muted"></p>
+    <div class="row"><button id="refreshButton" type="button">Refresh</button><button id="logoutButton" type="button">Sign out</button></div>
+    <p class="notice" id="status" role="status" aria-live="polite">Your account is isolated from other EdgePilot users.</p>
+  </div>
+  <div class="panel">
+    <h2>Your Public connection</h2>
+    <p class="muted">Only your Public key is stored, encrypted on the server. Your key is never shown again. Do not paste it into chat.</p>
+    <form id="keyForm">
+      <label for="apiSecret">Public API secret</label>
+      <input id="apiSecret" type="password" maxlength="2048" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+      <p><button type="submit" class="primary">Save my Public key</button></p>
+    </form>
+    <div id="connections" class="cards" aria-live="polite"></div>
+  </div>
+  <div class="panel">
+    <h2>Your verified Public accounts</h2>
+    <p class="muted">Only accounts returned by your own Public connection can be linked. Read-only: no trading or funds transfers.</p>
+    <div id="brokerAccounts" class="cards" aria-live="polite"></div>
+  </div>
+  <div class="panel">
+    <h2>Your portfolio</h2>
+    <div id="portfolio" class="cards" aria-live="polite"></div>
+  </div>
+  <p class="muted">This is a limited multi-user preview. Legacy trading screens are intentionally unavailable. Brokerage execution and transfers remain disabled.</p>
+</section>
+</main>
+<script src="/assets/users.js" defer></script>
+</body></html>
