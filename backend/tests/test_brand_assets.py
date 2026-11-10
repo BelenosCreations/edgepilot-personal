@@ -47,7 +47,7 @@ class BrandAssetsTests(unittest.TestCase):
         self.assertIn('versionCode = 1917',(BASE/'android/app/build.gradle.kts').read_text())
         self.assertIn('versionName = "0.19.17"',(BASE/'android/app/build.gradle.kts').read_text())
         app=(BASE/'backend/app.py').read_text()
-        self.assertIn('0.2.35.1.1-public-connection-management-opt-in',app)
+        self.assertIn('0.2.35.1-public-connection-management-opt-in',app)
         self.assertIn("@app.post('/api/order/submit')",app)
         self.assertIn("def submit():",app)
 
