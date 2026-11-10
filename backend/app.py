@@ -9,7 +9,7 @@ from urllib.parse import quote
 import requests
 from flask import Flask, jsonify, request, send_from_directory, g
 from dotenv import load_dotenv
-from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, tenant_registration, tenant_passkeys, account_scope, tenant_monitor_blueprint, tenant_watchlist, tenant_public_vault, tenant_public_live_readonly
+from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, tenant_password_change, tenant_registration, tenant_passkeys, account_scope, tenant_monitor_blueprint, tenant_watchlist, tenant_public_vault, tenant_public_live_readonly
 ROOT=Path(__file__).parent; load_dotenv(ROOT/'.env'); DB=Path(os.getenv('EDGE_DB_PATH',str(ROOT/'edgepilot.db'))); DB.parent.mkdir(parents=True,exist_ok=True)
 app=Flask(__name__,static_folder='static',static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # CSV/history research limit
@@ -47,6 +47,7 @@ credential_vault.setup()
 # Activation requires BOTH separate flags and an explicit migration review.
 tenant_schema_enabled=os.getenv('EDGE_TENANT_SCHEMA_PREPARE','false').lower()=='true'
 identity_auth_enabled=os.getenv('EDGE_IDENTITY_AUTH_ENABLED','false').lower()=='true'
+tenant_password_change_enabled=os.getenv('EDGE_TENANT_PASSWORD_CHANGE_ENABLED','false').lower()=='true'
 tenant_signup_enabled=os.getenv('EDGE_TENANT_SIGNUP_ENABLED','false').lower()=='true'
 tenant_passkeys_enabled=os.getenv('EDGE_TENANT_PASSKEYS_ENABLED','false').lower()=='true'
 tenant_read_enabled=os.getenv('EDGE_TENANT_ACCOUNT_READS_ENABLED','false').lower()=='true'
@@ -56,6 +57,8 @@ tenant_public_vault_enabled=os.getenv('EDGE_TENANT_PUBLIC_VAULT_ENABLED','false'
 tenant_public_read_enabled=os.getenv('EDGE_TENANT_PUBLIC_READONLY_ENABLED','false').lower()=='true'
 if identity_auth_enabled and not tenant_schema_enabled:
     raise RuntimeError('Identity subsystem requires the prepared tenant schema')
+if tenant_password_change_enabled and not identity_auth_enabled:
+    raise RuntimeError('Password management requires identity authentication')
 if tenant_signup_enabled and not identity_auth_enabled:
     raise RuntimeError('Tenant registration requires identity authentication')
 if tenant_passkeys_enabled and not identity_auth_enabled:
@@ -71,6 +74,7 @@ if tenant_public_vault_enabled and not identity_auth_enabled:
 if tenant_public_read_enabled and not (tenant_public_vault_enabled and tenant_read_enabled):
     raise RuntimeError('Tenant Public read-only API requires vault and tenant account reads')
 identity_store=None
+tenant_password_manager=None
 tenant_registration_store=None
 tenant_passkey_store=None
 tenant_account_store=None
@@ -83,6 +87,9 @@ if tenant_schema_enabled:
     if identity_auth_enabled:
         identity_auth.setup(str(DB))
         identity_store=identity_auth.IdentityStore(str(DB))
+        if tenant_password_change_enabled:
+            tenant_password_change.setup(str(DB))
+            tenant_password_manager=tenant_password_change.TenantPasswordChange(str(DB),identity_store)
         if tenant_signup_enabled:
             tenant_registration.setup(str(DB))
             tenant_registration_store=tenant_registration.TenantRegistration(str(DB))
@@ -135,6 +142,8 @@ def authenticate():
         return fail('Same-origin request required',403)
     if request.path.startswith('/api/identity/'):
         # Identity account reads require a second independently enabled gate.
+        if request.path=='/api/identity/password/change' and not tenant_password_change_enabled:
+            return fail('Not found',404)
         if request.path.startswith('/api/identity/accounts') and not tenant_read_enabled:
             return fail('Not found',404)
         if request.path.startswith('/api/identity/passkeys') and not tenant_passkeys_enabled:
@@ -339,6 +348,32 @@ def identity_passkey_revoke(credential_id):
     response=jsonify(result)
     response.delete_cookie(identity_auth.COOKIE_NAME,path='/',
         secure=True,httponly=True,samesite='Strict')
+    return response
+
+
+# Owner-only password rotation; user must prove their existing password.
+# The change revalidates identity and CSRF inside the SQLite write lock,
+# invalidates all of that member's sessions and does not affect passkeys
+# or Public account ownership. This is NOT a forgotten-password recovery API.
+@app.post('/api/identity/password/change')
+def identity_password_change():
+    if not tenant_password_change_enabled:
+        return fail('Not found',404)
+    payload=request.get_json(silent=True)
+    if not isinstance(payload,dict) or set(payload)!={'currentPassword','newPassword'}:
+        return fail('Password change unavailable',400)
+    try:
+        result=tenant_password_manager.change(
+            request.cookies.get(identity_auth.COOKIE_NAME,''),
+            request.headers.get('X-Edge-Identity-CSRF',''),
+            payload['currentPassword'],payload['newPassword'])
+    except tenant_password_change.PasswordChangeRateLimited:
+        return fail('Password change temporarily unavailable',429)
+    except tenant_password_change.PasswordChangeDenied:
+        return fail('Password change unavailable',400)
+    response=jsonify(result)
+    response.delete_cookie(identity_auth.COOKIE_NAME,path='/',
+                           secure=True,httponly=True,samesite='Strict')
     return response
 
 
@@ -572,7 +607,7 @@ def healthz():
     return {'ok':True}
 
 @app.get('/api/health')
-def health(): return {'ok':True,'version':'0.2.35.1-public-connection-management-opt-in','time':datetime.now(timezone.utc).isoformat()}
+def health(): return {'ok':True,'version':'0.2.36-account-password-change-opt-in','time':datetime.now(timezone.utc).isoformat()}
 def token():
     global cached_token,expires
     with lock:

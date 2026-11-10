@@ -10,6 +10,7 @@ from pathlib import Path
 
 IDENTITY_ROUTES=frozenset((
     ("POST","/api/identity/login"),
+    ("POST","/api/identity/password/change"),
     ("POST","/api/identity/register"),
     ("POST","/api/identity/passkeys/register/options"),
     ("POST","/api/identity/passkeys/register/finish"),
@@ -75,6 +76,10 @@ def inspect_sources(app_source,worker_source):
         "request.headers.get('X-Edge-Identity-CSRF'",
         "return fail('Not authenticated',401)",
         "tenant_public_vault_enabled",
+        "tenant_password_change_enabled",
+        "EDGE_TENANT_PASSWORD_CHANGE_ENABLED','false'",
+        "request.path=='/api/identity/password/change'",
+        "tenant_password_manager.change(",
         "tenant_monitor_preview_enabled",
         "tenant_watchlist_edit_enabled",
         "EDGE_TENANT_WATCHLIST_EDIT_ENABLED','false'",
@@ -120,6 +125,7 @@ def inspect_sources(app_source,worker_source):
             "tenant_api_gateway" in worker_source or
             "tenant_monitor_blueprint" in worker_source or
             "tenant_watchlist" in worker_source or
+            "tenant_password_change" in worker_source or
             "tenant_request_boundary" in worker_source or
             "tenant_worker_boundary" in worker_source or
             "tenant_test_http" in worker_source or
@@ -174,6 +180,8 @@ def inspect_sources(app_source,worker_source):
         "offlineSyntheticWorkGateMountedInProduction":False,
         "passkeyIdentityActivatedInProduction":False,
         "passkeyIdentityDefaultOff":True,
+        "tenantPasswordChangeDefaultOff":True,
+        "tenantPasswordChangeSessionRevocation":True,
         "passkeyAuthRequiresVerifiedWebAuthn":True,
         "tenantSignupDefaultOff":True,
         "tenantRegistrationRequiresOneUseInvite":True,

@@ -44,7 +44,8 @@ alone do not satisfy this acceptance criterion.
 
 ## Implemented code areas and still-incomplete items
 
-The repository includes account identity sessions, one-use invitation signup,
+The repository includes account identity sessions, independently gated current-password
+changes that revoke the member's device sessions, one-use invitation signup,
 official Public signup and API-key instructions from the /account screen,
 a user-owned encrypted Public credential vault, gated Public read-only
 account discovery/linking and portfolio retrieval, WebAuthn passkey server
@@ -64,7 +65,8 @@ silently enabling the existing global worker.
 
 Major outstanding work includes stable Android release signing, verified
 Digital Asset Links, physical biometric WebAuthn enrollment/sign-in on two
-devices, account recovery, controlled tenant activation and data migration,
+devices, forgotten-password recovery and proof of ownership, controlled
+tenant activation and data migration,
 strict per-account worker/strategy/history isolation, durable encrypted
 backup/restore verification, incident monitoring and real two-account
 read-only validation. No real orders/transfers are part of current acceptance.

@@ -1,3 +1,9 @@
+## v0.2.36 — 2026-11-10 — Individual account password security (opt-in)
+**Added:** Separate account-security form and default-off POST /api/identity/password/change for a signed-in EdgePilot member to change their password by proving the existing password.
+**Security:** The exact user is derived solely from their verified identity cookie, session credential version and CSRF under a serialized SQLite write transaction. Argon2id password change increments credential version and revokes *all* that member's device sessions, leaving other users' sessions, passkeys and encrypted Public credentials unchanged. Per-user failed attempts are limited (5 per 15 minutes), and successful changes are appended to immutable, secret-free security events. The current cookie is expired; passwords are never echoed or stored in browser state.
+**Testing:** Synthetic two-user HTTP and unit cases cover CSRF, cross-origin/overposting, account disable, current-password proof, concurrent changes, rate limits, all-device session revocation, wrong-password failures, immutable event logging and default-off schema behavior.
+**Limitations:** This is NOT forgotten-password recovery or passkey-only account reset. No email/SMS verification, real Android biometric ceremony, multi-user Public activation, trading, transfers or legacy worker migration is enabled. See TENANT_PASSWORD_CHANGE_RUNBOOK.md.
+
 ## v0.2.35.1 — 2026-11-10 — Offline contention test hardening
 **Fixed:** The disconnected synthetic SQLite safety test distinguishes legitimate fail-closed lock/fixture contention (STATE_UNAVAILABLE) from successful admissions under concurrent load. It asserts exactly two admitted operations and exactly two persisted usage records. Unexpected errors and a third admission still fail.
 **Reason:** The v0.2.35 post-merge CI encountered intermittent fail-closed SQLite contention in an older rehearsal test. The safety mechanism itself is unchanged, and no budget is raised or ignored.
