@@ -36,7 +36,7 @@ class ObservationRefreshTests(unittest.TestCase):
         self.assertNotIn("api('automation/auto/start'",interval)
         self.assertNotIn("api('funds/",interval)
         self.assertIn("'liveTradingAvailable':False",APP)
-        self.assertIn("0.2.19-fake-public-binding-recovery-inactive",APP)
+        self.assertIn("0.2.20-recorded-public-preflight-inactive",APP)
 
 
 if __name__=='__main__':
