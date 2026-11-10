@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
-from . import tenant_foundation, account_scope, migration_preflight, historical_reconciliation, shadow_storage, quarantine_review
+from . import tenant_foundation, account_scope, migration_preflight, historical_reconciliation, shadow_storage, quarantine_review, tenant_history
 
 ENABLE_FLAG="EDGE_OWNER_MIGRATION_REHEARSAL_ENABLED"
 APPROVAL_PHRASE="SHADOW REHEARSAL ONLY"
@@ -150,6 +150,7 @@ def _stage(conn,credential_key,source_report):
     account_scope.setup(conn.execute("PRAGMA database_list").fetchone()["file"])
     _install_shadow_tables(conn)
     historical_reconciliation.prepare(conn)
+    tenant_history.prepare(conn)
     # A new transaction contains all mapping writes. Never create working
     # sessions or activate the real account/worker.
     conn.execute("BEGIN IMMEDIATE")
@@ -234,6 +235,10 @@ def _stage(conn,credential_key,source_report):
         conn,source_report["tableCounts"],source_account,user_id,account_id)
     history["quarantineReview"]=quarantine_review.review(
         conn,history["quarantinedRows"] + history["unexplainedRows"])
+    tenant_references=tenant_history.stage_from_reconciled_history(
+        conn,user_id=user_id,account_id=account_id,
+        source_schema_sha256=source_report["schemaSha256"],
+        expected_count=history["accountLabeledRows"])
     digest=hashlib.sha256(source_account.encode("utf-8")).hexdigest()
     conn.execute("""INSERT INTO tenant_shadow_rehearsal_marker
         (id,source_schema_sha256,source_account_sha256,staging_state,created_at)
@@ -255,6 +260,7 @@ def _stage(conn,credential_key,source_report):
             "credentialVerifiedWithoutDisclosure":True,
             "newIdentitySessions":0,
             "historicalReconciliation":history,
+            "tenantHistoricalReferences":tenant_references,
             "workerEnabled":False,"paperEnabled":False,"liveEnabled":False,
             "pendingHistoricalTables":sorted(
                 name for name in source_report["tableCounts"]
@@ -321,7 +327,8 @@ def rehearse_owner_shadow(source_db, *, credential_key, phrase):
             "productionDatabaseChanged":False,
             "tenantActivationAuthorized":False}
     except (shadow_storage.MemoryStorageError,
-            historical_reconciliation.HistoryReconciliationError) as error:
+            historical_reconciliation.HistoryReconciliationError,
+            tenant_history.TenantHistoryError) as error:
         raise ShadowMigrationError(str(error)) from None
     except ShadowMigrationError:
         raise
