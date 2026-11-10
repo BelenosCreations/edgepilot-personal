@@ -1,3 +1,20 @@
+## Phase 21 (v0.2.27): Real read-only Public adapter behind user-scoped gates
+
+A separately flagged HTTPS adapter can authenticate with a per-user encrypted
+Public credential and list only that credential's provider accounts. It
+transactionally links a user-owned internal account to a verified provider
+account and can read sanitized balances/positions after revalidating the
+provider's current list. Secret material/access tokens are never returned
+or globally shared; revision fencing denies data read or account creation
+after key rotation/revocation races. Persistent per-user/global request
+budgets and strict allowlisted GET endpoints prevent accidental order traffic.
+
+The identity-only API is disabled by default and the current owner login,
+legacy Public key, watchlist, worker, trading and transfer paths are untouched.
+Cross-owner simulated two-phone tests exercise a fake network; actual two-user
+Public accounts and Android biometric flows remain incomplete. See
+TENANT_PUBLIC_LIVE_READONLY_RUNBOOK.md.
+
 ## Phase 20 (v0.2.26): Independently encrypted Public secrets per identity, opt-in
 
 Introduced an identity-only server vault and four gated lifecycle HTTP routes.
