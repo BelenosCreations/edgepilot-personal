@@ -8,7 +8,10 @@ HTTP activation belongs behind an independent disabled-by-default flag.
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
+import hashlib
+import hmac
 import re
+import uuid
 import sqlite3
 import time
 from urllib.parse import quote
@@ -133,7 +136,8 @@ class TenantPublicReadOnly:
                 ch in value for ch in "\r\n\0"):
                 raise ValueError
             return value
-        except (requests.RequestException,TypeError,ValueError,PublicReadUnavailable):
+        except (requests.RequestException,TypeError,ValueError,PublicReadUnavailable,
+                tenant_public_vault.TenantVaultDenied):
             raise PublicReadUnavailable("Public authentication unavailable") from None
 
     def _accounts(self,access_token):
@@ -162,34 +166,68 @@ class TenantPublicReadOnly:
         except (requests.RequestException,TypeError,ValueError,PublicReadUnavailable):
             raise PublicReadUnavailable("Public account discovery unavailable") from None
 
-    def discover(self, identity_token, connection_id):
+    def _credential_fingerprint(self, owner, connection_id):
+        # A scoped ciphertext revision token. Not exposed to app clients.
+        with tenant_foundation._open(self.path) as db:
+            row=db.execute("""SELECT credential_ciphertext FROM tenant_connections
+                WHERE connection_id=? AND user_id=? AND provider='public'
+                  AND revoked_at IS NULL""",(connection_id,owner)).fetchone()
+        if row is None:
+            raise PublicReadUnavailable("Public connection unavailable")
+        return hashlib.sha256(bytes(row["credential_ciphertext"])).digest()
+
+    def _discover_scoped(self, identity_token, connection_id):
         owner=self._principal(identity_token)
         conn=tenant_public_vault._uuid(connection_id)
+        before=self._credential_fingerprint(owner,conn)
         self._admit(owner,conn)
         token=self._token(identity_token,conn)
         accounts=self._accounts(token)
-        if self._principal(identity_token)!=owner:
-            raise PublicReadUnavailable("Session no longer valid")
-        # The provider key may be rotated while the HTTPS request is in
-        # flight. Recheck the stored ciphertext's active ownership before
-        # returning and require a fresh discovery after any later change.
-        self.vault._credential_for_provider_only(identity_token,conn)
+        if self._principal(identity_token)!=owner or not hmac.compare_digest(
+            before,self._credential_fingerprint(owner,conn)
+        ):
+            raise PublicReadUnavailable("Public connection changed")
+        return owner,conn,accounts,before
+
+    def discover(self, identity_token, connection_id):
+        _,conn,accounts,_=self._discover_scoped(identity_token,connection_id)
         return {"connectionId":conn,"accounts":accounts,
                 "readOnly":True,"ordersEnabled":False}
 
     def link_verified(self, identity_token, csrf, connection_id,
                       provider_account_ref, label):
         owner=self._principal(identity_token,csrf)
-        conn=tenant_public_vault._uuid(connection_id)
         account=_safe_id(provider_account_ref)
         if not isinstance(label,str) or not 1<=len(label.strip())<=64:
             raise PublicReadUnavailable("Invalid account label")
-        listed=self.discover(identity_token,conn)
-        if not any(a["accountId"]==account for a in listed["accounts"]):
+        checked_owner,conn,accounts,fingerprint=self._discover_scoped(
+            identity_token,connection_id)
+        if checked_owner!=owner or not any(
+            a["accountId"]==account for a in accounts
+        ):
             raise PublicReadUnavailable("Public account unavailable")
-        # The tenant store atomically rejects cross-owner/revoked connections.
+        internal=str(uuid.uuid4())
         try:
-            internal=self.vault.tenants.link_account(owner,conn,account,label)
+            with tenant_foundation._open(self.path) as db:
+                db.execute("BEGIN IMMEDIATE")
+                row=db.execute("""SELECT c.credential_ciphertext
+                    FROM tenant_connections c JOIN tenant_users u ON u.user_id=c.user_id
+                    WHERE c.connection_id=? AND c.user_id=? AND c.revoked_at IS NULL
+                    AND u.disabled_at IS NULL""",(conn,owner)).fetchone()
+                if row is None or not hmac.compare_digest(
+                    hashlib.sha256(bytes(row["credential_ciphertext"])).digest(),
+                    fingerprint
+                ):
+                    raise PublicReadUnavailable("Public connection changed")
+                db.execute("""INSERT INTO tenant_accounts
+                    (account_id,user_id,connection_id,provider,
+                     provider_account_ref,label,created_at)
+                    VALUES(?,?,?,'public',?,?,?)""",
+                    (internal,owner,conn,account,label.strip(),tenant_foundation._now()))
+                db.execute("""INSERT INTO tenant_audit_events
+                    (created_at,user_id,account_id,action)
+                    VALUES(?,?,?,'ACCOUNT_LINKED')""",
+                    (tenant_foundation._now(),owner,internal))
         except (sqlite3.IntegrityError,tenant_foundation.TenantAccessError,
                 ValueError):
             raise PublicReadUnavailable("Public account unavailable") from None
@@ -212,6 +250,7 @@ class TenantPublicReadOnly:
             raise PublicReadUnavailable("Public account unavailable")
         conn=row["connection_id"]
         provider_id=_safe_id(row["provider_account_ref"])
+        credential_fingerprint=self._credential_fingerprint(owner,conn)
         self._admit(owner,conn)
         token=self._token(identity_token,conn)
         # Refresh the authoritative provider account list before each
@@ -248,14 +287,18 @@ class TenantPublicReadOnly:
         if self._principal(identity_token)!=owner:
             raise PublicReadUnavailable("Session no longer valid")
         with tenant_foundation._open(self.path) as db:
-            still_active=db.execute("""SELECT 1 FROM tenant_accounts a
+            still_active=db.execute("""SELECT c.credential_ciphertext
+                FROM tenant_accounts a
                 JOIN tenant_connections c
                   ON c.connection_id=a.connection_id AND c.user_id=a.user_id
                 WHERE a.user_id=? AND a.account_id=? AND a.connection_id=?
                   AND a.provider_account_ref=? AND a.disabled_at IS NULL
                   AND c.revoked_at IS NULL""",
                 (owner,account_uuid,conn,provider_id)).fetchone()
-        if still_active is None:
+        if (still_active is None or not hmac.compare_digest(
+            hashlib.sha256(bytes(still_active["credential_ciphertext"])).digest(),
+            credential_fingerprint
+        )):
             raise PublicReadUnavailable("Public account unavailable")
         return {"accountId":account_uuid,"balance":amount,"holdings":positions,
                 "readOnly":True,"ordersEnabled":False,"transfersEnabled":False}
