@@ -67,6 +67,8 @@ def inspect_sources(app_source,worker_source):
         "tenant_api_gateway", "tenant_monitor_blueprint",
         "tenant_request_boundary", "tenant_worker_boundary",
         "tenant_test_http", "tenant_test_orchestrator",
+        "tenant_test_public_binding", "tenant_test_recovery",
+        "tenant_test_binding_rehearsal", "tenant_legacy_dependency_audit",
     )):
         raise ApiBoundaryError("Dormant historical store exposed in legacy HTTP app")
     if ("appmod.selected_account()" not in worker_source or
@@ -77,7 +79,11 @@ def inspect_sources(app_source,worker_source):
             "tenant_request_boundary" in worker_source or
             "tenant_worker_boundary" in worker_source or
             "tenant_test_http" in worker_source or
-            "tenant_test_orchestrator" in worker_source):
+            "tenant_test_orchestrator" in worker_source or
+            "tenant_test_public_binding" in worker_source or
+            "tenant_test_recovery" in worker_source or
+            "tenant_test_binding_rehearsal" in worker_source or
+            "tenant_legacy_dependency_audit" in worker_source):
         raise ApiBoundaryError("Legacy worker authorization surface changed")
     legacy={r for r in routes if r not in identity}
     if not legacy:
@@ -95,6 +101,9 @@ def inspect_sources(app_source,worker_source):
         "tenantWorkerBoundaryWiredToLiveWorker":False,
         "tenantTestHttpMountedOnProduction":False,
         "tenantBatchOrchestratorActivated":False,
+        "syntheticPublicBindingConnectedToProduction":False,
+        "tenantRecoveryGateWiredToLiveWorker":False,
+        "realProviderOwnershipProved":False,
         "httpIntegrationOnlyInIsolatedFixture":True,
         "legacyApiStillGlobalSingleOwner":True,
         "sessionScopedSelectionCannotReplaceLegacyAccountYet":True,
