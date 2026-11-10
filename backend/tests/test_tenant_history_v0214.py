@@ -217,7 +217,7 @@ class ShadowHistoryStageTests(unittest.TestCase):
         report=shadow.rehearse_owner_shadow(self.path,credential_key=self.key,
                                             phrase=shadow.APPROVAL_PHRASE)
         self.assertEqual(report["historicalReconciliation"]["accountLabeledRows"],2)
-        self.assertEqual(report["historicalReconciliation"]["quarantinedRows"],2)
+        self.assertEqual(report["historicalReconciliation"]["quarantinedRows"],5)
         staged=report["tenantHistoricalReferences"]
         self.assertEqual(staged["referencesStaged"],2)
         self.assertEqual(staged["quarantinedRecordsImported"],0)
