@@ -18,6 +18,9 @@ IDENTITY_ROUTES=frozenset((
     ("POST","/api/identity/public/connections"),
     ("POST","/api/identity/public/connections/<connection_id>/rotate"),
     ("DELETE","/api/identity/public/connections/<connection_id>"),
+    ("GET","/api/identity/public/read/connections/<connection_id>/accounts"),
+    ("POST","/api/identity/public/read/connections/<connection_id>/accounts"),
+    ("GET","/api/identity/public/read/accounts/<account_id>/portfolio"),
 ))
 HTTP={"get":"GET","post":"POST","put":"PUT","delete":"DELETE",
       "patch":"PATCH"}
@@ -64,6 +67,8 @@ def inspect_sources(app_source,worker_source):
         "return fail('Not authenticated',401)",
         "tenant_public_vault_enabled",
         "request.path.startswith('/api/identity/public/connections')",
+        "request.path.startswith('/api/identity/public/read/')",
+        "tenant_public_read_enabled",
     )
     if not all(value in app_source for value in required_guard):
         raise ApiBoundaryError("Legacy/identity authorization boundary has changed")
@@ -111,6 +116,7 @@ def inspect_sources(app_source,worker_source):
             "tenant_public_connection_readiness" in worker_source or
             "tenant_public_durable_safety_rehearsal" in worker_source or
             "tenant_public_offline_work_gate" in worker_source or
+            "tenant_public_live_readonly" in worker_source or
             "tenant_passkeys" in worker_source):
         raise ApiBoundaryError("Legacy worker authorization surface changed")
     legacy={r for r in routes if r not in identity}
