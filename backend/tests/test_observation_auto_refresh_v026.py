@@ -36,7 +36,7 @@ class ObservationRefreshTests(unittest.TestCase):
         self.assertNotIn("api('automation/auto/start'",interval)
         self.assertNotIn("api('funds/",interval)
         self.assertIn("'liveTradingAvailable':False",APP)
-        self.assertIn("0.2.35.1-public-connection-management-opt-in",APP)
+        self.assertIn("0.2.36-account-password-change-opt-in",APP)
 
 
 if __name__=='__main__':
