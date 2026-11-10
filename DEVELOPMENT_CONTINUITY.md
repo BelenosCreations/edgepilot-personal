@@ -130,3 +130,20 @@ authorization, real trading and transfers are unchanged. See
 TENANT_SESSION_CONTROLS_RUNBOOK.md. The two-physical-phone acceptance target
 remains open.
 
+
+## v0.2.38 — Stable Android signing preparation
+
+A standalone manual-only GitHub Actions workflow now builds a private signed
+Android test APK using a trusted operator-owned keystore and an independently
+pinned certificate SHA-256. It cannot run automatically or on a PR, and
+rejects missing or mismatched secrets/certificates. The normal debug APK
+workflow is untouched. The project does NOT yet have a provisioned stable
+signer, verified signed build, Android Digital Asset Links association, or
+physical two-device biometric acceptance.
+
+Next: complete isolated signing-key provisioning and website association
+using an authorized owner action, then verify Credential Manager on real
+devices; do not flip tenant or Public/trading flags automatically. Continue
+account-specific worker/backup isolation development without broad activation.
+Review ANDROID_PRIVATE_SIGNING_RUNBOOK.md and latest CI before acting.
+

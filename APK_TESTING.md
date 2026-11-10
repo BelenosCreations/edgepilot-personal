@@ -37,6 +37,26 @@ return to EdgePilot and paste it into the individual-account connection
 field, not the legacy personal access-token input. Features are still
 default-off in production and the two-device integration remains unverified.
 
+## Stable-signed test APK preflight (not activated)
+
+The repository now includes a **separate manual** GitHub Actions workflow
+named "EdgePilot manually signed Android test APK". It requires an operator
+to configure a long-lived private signing keystore and matching certificate
+SHA-256 digest in GitHub Actions secrets. A requested build refuses absent
+or mismatched signing credentials and uploads *only* a verified private
+test APK. The usual v0.19.17 debug APK remains the normal build path.
+
+This signed workflow has not yet been run with actual signing inputs. Do
+not install a claimed "signed" artifact until its GitHub run and pinned
+certificate have been verified. A stable-signed APK may require uninstalling
+an existing ephemeral debug-signed EdgePilot installation first, removing
+on-device cookies/preferences. Broker and EdgePilot data stored on the server
+is separate from those local settings.
+
+See ANDROID_PRIVATE_SIGNING_RUNBOOK.md. Signing a test APK does not activate
+EdgePilot multi-user credentials, Android passkeys, live brokerage requests,
+market scanners, orders or transfers.
+
 ## Passkeys are not yet proven on real devices
 
 This APK includes AndroidX WebKit's native Web Authentication feature
