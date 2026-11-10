@@ -1,3 +1,22 @@
+## Phase 18 (v0.2.24): Atomic fake work checkpoints vs stop/pause/revocation (inactive)
+
+A disconnected offline-only work-stage recorder shares the v0.2.23
+synthetic SQLite fixture and write-transaction safety controls. It records
+only strict BEGIN -> CHECK -> FINISH stages, each authorized by a fake
+unexpired, owner/account-scoped revisioned lease under the *same transaction*
+as simulated emergency-stop state. Stop first means stage denied; stage
+first means a historical completed record, not a retroactive cancellation.
+Parallel fake processes cannot duplicate a stage. State and event audit
+writes are atomic; no arbitrary callback or network adapter is invoked.
+Read-only secret-free incident counts remain available after a stop.
+
+The live Flask app, Observe worker, Public adapter, Android APK and
+production database remain unchanged except a version/health string; all
+real brokerage, trading and funds operations stay disabled. Static audit
+prohibits the new gate from being imported into production. Local SQLite
+is not a distributed execution fence or an in-flight broker cancellation
+protocol. See TENANT_PUBLIC_OFFLINE_WORK_FENCING_RUNBOOK.md.
+
 ## Phase 17 (v0.2.23): Disconnected disk-backed multi-process safety rehearsal (inactive)
 
 Introduced a separate synthetic-only private temp-directory SQLite safety fixture.
