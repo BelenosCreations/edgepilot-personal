@@ -177,6 +177,26 @@ class TenantWatchlistHttpTests(unittest.TestCase):
         self.assertEqual(self.put(self.bob,self.acct_b,["MSFT"],self.csrf_b).status_code,200)
 
 
+class TenantWatchlistUiChecks(unittest.TestCase):
+    def test_private_watchlist_controls_require_readonly_and_current_identity(self):
+        from pathlib import Path
+        root=Path(__file__).resolve().parents[2]
+        js=(root/"backend/static/assets/identity.js").read_text(encoding="utf-8")
+        for pattern in (
+            '"PUT", {symbols}, true',
+            'requestGeneration !== identityViewGeneration',
+            'saved.accountId !== id',
+            'saved.workerActive !== false',
+            'saved.liveTradingEnabled !== false',
+            'saved.fundTransfersEnabled !== false',
+            'new Set(symbols).size !== symbols.length',
+            '"Save account watchlist"',
+            'listInput.maxLength = 512',
+        ):
+            self.assertIn(pattern,js)
+        self.assertNotIn("innerHTML",js)
+
+
 class TenantWatchlistOffTests(unittest.TestCase):
     def test_default_off_and_activation_dependency(self):
         with tempfile.TemporaryDirectory(prefix="edgepilot-v033-disabled-") as tmp:
