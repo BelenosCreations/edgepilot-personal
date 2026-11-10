@@ -1,3 +1,15 @@
+## Phase 13 (v0.2.19): Controlled fake Public binding, isolated recovery and legacy inventory
+
+The verified-memory-only tests now model explicit account-to-connection
+binding against a **fake local Public fixture** (not actual provider
+ownership proof). A per-account recovery latch requires manual
+synthetic-only review before simulated observation restarts; failures in
+one account do not resume or affect another owner's account. New static
+analysis inventories remaining global selected-account uses in the live
+Flask/worker components; production cutover remains blocked. See
+TENANT_PUBLIC_BINDING_RECOVERY_RUNBOOK.md for exact limits and safeguards.
+
+
 ## Phase 12 (v0.2.18): Isolated Flask tenant routes and offline account worker orchestration
 
 A new test-gated Flask factory exercises *real HTTP request handling* for
