@@ -271,7 +271,7 @@ class TwoUserRealCryptoHttpAcceptance(unittest.TestCase):
         # Failed cross-owner revocation cannot make another owner's key disappear.
         path = "/api/identity/passkeys/" + _url64(self.alice_key.credential_id)
         denial = fresh_b.delete(path, base_url=ORIGIN, headers={
-            **HEADERS, "X-Edge-Identity-CSRF": done_b.get_json()["csrf"]})
+            **HEADERS, "X-Edge-Identity-CSRF": b_session.get_json()["csrf"]})
         self.assertEqual(denial.status_code, 404)
         self.assertEqual(self.get(fresh_a, "/api/identity/session").status_code, 200)
 
