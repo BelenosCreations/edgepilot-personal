@@ -73,6 +73,17 @@ another real person's key. Live orders and funds transfers stay disabled.
   until a verified migration. Do not auto-enable dormant identity, passkey
   or Public flags simply because code exists.
 
+## Verification stage update — v0.2.40
+
+Backend integration now exercises two independent synthetic users from
+invitation through isolated read-only fake Public accounts, watchlists,
+inactive monitor previews and session revocation on one hosted process.
+Android passkey enrollment and login are **not** verified by this test:
+only WebAuthn registration options are exercised, with signature
+cryptography tested separately. No real brokerage keys/accounts or
+production worker jobs are involved. Physical Android and permitted
+real-account acceptance criteria below are still outstanding.
+
 ## Milestone acceptance criteria — not complete until verified
 
 - Two separately provisioned EdgePilot users can register and sign in from
