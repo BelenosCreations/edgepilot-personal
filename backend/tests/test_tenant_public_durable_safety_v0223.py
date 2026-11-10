@@ -189,6 +189,20 @@ class OfflineDurableSafetyTests(unittest.TestCase):
         with self.assertRaises(offline.OfflineSafetyDenied):
             offline.OfflineDurableSafetyRehearsal(self.path)
 
+    def test_fixture_requires_standard_scratch_even_if_tmpdir_redirected(self):
+        # No external mount or custom TMPDIR may turn this fixture into a
+        # production-disk store. It is not a persistent service.
+        from unittest.mock import patch
+        with patch.object(offline.tempfile,"gettempdir",return_value="/data"):
+            with self.assertRaises(offline.OfflineSafetyDenied) as caught:
+                offline.OfflineDurableSafetyRehearsal(self.path)
+            self.assertEqual(caught.exception.code,"STATE_UNAVAILABLE")
+        with tempfile.TemporaryDirectory(prefix="edgepilot-outside-scratch-",
+                                         dir="/dev/shm") as outside:
+            with self.assertRaises(offline.OfflineSafetyDenied) as caught:
+                offline.OfflineDurableSafetyRehearsal(outside)
+            self.assertEqual(caught.exception.code,"STATE_UNAVAILABLE")
+
     def test_stop_cannot_be_cleared_through_sql_trigger(self):
         self.guard.emergency_stop()
         with sqlite3.connect(self.guard.db_path) as con:
@@ -199,6 +213,11 @@ class OfflineDurableSafetyTests(unittest.TestCase):
             with self.assertRaises(sqlite3.IntegrityError):
                 con.execute("DELETE FROM offline_audit")
         self.assertTrue(self.guard.is_stopped())
+        incident = self.guard.audit_summary()
+        self.assertTrue(incident["emergencyStopped"])
+        self.assertEqual(incident["eventCounts"]["STOP"],1)
+        self.assertFalse(incident["productionIntegrated"])
+        self.assertNotIn(self.account_a,str(incident))
         with self.assertRaises(offline.OfflineSafetyDenied) as caught:
             self.guard.resume_paused_synthetic(
                 self.owner_b,self.account_b,expected_revision=1,
