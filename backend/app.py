@@ -9,7 +9,7 @@ from urllib.parse import quote
 import requests
 from flask import Flask, jsonify, request, send_from_directory, g
 from dotenv import load_dotenv
-from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, account_scope, tenant_public_vault
+from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, account_scope, tenant_public_vault, tenant_public_live_readonly
 ROOT=Path(__file__).parent; load_dotenv(ROOT/'.env'); DB=Path(os.getenv('EDGE_DB_PATH',str(ROOT/'edgepilot.db'))); DB.parent.mkdir(parents=True,exist_ok=True)
 app=Flask(__name__,static_folder='static',static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # CSV/history research limit
@@ -49,15 +49,19 @@ tenant_schema_enabled=os.getenv('EDGE_TENANT_SCHEMA_PREPARE','false').lower()=='
 identity_auth_enabled=os.getenv('EDGE_IDENTITY_AUTH_ENABLED','false').lower()=='true'
 tenant_read_enabled=os.getenv('EDGE_TENANT_ACCOUNT_READS_ENABLED','false').lower()=='true'
 tenant_public_vault_enabled=os.getenv('EDGE_TENANT_PUBLIC_VAULT_ENABLED','false').lower()=='true'
+tenant_public_read_enabled=os.getenv('EDGE_TENANT_PUBLIC_READONLY_ENABLED','false').lower()=='true'
 if identity_auth_enabled and not tenant_schema_enabled:
     raise RuntimeError('Identity subsystem requires the prepared tenant schema')
 if tenant_read_enabled and not identity_auth_enabled:
     raise RuntimeError('Tenant account reads require identity authentication')
 if tenant_public_vault_enabled and not identity_auth_enabled:
     raise RuntimeError('Tenant Public vault requires identity authentication')
+if tenant_public_read_enabled and not (tenant_public_vault_enabled and tenant_read_enabled):
+    raise RuntimeError('Tenant Public read-only API requires vault and tenant account reads')
 identity_store=None
 tenant_account_store=None
 tenant_connection_vault=None
+tenant_public_reader=None
 if tenant_schema_enabled:
     tenant_foundation.setup(str(DB))
     if identity_auth_enabled:
@@ -69,6 +73,10 @@ if tenant_schema_enabled:
         if tenant_public_vault_enabled:
             tenant_public_vault.setup(str(DB))
             tenant_connection_vault=tenant_public_vault.TenantPublicVault(str(DB),identity_store)
+            if tenant_public_read_enabled:
+                tenant_public_live_readonly.setup(str(DB))
+                tenant_public_reader=tenant_public_live_readonly.TenantPublicReadOnly(
+                    str(DB),identity_store,tenant_connection_vault)
 def settings():
     with database() as c: return {r['k']:r['v'] for r in c.execute('SELECT * FROM settings')}
 def put(k,v):
@@ -101,6 +109,8 @@ def authenticate():
         if request.path.startswith('/api/identity/accounts') and not tenant_read_enabled:
             return fail('Not found',404)
         if request.path.startswith('/api/identity/public/connections') and not tenant_public_vault_enabled:
+            return fail('Not found',404)
+        if request.path.startswith('/api/identity/public/read/') and not tenant_public_read_enabled:
             return fail('Not found',404)
         # Identity sessions cannot authenticate any existing broker, settings,
         # monitoring or order API. All routes here remain disabled by default.
@@ -264,6 +274,44 @@ def identity_public_delete_connection(connection_id):
             token,request.headers.get('X-Edge-Identity-CSRF',''),connection_id)
     except tenant_public_vault.TenantVaultDenied:
         return fail('Connection unavailable',404)
+
+
+# Real read-only Public API access, separately flagged and identity-scoped.
+# These endpoints can only list/verify accounts and sanitize portfolio reads.
+# There is no path here for submitting orders or moving funds.
+@app.get('/api/identity/public/read/connections/<connection_id>/accounts')
+def identity_public_discover_accounts(connection_id):
+    try:
+        token=request.cookies.get(identity_auth.COOKIE_NAME,'')
+        return tenant_public_reader.discover(token,connection_id)
+    except (tenant_public_live_readonly.PublicReadUnavailable,
+            tenant_public_vault.TenantVaultDenied):
+        return fail('Public account discovery unavailable',404)
+
+
+@app.post('/api/identity/public/read/connections/<connection_id>/accounts')
+def identity_public_link_account(connection_id):
+    body=request.get_json(silent=True)
+    if not isinstance(body,dict) or set(body)!={'accountId','label'}:
+        return fail('Choose one verified Public account and label',400)
+    try:
+        token=request.cookies.get(identity_auth.COOKIE_NAME,'')
+        return tenant_public_reader.link_verified(
+            token,request.headers.get('X-Edge-Identity-CSRF',''),
+            connection_id,body['accountId'],body['label'])
+    except (tenant_public_live_readonly.PublicReadUnavailable,
+            tenant_public_vault.TenantVaultDenied):
+        return fail('Public account unavailable',404)
+
+
+@app.get('/api/identity/public/read/accounts/<account_id>/portfolio')
+def identity_public_account_portfolio(account_id):
+    try:
+        token=request.cookies.get(identity_auth.COOKIE_NAME,'')
+        return tenant_public_reader.portfolio(token,account_id)
+    except (tenant_public_live_readonly.PublicReadUnavailable,
+            tenant_public_vault.TenantVaultDenied):
+        return fail('Public portfolio unavailable',404)
 
 
 @app.get('/api/identity/session')
