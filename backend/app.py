@@ -9,7 +9,7 @@ from urllib.parse import quote
 import requests
 from flask import Flask, jsonify, request, send_from_directory, g
 from dotenv import load_dotenv
-from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, tenant_registration, tenant_passkeys, account_scope, tenant_public_vault, tenant_public_live_readonly
+from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, tenant_registration, tenant_passkeys, account_scope, tenant_monitor_blueprint, tenant_public_vault, tenant_public_live_readonly
 ROOT=Path(__file__).parent; load_dotenv(ROOT/'.env'); DB=Path(os.getenv('EDGE_DB_PATH',str(ROOT/'edgepilot.db'))); DB.parent.mkdir(parents=True,exist_ok=True)
 app=Flask(__name__,static_folder='static',static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # CSV/history research limit
@@ -50,6 +50,7 @@ identity_auth_enabled=os.getenv('EDGE_IDENTITY_AUTH_ENABLED','false').lower()=='
 tenant_signup_enabled=os.getenv('EDGE_TENANT_SIGNUP_ENABLED','false').lower()=='true'
 tenant_passkeys_enabled=os.getenv('EDGE_TENANT_PASSKEYS_ENABLED','false').lower()=='true'
 tenant_read_enabled=os.getenv('EDGE_TENANT_ACCOUNT_READS_ENABLED','false').lower()=='true'
+tenant_monitor_preview_enabled=os.getenv('EDGE_TENANT_MONITOR_PREVIEW_ENABLED','false').lower()=='true'
 tenant_public_vault_enabled=os.getenv('EDGE_TENANT_PUBLIC_VAULT_ENABLED','false').lower()=='true'
 tenant_public_read_enabled=os.getenv('EDGE_TENANT_PUBLIC_READONLY_ENABLED','false').lower()=='true'
 if identity_auth_enabled and not tenant_schema_enabled:
@@ -60,6 +61,8 @@ if tenant_passkeys_enabled and not identity_auth_enabled:
     raise RuntimeError('Passkeys require identity authentication')
 if tenant_read_enabled and not identity_auth_enabled:
     raise RuntimeError('Tenant account reads require identity authentication')
+if tenant_monitor_preview_enabled and not tenant_read_enabled:
+    raise RuntimeError('Tenant monitor preview requires account-scoped identity reads')
 if tenant_public_vault_enabled and not identity_auth_enabled:
     raise RuntimeError('Tenant Public vault requires identity authentication')
 if tenant_public_read_enabled and not (tenant_public_vault_enabled and tenant_read_enabled):
@@ -68,6 +71,7 @@ identity_store=None
 tenant_registration_store=None
 tenant_passkey_store=None
 tenant_account_store=None
+tenant_monitor_planner=None
 tenant_connection_vault=None
 tenant_public_reader=None
 if tenant_schema_enabled:
@@ -87,6 +91,8 @@ if tenant_schema_enabled:
         if tenant_read_enabled:
             account_scope.setup(str(DB))
             tenant_account_store=account_scope.AccountScopeStore(str(DB),identity_store)
+            if tenant_monitor_preview_enabled:
+                tenant_monitor_planner=tenant_monitor_blueprint.DormantAccountMonitorPlanner(str(DB))
         if tenant_public_vault_enabled:
             tenant_public_vault.setup(str(DB))
             tenant_connection_vault=tenant_public_vault.TenantPublicVault(str(DB),identity_store)
@@ -355,6 +361,24 @@ def identity_account_summary(account_id):
         return tenant_account_store.account_summary(token,account_id)
     except account_scope.TenantAccessError:
         # Uniform 404 for missing, disabled, revoked or other user's account.
+        return fail('Account unavailable',404)
+
+
+# Preview ONLY: plans are deliberately disabled and contain no provider
+# token, job execution, order capability, or global selected-account fallback.
+@app.get('/api/identity/accounts/<account_id>/monitor/preview')
+def identity_monitor_preview(account_id):
+    if not tenant_monitor_preview_enabled:
+        return fail('Not found',404)
+    try:
+        principal=g.edge_identity
+        plan=tenant_monitor_planner.plan_for(principal['user_id'],account_id)
+        return {'accountId':plan.account_id,'watchlist':list(plan.symbols),
+                'mode':plan.mode,'scheduled':False,'workerActive':False,
+                'brokerRequestsAllowed':False,'paperEnabled':False,
+                'liveTradingEnabled':False,'readOnly':True,
+                'simulatedPlanOnly':True}
+    except (account_scope.TenantAccessError,tenant_monitor_blueprint.MonitorPlanningError):
         return fail('Account unavailable',404)
 
 
