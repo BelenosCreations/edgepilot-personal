@@ -1,7 +1,8 @@
 # EdgePilot Android test shell — v0.19.17
 
-This is a **debug-signed, private test APK**, not a Play Store release or
-production-signed build. It runs the hosted EdgePilot web application through
+EdgePilot supports both **debug-signed** Android testing and a separately
+**permanently signed private test APK**. Neither is a Play Store release or a
+production-activated brokerage client. It runs the hosted EdgePilot web application through
 an HTTPS-only Android WebView. Server research and Observe/Paper workers run
 in Render; no trading worker operates on the phone.
 
@@ -37,7 +38,7 @@ return to EdgePilot and paste it into the individual-account connection
 field, not the legacy personal access-token input. Features are still
 default-off in production and the two-device integration remains unverified.
 
-## Stable-signed test APK preflight (not activated)
+## Permanently signed private test APK — verified CI, not installed
 
 The repository now includes a **separate manual** GitHub Actions workflow
 named "EdgePilot manually signed Android test APK". It requires an operator
@@ -46,12 +47,27 @@ SHA-256 digest in GitHub Actions secrets. A requested build refuses absent
 or mismatched signing credentials and uploads *only* a verified private
 test APK. The usual v0.19.17 debug APK remains the normal build path.
 
-This signed workflow has not yet been run with actual signing inputs. Do
-not install a claimed "signed" artifact until its GitHub run and pinned
-certificate have been verified. A stable-signed APK may require uninstalling
-an existing ephemeral debug-signed EdgePilot installation first, removing
-on-device cookies/preferences. Broker and EdgePilot data stored on the server
-is separate from those local settings.
+The signed workflow completed successfully on its second attempt on
+November 10, 2026: GitHub run #42888113943, commit
+`45ecaf82d0f1c3d648c2e6ab0a17d18817823e73`. The first attempt correctly
+refused a mismatched fingerprint; the second passed certificate pinning and
+uploaded `EdgePilot-v0.19.17-private-stable-signed-test` containing
+`EdgePilot-private-signed-test.apk`. The private artifact expires November
+17, 2026 (seven-day retention).
+
+To retrieve the verified private artifact, open the signed
+[GitHub Actions run](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/42888113943)
+while signed into the authorized repository account. Download its successful
+attempt's artifact, extract the APK and verify the package/signature before
+installing. GitHub's artifact URL requires authorized repository access.
+
+**Do not uninstall your currently installed debug APK yet.** Android rejects
+an in-place install when the existing same-package APK has a different
+signing certificate. A new stable-signed install may require uninstalling
+the debug version, which erases the app's on-device cookies and preferences.
+Ensure existing login and recovery paths work first. Encrypted server-side
+credentials are separate from local app data. The signed test APK is not yet
+verified on a physical Android phone.
 
 See ANDROID_PRIVATE_SIGNING_RUNBOOK.md. Signing a test APK does not activate
 EdgePilot multi-user credentials, Android passkeys, live brokerage requests,
@@ -89,8 +105,9 @@ TENANT_PASSKEY_MOBILE_RUNBOOK.md for the verification process.
   remain disabled.
 - No Android offline trading, push-notification engine, automatic trusted
   release signing or Play Store delivery is implemented.
-- APK artifacts are available only to authorized repository users and
-  expire after the private workflow retention period (currently 14 days).
+- APK artifacts are available only to authorized repository users. The
+  permanent-signed test artifact currently has 7-day retention; the debug
+  workflow's artifact retention is separate.
 - The debug signing identity can change between GitHub runners. Installing a
   new debug build may require uninstalling the previous one, losing local
   phone preferences and cookies; server data is unaffected.
