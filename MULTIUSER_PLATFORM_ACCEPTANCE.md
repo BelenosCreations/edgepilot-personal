@@ -119,6 +119,19 @@ the public endpoint's content, not the operating system's credential
 association or passkey enrollment. All two-device identity and Public
 account acceptance gates below remain open.
 
+## v0.2.41 — Genuine WebAuthn cryptographic replay tests, offline only
+
+The new two-user local HTTP suite uses independently generated ephemeral
+P-256 software authenticator keys, actual CBOR attestation and signed
+ES256 assertions verified by the production py_webauthn routines, not
+patched fake cryptographic verifiers. It tests valid independent logins
+and malicious origins, signatures, UV flags, challenges, counters, user
+handles and cross-user revocation without any external HTTP access.
+This closes only the **synthetic cryptographic protocol verification**
+subcheck. Device-level Android Credential Manager biometrics, OS website
+association, two real phones and independent real Public account linking
+are still unverified; tenant feature flags remain default-off.
+
 ## Milestone acceptance criteria — not complete until verified
 
 - Two separately provisioned EdgePilot users can register and sign in from
