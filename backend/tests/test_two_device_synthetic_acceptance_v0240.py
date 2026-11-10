@@ -93,6 +93,11 @@ class TwoDeviceSyntheticAcceptance(unittest.TestCase):
             "EDGE_AUTOMATION_WORKER_ENABLED":"false",
         })
         self.env.start()
+        # Fail the test if any production-style requests transport tries to
+        # leave the process. FakePublic is an in-memory fake, not requests.
+        self.block_network=patch("requests.sessions.Session.request",
+                                 side_effect=AssertionError("Real network prohibited in synthetic acceptance"))
+        self.real_network=self.block_network.start()
         import app
         self.module=importlib.reload(app)
         self.http=DenyByDefaultPublic()
@@ -109,6 +114,7 @@ class TwoDeviceSyntheticAcceptance(unittest.TestCase):
         self.csrf={}
 
     def tearDown(self):
+        self.block_network.stop()
         self.env.stop()
         import app
         importlib.reload(app)
@@ -244,6 +250,7 @@ class TwoDeviceSyntheticAcceptance(unittest.TestCase):
         # never includes orders, funds, deposits, withdrawals, or outside
         # provider URLs.
         self.assertGreater(len(self.http.calls),0)
+        self.real_network.assert_not_called()
         self.assertTrue(all(url.startswith(ro.BASE+"/") for _,url in self.http.calls))
         self.assertFalse(any(("order" in url.lower() or
                               "transfer" in url.lower() or
