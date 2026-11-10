@@ -303,9 +303,11 @@ missing configuration compiles only a nonfunctional .invalid host.
 A new manual-only workflow can sign the staging package with the same
 operator-owned certificate after a separate staging HTTPS service exists.
 PR Android CI compiles the unsigned staging build without exposing a
-signed staging artifact. An optional backend staging association responds
-only when explicitly isolated with exact RP/host and all live credentials,
-workers, orders and provider paths absent.
+signed staging artifact. A process-startup staging guard refuses unsafe configuration **before**
+opening the database or initializing legacy owner credentials, while the
+optional backend staging association responds only when explicitly
+isolated with exact RP/host and all live credentials, workers, orders
+and provider paths absent.
 
 No separate paid Render service or DNS has been provisioned in this
 milestone; neither staging signed build, physical Android biometrics nor
