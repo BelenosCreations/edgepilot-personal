@@ -223,7 +223,7 @@ class TenantPasskeyTests(unittest.TestCase):
         self.assertFalse(tenant_route_audit.inspect_sources(app,worker)["crossAccountProductionCutoverAllowed"])
         with self.assertRaises(tenant_route_audit.ApiBoundaryError):
             tenant_route_audit.inspect_sources(
-                app,worker+"\nfrom engine import tenant_passkeys\n"
+                app,worker+"\nfrom engine import tenant_passkeys\n")
 
 
 if __name__=="__main__":
