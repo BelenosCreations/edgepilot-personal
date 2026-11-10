@@ -114,6 +114,22 @@ class AccountSessionIsolationTests(unittest.TestCase):
             self.assertEqual(con.execute("""SELECT COUNT(*) FROM
                 tenant_session_account_selection""").fetchone()[0],0)
 
+    def test_raw_database_cannot_bind_a_session_to_different_owner(self):
+        import hashlib
+        h=hashlib.sha256(self.a["token"].encode()).hexdigest()
+        with account_scope._db(self.path) as con:
+            with self.assertRaises(sqlite3.IntegrityError):
+                con.execute("""INSERT INTO tenant_session_account_selection
+                    (token_hash,user_id,account_id,selected_at)
+                    VALUES(?,?,?,1)""",(h,self.another,self.bb))
+        self.api.select_account(self.a["token"],self.a["csrf"],self.aa)
+        with account_scope._db(self.path) as con:
+            with self.assertRaises(sqlite3.IntegrityError):
+                con.execute("""UPDATE tenant_session_account_selection
+                    SET user_id=?,account_id=? WHERE token_hash=?""",
+                    (self.another,self.bb,h))
+        self.assertEqual(self.api.selected_account(self.a["token"]),self.aa)
+
     def test_account_disable_and_provider_revocation_fail_closed(self):
         self.api.select_account(self.a["token"],self.a["csrf"],self.aa)
         self.api.select_account(self.b["token"],self.b["csrf"],self.a2)
