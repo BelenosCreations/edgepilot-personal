@@ -17,6 +17,10 @@ class WatchlistDenied(PermissionError):
     """Deliberately uniform denial for missing, revoked, or foreign accounts."""
 
 
+class WatchlistInvalid(ValueError):
+    """Invalid nonsecret symbol list; never echo raw caller input."""
+
+
 def _uuid(value):
     if not isinstance(value, str):
         raise WatchlistDenied("Account unavailable")
@@ -30,16 +34,16 @@ def _uuid(value):
 
 def _symbols(values):
     if type(values) is not list or len(values) > tenant_monitor_blueprint._MAX_WATCHLIST:
-        raise WatchlistDenied("Invalid watchlist")
+        raise WatchlistInvalid("Invalid watchlist")
     normalized = []
     for value in values:
         if (not isinstance(value, str) or
                 tenant_monitor_blueprint._SYMBOL.fullmatch(value) is None or
                 value in normalized):
-            raise WatchlistDenied("Invalid watchlist")
+            raise WatchlistInvalid("Invalid watchlist")
         normalized.append(value)
     if len(",".join(normalized)) > 512:
-        raise WatchlistDenied("Invalid watchlist")
+        raise WatchlistInvalid("Invalid watchlist")
     return normalized
 
 
