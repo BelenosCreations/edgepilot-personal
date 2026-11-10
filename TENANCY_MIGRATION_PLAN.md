@@ -1,3 +1,16 @@
+## Phase 9 (v0.2.15): Dormant typed historical summaries and route boundary audit
+
+The offline owner shadow rehearsal can now stage validated, account-scoped
+source-only summaries of transaction, broker observation and audit events,
+in addition to the v0.2.14 immutable reference ledger. All references
+remain, even for invalid/unsupported records, which are counted as pending.
+A new static API and worker inventory explicitly **blocks production
+multi-account cutover** while the live legacy routes and worker still
+depend on one globally selected account. No live changes occur.
+See TENANT_HISTORY_SUMMARIES_RUNBOOK.md for audit limits, rollback
+procedure and required future approval.
+
+
 ## Phase 8 (v0.2.14): Account-specific dormant historical references
 
 Introduces backend/engine/tenant_history.py, used **only** in the

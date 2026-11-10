@@ -17,10 +17,11 @@ import sqlite3
 import tempfile
 import uuid
 from datetime import datetime, timezone
+from contextlib import closing
 from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
-from . import tenant_foundation, account_scope, migration_preflight, historical_reconciliation, shadow_storage, quarantine_review, tenant_history
+from . import tenant_foundation, account_scope, migration_preflight, historical_reconciliation, shadow_storage, quarantine_review, tenant_history, tenant_history_details, tenant_route_audit
 
 ENABLE_FLAG="EDGE_OWNER_MIGRATION_REHEARSAL_ENABLED"
 APPROVAL_PHRASE="SHADOW REHEARSAL ONLY"
@@ -151,6 +152,7 @@ def _stage(conn,credential_key,source_report):
     _install_shadow_tables(conn)
     historical_reconciliation.prepare(conn)
     tenant_history.prepare(conn)
+    tenant_history_details.prepare(conn)
     # A new transaction contains all mapping writes. Never create working
     # sessions or activate the real account/worker.
     conn.execute("BEGIN IMMEDIATE")
@@ -239,6 +241,9 @@ def _stage(conn,credential_key,source_report):
         conn,user_id=user_id,account_id=account_id,
         source_schema_sha256=source_report["schemaSha256"],
         expected_count=history["accountLabeledRows"])
+    typed_details=tenant_history_details.stage(
+        conn,user_id=user_id,account_id=account_id,
+        expected_references=tenant_references["referencesStaged"])
     digest=hashlib.sha256(source_account.encode("utf-8")).hexdigest()
     conn.execute("""INSERT INTO tenant_shadow_rehearsal_marker
         (id,source_schema_sha256,source_account_sha256,staging_state,created_at)
@@ -261,6 +266,7 @@ def _stage(conn,credential_key,source_report):
             "newIdentitySessions":0,
             "historicalReconciliation":history,
             "tenantHistoricalReferences":tenant_references,
+            "tenantHistoricalSummaries":typed_details,
             "workerEnabled":False,"paperEnabled":False,"liveEnabled":False,
             "pendingHistoricalTables":sorted(
                 name for name in source_report["tableCounts"]
@@ -279,43 +285,48 @@ def rehearse_owner_shadow(source_db, *, credential_key, phrase):
         raise ShadowMigrationError("Offline shadow rehearsal is disabled")
     try:
         path, ram_root=shadow_storage.require_isolated_source(source_db)
+        boundary_report=tenant_route_audit.inspect_repo()
+        source_bytes_before=hashlib.sha256(path.read_bytes()).digest()
         before=migration_preflight.inspect_database(path)
-        with _conn(path,readonly=True) as original:
+        with closing(_conn(path,readonly=True)) as original:
             source_fingerprint=historical_reconciliation.source_content_fingerprint(
                 original,before["tableCounts"])
         with tempfile.TemporaryDirectory(
                 prefix="edgepilot-shadow-rehearsal-",dir=str(ram_root)) as root:
             work=Path(root)/"shadow.db"
-            with _conn(path,readonly=True) as src, _conn(work) as dest:
+            with closing(_conn(path,readonly=True)) as src, closing(_conn(work)) as dest:
                 src.backup(dest)
             os.chmod(work,0o600)
             snapshot_report=migration_preflight.inspect_database(work)
             if before!=snapshot_report:
                 raise ShadowMigrationError("Isolated source changed during snapshot")
-            with _conn(work,readonly=True) as staged_copy:
+            with closing(_conn(work,readonly=True)) as staged_copy:
                 copy_fingerprint=historical_reconciliation.source_content_fingerprint(
                     staged_copy,before["tableCounts"])
             if copy_fingerprint!=source_fingerprint:
                 raise ShadowMigrationError("Source and shadow contents do not match")
-            with _conn(work) as stage:
+            with closing(_conn(work)) as stage:
                 report=_stage(stage,credential_key,before)
             shadow=migration_preflight.inspect_database(work)
             if shadow["integrity"]!="ok" or shadow["foreignKeys"]!="ok":
                 raise ShadowMigrationError("Shadow database failed integrity validation")
-            with _conn(work,readonly=True) as archived:
+            with closing(_conn(work,readonly=True)) as archived:
                 historical_reconciliation.verify_shadow_index(
                     archived,before["tableCounts"])
             after=migration_preflight.inspect_database(path)
-            with _conn(path,readonly=True) as original:
+            with closing(_conn(path,readonly=True)) as original:
                 final_fingerprint=historical_reconciliation.source_content_fingerprint(
                     original,before["tableCounts"])
-            if after!=before or final_fingerprint!=source_fingerprint:
+            if (after!=before or final_fingerprint!=source_fingerprint or
+                    hashlib.sha256(path.read_bytes()).digest()!=source_bytes_before):
                 raise ShadowMigrationError("Isolated source changed during rehearsal")
         # Reaching this point proves temporary files were cleaned up.
         if Path(root).exists():
             raise ShadowMigrationError("Disposable temporary storage was not removed")
-        return {**report,"sourceLogicalInventoryUnchanged":True,
+        return {**report,"routeAndWorkerBoundaryAudit":boundary_report,
+            "sourceLogicalInventoryUnchanged":True,
             "sourceContentsUnchanged":True,
+            "sourceFileBytesUnchanged":True,
             "sourceToCopyContentsMatched":True,
             "historicalRowFingerprintsVerified":True,
             "disposableWorkingCopyRemoved":True,
@@ -328,7 +339,9 @@ def rehearse_owner_shadow(source_db, *, credential_key, phrase):
             "tenantActivationAuthorized":False}
     except (shadow_storage.MemoryStorageError,
             historical_reconciliation.HistoryReconciliationError,
-            tenant_history.TenantHistoryError) as error:
+            tenant_history.TenantHistoryError,
+            tenant_history_details.DetailSafetyError,
+            tenant_route_audit.ApiBoundaryError) as error:
         raise ShadowMigrationError(str(error)) from None
     except ShadowMigrationError:
         raise
