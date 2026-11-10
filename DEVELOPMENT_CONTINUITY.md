@@ -163,3 +163,17 @@ This is NOT production offsite backup or key-management readiness. No live
 brokerage request, transfer or trading was enabled. Review
 TENANT_BACKUP_REHEARSAL_RUNBOOK.md and latest CI for the exact commit.
 
+
+## v0.2.40 — Shared-backend two-user HTTP acceptance rehearsal
+
+Synthetic end-to-end tests now simulate Alice and Bob on independent Flask
+cookie jars against the SAME backend with separately gated identity,
+invitation signup, WebAuthn option preparation, encrypted fake Public keys,
+read-only fake broker accounts/portfolios, per-account watchlists and
+inactive monitoring previews, and selective other-device session logout.
+No real HTTP brokerage requests, Android biometric assertions, live workers,
+orders or transfers occur. Passing tests are NOT proof of two real phones,
+real provider permission, authenticated production Public accounts or
+production-grade recovery. See TWO_DEVICE_SYNTHETIC_ACCEPTANCE_RUNBOOK.md
+before declaring this stage complete.
+
