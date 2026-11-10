@@ -645,7 +645,7 @@ def healthz():
     return {'ok':True}
 
 @app.get('/api/health')
-def health(): return {'ok':True,'version':'0.2.37-device-session-controls-opt-in','time':datetime.now(timezone.utc).isoformat()}
+def health(): return {'ok':True,'version':'0.2.38-private-android-signing-preflight-opt-in','time':datetime.now(timezone.utc).isoformat()}
 def token():
     global cached_token,expires
     with lock:
