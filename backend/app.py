@@ -518,6 +518,47 @@ def identity_logout():
     return response
 
 
+# Current-password step-up, identity-only account security.
+# Both operations invalidate all sessions for this user, never another user.
+# They do not revoke passkeys or alter the encrypted Public key vault.
+@app.post('/api/identity/security/change-password')
+def identity_change_password():
+    body=request.get_json(silent=True)
+    if not isinstance(body,dict) or set(body)!={'currentPassword','newPassword'}:
+        return fail('Invalid security request',400)
+    try:
+        result=identity_store.change_password_from_session(
+            request.cookies.get(identity_auth.COOKIE_NAME,''),
+            request.headers.get('X-Edge-Identity-CSRF',''),
+            body['currentPassword'],body['newPassword'])
+    except ValueError:
+        return fail('New password must be different and 14–128 characters',400)
+    except PermissionError:
+        return fail('Security confirmation unavailable',403)
+    response=jsonify(result)
+    response.delete_cookie(identity_auth.COOKIE_NAME,path='/',
+                           secure=True,httponly=True,samesite='Strict')
+    return response
+
+
+@app.post('/api/identity/security/sign-out-everywhere')
+def identity_sign_out_everywhere():
+    body=request.get_json(silent=True)
+    if not isinstance(body,dict) or set(body)!={'currentPassword'}:
+        return fail('Invalid security request',400)
+    try:
+        result=identity_store.sign_out_everywhere_from_session(
+            request.cookies.get(identity_auth.COOKIE_NAME,''),
+            request.headers.get('X-Edge-Identity-CSRF',''),
+            body['currentPassword'])
+    except PermissionError:
+        return fail('Security confirmation unavailable',403)
+    response=jsonify(result)
+    response.delete_cookie(identity_auth.COOKIE_NAME,path='/',
+                           secure=True,httponly=True,samesite='Strict')
+    return response
+
+
 @app.get('/api/session')
 def get_session():
     session=request.cookies.get(session_auth.COOKIE_NAME,'')
