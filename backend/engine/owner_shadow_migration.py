@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
-from . import tenant_foundation, account_scope, migration_preflight, historical_reconciliation, shadow_storage, quarantine_review, tenant_history
+from . import tenant_foundation, account_scope, migration_preflight, historical_reconciliation, shadow_storage, quarantine_review, tenant_history, tenant_history_details
 
 ENABLE_FLAG="EDGE_OWNER_MIGRATION_REHEARSAL_ENABLED"
 APPROVAL_PHRASE="SHADOW REHEARSAL ONLY"
@@ -151,6 +151,7 @@ def _stage(conn,credential_key,source_report):
     _install_shadow_tables(conn)
     historical_reconciliation.prepare(conn)
     tenant_history.prepare(conn)
+    tenant_history_details.prepare(conn)
     # A new transaction contains all mapping writes. Never create working
     # sessions or activate the real account/worker.
     conn.execute("BEGIN IMMEDIATE")
@@ -239,6 +240,9 @@ def _stage(conn,credential_key,source_report):
         conn,user_id=user_id,account_id=account_id,
         source_schema_sha256=source_report["schemaSha256"],
         expected_count=history["accountLabeledRows"])
+    typed_details=tenant_history_details.stage(
+        conn,user_id=user_id,account_id=account_id,
+        expected_references=tenant_references["referencesStaged"])
     digest=hashlib.sha256(source_account.encode("utf-8")).hexdigest()
     conn.execute("""INSERT INTO tenant_shadow_rehearsal_marker
         (id,source_schema_sha256,source_account_sha256,staging_state,created_at)
@@ -261,6 +265,7 @@ def _stage(conn,credential_key,source_report):
             "newIdentitySessions":0,
             "historicalReconciliation":history,
             "tenantHistoricalReferences":tenant_references,
+            "tenantHistoricalSummaries":typed_details,
             "workerEnabled":False,"paperEnabled":False,"liveEnabled":False,
             "pendingHistoricalTables":sorted(
                 name for name in source_report["tableCounts"]
@@ -328,7 +333,8 @@ def rehearse_owner_shadow(source_db, *, credential_key, phrase):
             "tenantActivationAuthorized":False}
     except (shadow_storage.MemoryStorageError,
             historical_reconciliation.HistoryReconciliationError,
-            tenant_history.TenantHistoryError) as error:
+            tenant_history.TenantHistoryError,
+            tenant_history_details.DetailSafetyError) as error:
         raise ShadowMigrationError(str(error)) from None
     except ShadowMigrationError:
         raise
