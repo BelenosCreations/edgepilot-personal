@@ -136,8 +136,8 @@ are still unverified; tenant feature flags remain default-off.
 
 A separate, side-by-side test Android package and compile-time staging
 host can now be built without modifying or uninstalling the regular
-EdgePilot owner app. The backend allows a staging-only Android association
-only with exact isolated RP/host, separate package, no live owner token or
+EdgePilot owner app. A fail-closed process-startup guard and the staging-only Android
+association both require exact isolated RP/host, separate package, no live owner token or
 Public secret, no worker/trading activity and no production database path.
 A manual-only staging signer is isolated from the existing signed owner
 APK workflow. This is a code/CI readiness step, not a deployed staging
