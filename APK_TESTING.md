@@ -38,7 +38,7 @@ return to EdgePilot and paste it into the individual-account connection
 field, not the legacy personal access-token input. Features are still
 default-off in production and the two-device integration remains unverified.
 
-## Permanently signed private test APK — verified CI, not installed
+## Permanently signed private test APK — verified CI and owner-reported install
 
 The repository now includes a **separate manual** GitHub Actions workflow
 named "EdgePilot manually signed Android test APK". It requires an operator
@@ -66,8 +66,15 @@ an in-place install when the existing same-package APK has a different
 signing certificate. A new stable-signed install may require uninstalling
 the debug version, which erases the app's on-device cookies and preferences.
 Ensure existing login and recovery paths work first. Encrypted server-side
-credentials are separate from local app data. The signed test APK is not yet
-verified on a physical Android phone.
+credentials are separate from local app data. On November 10, 2026, the owner reported installing the previously
+downloaded permanent-signed test APK on their current Android phone, then
+successfully logging into the legacy EdgePilot personal dashboard using
+the previously verified existing owner access token. This confirms a
+basic real-phone application/login smoke test as reported by the owner;
+it does NOT independently inspect that phone's installed signing
+certificate, verify Digital Asset Links or test the separate tenant
+passkey authentication path. The old installation's local cookies and
+settings were not guaranteed to be preserved.
 
 See ANDROID_PRIVATE_SIGNING_RUNBOOK.md. Signing a test APK does not activate
 EdgePilot multi-user credentials, Android passkeys, live brokerage requests,
