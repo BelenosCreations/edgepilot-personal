@@ -162,5 +162,34 @@ class PasswordChangeDefaultOffHttpTests(unittest.TestCase):
         importlib.reload(app)
 
 
+class TenantPasswordChangeUiChecks(unittest.TestCase):
+    def test_password_form_is_separate_and_never_stores_secrets(self):
+        from pathlib import Path
+        root=Path(__file__).resolve().parents[2]
+        html=(root/"backend/static/identity.html").read_text(encoding="utf-8")
+        js=(root/"backend/static/assets/identity.js").read_text(encoding="utf-8")
+        for field in ("passwordChangeForm","currentEdgePilotPassword",
+                      "replacementEdgePilotPassword","changeEdgePilotPassword"):
+            self.assertIn('id="'+field+'"',html)
+        self.assertIn('autocomplete="current-password"',html)
+        self.assertIn('autocomplete="new-password"',html)
+        self.assertIn("forgotten-password recovery is not available yet",html)
+        for marker in (
+            '"/password/change","POST"',
+            '{currentPassword,newPassword},true',
+            'changed.allIdentitySessionsRevoked !== true',
+            'changed.publicCredentialChanged !== false',
+            'changed.liveTradingEnabled !== false',
+            'changed.fundTransfersEnabled !== false',
+            'generation !== identityViewGeneration',
+            'showLoggedOut();',
+            'el("currentEdgePilotPassword").value = "";',
+            'el("replacementEdgePilotPassword").value = "";',
+        ):
+            self.assertIn(marker,js)
+        for forbidden in ("localStorage","sessionStorage","document.cookie","innerHTML"):
+            self.assertNotIn(forbidden,js)
+
+
 if __name__=="__main__":
     unittest.main()
