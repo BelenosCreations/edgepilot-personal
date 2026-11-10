@@ -47,6 +47,12 @@ def require_isolated_source(path):
                 or not stat.S_ISREG(metadata.st_mode)
                 or metadata.st_dev != root.stat().st_dev):
             raise MemoryStorageError("Isolated plaintext source must be in verified tmpfs")
+        # A detached restored source must be a self-contained SQLite file.
+        # Open WAL sidecars may checkpoint into the main file during rehearsal
+        # and change its bytes even when the logical contents are identical.
+        wal = Path(str(candidate) + "-wal")
+        if wal.exists() and (not wal.is_file() or wal.stat().st_size > 0):
+            raise MemoryStorageError("Restored SQLite source has active WAL; refuse rehearsal")
         # Leave room for SQLite's backup, indexing, journals and integrity checks.
         fs = os.statvfs(root)
         free_bytes = fs.f_bavail * fs.f_frsize
