@@ -172,6 +172,8 @@ class OfflineDurableSafetyRehearsal:
                     FOREIGN KEY(owner_id,account_id)
                       REFERENCES offline_accounts(owner_id,account_id)
                 );
+                CREATE INDEX idx_offline_lease_expiry
+                    ON offline_leases(expires_at);
                 CREATE TABLE offline_audit(
                     id INTEGER PRIMARY KEY,
                     event TEXT NOT NULL CHECK(event IN
@@ -192,6 +194,7 @@ class OfflineDurableSafetyRehearsal:
     @contextmanager
     def _connection(self):
         identity = self._check_fixture()
+        con = None
         try:
             # mode=rw prohibits silently creating a missing replacement database.
             con = sqlite3.connect(self.db_path.as_uri() + "?mode=rw",
@@ -202,12 +205,13 @@ class OfflineDurableSafetyRehearsal:
             con.execute("PRAGMA synchronous=FULL")
             if self._private_file(self.db_path) != identity:
                 raise OfflineSafetyDenied("STATE_UNAVAILABLE")
-            try:
-                yield con
-            finally:
-                con.close()
+            yield con
         except sqlite3.Error:
             raise OfflineSafetyDenied("STATE_UNAVAILABLE") from None
+        finally:
+            # Close even when an initialization PRAGMA or inode check fails.
+            if con is not None:
+                con.close()
 
     @contextmanager
     def _transaction(self):
@@ -275,6 +279,9 @@ class OfflineDurableSafetyRehearsal:
             row = self._account(con,owner,account)
             if now < guard["last_at"]:
                 raise OfflineSafetyDenied("CLOCK_INVALID")
+            # Expired leases are unusable and should not grow without bound.
+            # Keep cleanup in the same serialized transaction as admission.
+            con.execute("DELETE FROM offline_leases WHERE expires_at<=?", (now,))
             con.execute("DELETE FROM offline_usage WHERE admitted_at<=?",
                         (now - WINDOW_SECONDS,))
             total = con.execute("SELECT COUNT(*) FROM offline_usage").fetchone()[0]
@@ -302,6 +309,8 @@ class OfflineDurableSafetyRehearsal:
         with self._transaction() as con:
             guard = self._guard(con)
             current = self._account(con,owner,account)
+            if now < guard["last_at"]:
+                raise OfflineSafetyDenied("CLOCK_INVALID")
             row = con.execute("""SELECT guard_revision,account_revision,expires_at
                 FROM offline_leases WHERE lease_id=? AND owner_id=? AND account_id=?""",
                 (lease_id,owner,account)).fetchone()
