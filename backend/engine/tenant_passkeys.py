@@ -1,6 +1,6 @@
-"""Passkey-ready, tenant-scoped EdgePilot identity repository (NOT YET EXPOSED).
+"""Tenant-scoped WebAuthn repository, optionally exposed behind a disabled-by-default gate.
 
-Uses real WebAuthn cryptographic verification and the existing dormant Argon2id
+Uses real WebAuthn cryptographic verification and the separate Argon2id
 identity store's session format. No biometric templates, Public API keys,
 broker data, bank details, callbacks, app routes, or production worker changes.
 The caller must derive registration tokens from an authenticated identity
@@ -105,7 +105,7 @@ def setup(path):
 
 
 class TenantPasskeyStore:
-    """Dormant passkey ceremonies; never accepts a client-provided owner ID."""
+    """User-scoped passkey ceremonies; never accepts a client-provided owner ID."""
 
     def __init__(self, path, identity_store, *, rp_id, expected_origin):
         if not isinstance(identity_store, identity_auth.IdentityStore):
