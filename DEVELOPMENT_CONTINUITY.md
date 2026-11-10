@@ -208,3 +208,22 @@ or transfers have been enabled.
 
 See ANDROID_PRIVATE_SIGNING_RUNBOOK.md and APK_TESTING.md for the exact
 GitHub run and safe installation limitations.
+
+## November 10, 2026 — Owner-reported physical Android installation and legacy login
+
+The owner installed the previously verified permanent-certificate Android
+v0.19.17 test APK on their *existing* phone after locating the legacy
+EDGE_APP_TOKEN on Render and confirming that the original token still
+worked in Chrome separately. The user subsequently reported a successful
+login in the installed app. No token, passphrase, backup ciphertext or
+other credential should appear in README, CHANGELOG or GitHub issues.
+No key rotation was required.
+
+Important: do not conflate this one-phone **owner-reported legacy dashboard**
+smoke test with proof of app-to-website Digital Asset Links, Android
+Credential Manager passkey registration/authentication, or the approved
+two-distinct-devices/two-independent-EdgePilot-users target. The default-off
+identity/passkey/Public-tenant feature gates remain unchanged. The next
+technical work is website association validation and safe isolated-test
+passkey verification; real orders, transfers and production multiuser
+cutover remain disabled.
