@@ -115,3 +115,13 @@ STATE_UNAVAILABLE denial in the disconnected multi-process SQLite rehearsal.
 The patch retains exactly two durable admissions and checks fail-closed
 denial types. Verify v0.2.35.1 PR and post-merge CI before continuing.
 No production broker or Android behavior changed.
+
+## v0.2.36 individual session security checkpoint
+
+A new default-off individual-account interface adds old-password-confirmed
+password changes and sign-out-everywhere. Both invalidate only the current
+user's sessions; passkeys and encrypted Public connections are preserved.
+Server-side rate limiting, under-lock identity/CSRF fencing and immutable
+secret-free audits back these operations. The owner still needs a separate
+lost-password/lost-device recovery path. Real two-phone biometric and
+Public-account acceptance remains incomplete; never infer it from CI.
