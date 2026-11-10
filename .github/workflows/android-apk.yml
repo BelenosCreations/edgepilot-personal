@@ -31,6 +31,17 @@ jobs:
         run: gradle --no-daemon --stacktrace -p android :app:assembleDebug
       - name: Compile separate unsigned staging package (no artifact)
         run: gradle --no-daemon --stacktrace -p android :app:assembleStaging "-PedgePilotStagingHost=ci-only.belenoscreations.biz"
+      - name: Verify production and staging have distinct Android package IDs
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools="${ANDROID_HOME}/build-tools/35.0.0"
+          owner="android/app/build/outputs/apk/debug/app-debug.apk"
+          staging="android/app/build/outputs/apk/staging/app-staging-unsigned.apk"
+          test -s "$owner"
+          test -s "$staging"
+          "$tools/aapt" dump badging "$owner" | grep -Eq "^package: name='com[.]edgepilot[.]mobile' versionCode='1917' "
+          "$tools/aapt" dump badging "$staging" | grep -Eq "^package: name='com[.]edgepilot[.]mobile[.]staging' versionCode='1917' "
       - name: Upload privately to workflow artifacts
         uses: actions/upload-artifact@v4
         with:
