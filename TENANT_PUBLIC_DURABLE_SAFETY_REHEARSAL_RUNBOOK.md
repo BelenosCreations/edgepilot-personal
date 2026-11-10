@@ -44,7 +44,9 @@ SQLite BEGIN IMMEDIATE serializes synthetic admissions, pauses, revocations,
 manual pause clearance, and emergency stops across independent processes.
 Every guard reads the same on-disk state. A simulated admission is capped at
 two/account and ten globally per rolling 60 seconds. The SQLite connection
-uses FULL synchronous durability and fails closed on errors or lock timeouts.
+uses FULL synchronous durability, closes on initialization/verification failures,
+rejects backwards clocks for both admission and lease revalidation, prunes
+expired leases on new admission, and fails closed on errors or lock timeouts.
 
 Admission returns a **fake, ten-second lease** with the guard epoch and the
 account revision. A later explicit revalidation denies leases after pause,
