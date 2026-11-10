@@ -40,6 +40,15 @@ class TenantBoundaryAuditTests(unittest.TestCase):
         with self.assertRaises(tenant_route_audit.ApiBoundaryError):
             tenant_route_audit.inspect_sources(self.app,changed)
 
+    def test_new_dormant_router_or_monitor_cannot_be_wired_silently(self):
+        for name in ("tenant_api_gateway","tenant_monitor_blueprint"):
+            with self.assertRaises(tenant_route_audit.ApiBoundaryError):
+                tenant_route_audit.inspect_sources(
+                    self.app + "\\nfrom engine import "+name+"\\n",self.worker)
+            with self.assertRaises(tenant_route_audit.ApiBoundaryError):
+                tenant_route_audit.inspect_sources(
+                    self.app,self.worker + "\\nfrom engine import "+name+"\\n")
+
     def test_tenant_payload_code_is_not_live_wired(self):
         self.assertNotIn("tenant_history_details",self.app)
         self.assertNotIn("tenant_history_details",self.worker)
