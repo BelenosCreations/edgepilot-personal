@@ -75,6 +75,7 @@ class AndroidSignerPreflightTests(unittest.TestCase):
             "permissions:\n  contents: read",
             "assembleRelease",
             "apksigner",
+            "--ks-type JKS",
             "verify --min-sdk-version 26 --verbose --print-certs",
             "python3 android/tools/verify_signed_apk_cert.py",
             "base64 --decode",
