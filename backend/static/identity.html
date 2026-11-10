@@ -78,6 +78,20 @@
         <button id="addPasskey" class="primary" type="button">Add biometric passkey</button>
         <button id="signOut" type="button">Sign out</button>
         <small id="passkeyInfo">Use a fingerprint, face unlock, or device screen lock through your credential provider. EdgePilot stores no biometric templates.</small>
+        <h3>Account security</h3>
+        <form id="changeIdentityPasswordForm">
+          <label for="securityCurrentPassword">Current EdgePilot password</label>
+          <input id="securityCurrentPassword" type="password" autocomplete="current-password" minlength="14" maxlength="128" required>
+          <label for="securityNewPassword">New EdgePilot password (14+ characters)</label>
+          <input id="securityNewPassword" type="password" autocomplete="new-password" minlength="14" maxlength="128" required>
+          <button type="submit">Change password and sign out all devices</button>
+        </form>
+        <form id="signOutEverywhereForm">
+          <label for="securitySignOutPassword">Current password to sign out on all devices</label>
+          <input id="securitySignOutPassword" type="password" autocomplete="current-password" minlength="14" maxlength="128" required>
+          <button type="submit">Sign out every device</button>
+        </form>
+        <small>Both actions end all active EdgePilot sessions for your account. Registered passkeys remain usable; Public connections and keys are unchanged.</small>
       </div>
       <form id="publicKeyForm" class="panel">
         <h2>Your Public connection</h2>
