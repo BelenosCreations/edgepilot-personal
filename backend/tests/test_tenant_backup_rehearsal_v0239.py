@@ -67,12 +67,14 @@ class TwoTenantEncryptedRestoreTests(unittest.TestCase):
         sa=rebuilt.authenticate("restore_alice","example-alice-password-long-v039","new-phone-a")
         sb=rebuilt.authenticate("restore_bob","example-bob-password-long-v039","new-phone-b")
         scopes=account_scope.AccountScopeStore(str(restored),rebuilt)
-        self.assertEqual([x["account_id"] for x in scopes.list_accounts(sa["token"])],[self.aa])
-        self.assertEqual([x["account_id"] for x in scopes.list_accounts(sb["token"])],[self.ba])
-        with self.assertRaises(tenant_foundation.TenantAccessError):
-            scopes.account_summary(sa["token"],self.ba)
-        with self.assertRaises(tenant_foundation.TenantAccessError):
-            scopes.account_summary(sb["token"],self.aa)
+        # Restoring an old archive must quarantine ALL broker bindings:
+        # a later revoked key may not be resurrected by disaster recovery.
+        self.assertEqual(scopes.list_accounts(sa["token"]),[])
+        self.assertEqual(scopes.list_accounts(sb["token"]),[])
+        for token,acct in ((sa["token"],self.aa),(sa["token"],self.ba),
+                           (sb["token"],self.ba),(sb["token"],self.aa)):
+            with self.assertRaises(tenant_foundation.TenantAccessError):
+                scopes.account_summary(token,acct)
         with sqlite3.connect(restored) as con:
             self.assertEqual(con.execute("PRAGMA integrity_check").fetchone()[0],"ok")
             self.assertIsNone(con.execute("PRAGMA foreign_key_check").fetchone())
@@ -84,6 +86,16 @@ class TwoTenantEncryptedRestoreTests(unittest.TestCase):
             rows=con.execute("""SELECT user_id,credential_ciphertext
                 FROM tenant_connections ORDER BY user_id""").fetchall()
             self.assertEqual(len(rows),2)
+            # Ownership and settings survive as encrypted historical data,
+            # but all recovered connections/accounts are unusable until
+            # explicit later re-enrollment and provider re-verification.
+            state=con.execute("""SELECT c.user_id,c.revoked_at,a.disabled_at
+                FROM tenant_connections c JOIN tenant_accounts a
+                ON a.connection_id=c.connection_id
+                ORDER BY c.user_id""").fetchall()
+            self.assertEqual(len(state),2)
+            self.assertEqual({r[0] for r in state},{self.a,self.b})
+            self.assertTrue(all(r[1] and r[2] for r in state))
             self.assertEqual({uid:Fernet(self.vault_key).decrypt(blob).decode()
                               for uid,blob in rows},
                 {self.a:"SYNTHETIC-ONLY-NOT-REAL-PUBLIC-ALICE-123",
