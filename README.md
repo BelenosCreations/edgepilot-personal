@@ -6,7 +6,7 @@ EdgePilot is a personal trading-intelligence platform designed to bring brokerag
 
 The goal is not simply to display prices or place trades. EdgePilot is intended to provide a traceable decision system: understand what the broker actually reported, distinguish observation from simulated results, evaluate a strategy against costs and risk, and refuse activity when data or authorization is uncertain.
 
-> **Development status:** The repository is currently at **v0.2.26**. The existing owner-facing application supports read-only brokerage research and experimental Observe/Paper modes. **Real brokerage order submission, autonomous live trading, and bank transfers are disabled.** The new multi-user and passkey components are in staged development, not a completed public sign-up or independently verified multi-device service. See [CHANGELOG.md](CHANGELOG.md) for release history.
+> **Development status:** The repository is currently developing **v0.2.30**. The existing owner-facing application supports brokerage research and experimental Observe/Paper modes; **real brokerage order submission, autonomous live trading, and bank transfers remain disabled**. A separate, gated multi-user identity platform now includes invitation registration, individually encrypted Public connections, read-only account integration, and WebAuthn passkey endpoints. An Android-capable passkey account screen is being added, but actual multi-device biometric sign-in and live multi-user acceptance are not yet verified. See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## The project vision
 
@@ -93,7 +93,7 @@ Android test app (WebView)     Installable browser PWA
 - **Backend:** Python 3.12, Flask, requests, and internal engine modules covering market data, brokerage evidence, settings, risk calculations, simulation, authentication, observation, and research.
 - **Persistence:** SQLite on a persistent server volume for the existing personal deployment. Durable storage, secret management, and tested backup/restore procedures are essential for hosted operation.
 - **Hosting:** Docker and a Render Blueprint are included. The present service runs a single-owner backend and an experimental Observe/Paper worker, with SQLite leases to reduce duplicate work. This is not yet a horizontally scaled, independently durable trading-worker system.
-- **Android:** Gradle-based test APK project under the android directory. The debug APK loads the approved HTTPS site and does not bundle Public credentials.
+- **Android:** Gradle-based test APK project under the android directory. The debug APK loads the approved HTTPS site, never bundles Public credentials, and now prepares WebView for native Credential Manager-backed WebAuthn on supported devices. A verified app-signing certificate and Digital Asset Links association are still prerequisites for real passkey operation.
 - **Continuous integration:** GitHub Actions runs backend unit/HTTP tests, Python compilation checks, JavaScript syntax validation, and a separate Android debug-build workflow.
 
 The principal source directories are **backend/** (server, engines, tests, and web assets), **android/** (Android wrapper), and **.github/workflows/** (CI and APK generation).
@@ -110,7 +110,7 @@ A full implementation requires:
 4. Passkey-capable sign-in using WebAuthn, Android Credential Manager, and verified application/website association. Phone biometrics or device PIN verify the user locally; the backend should not store biometric images.
 5. Real end-to-end validation with two separate devices, identities, and independently connected Public accounts before declaring the multi-user development stage complete.
 
-**Where this stands now:** The repository contains opt-in tenant schemas, separate identity sessions, account-scoped models, dormant WebAuthn/passkey logic, and a staged per-user encrypted Public credential vault. Those foundations are intentionally isolated from the legacy owner-facing routes and worker. User self-registration, real Android passkey enrollment, production tenant migration, independently routed live Public reads, full worker separation, and real two-device acceptance testing are **not complete**.
+**Where this stands now:** Separate identity sessions and invitation-only signup, tenant-owned encrypted Public keys, gated read-only Public account access, and cryptographically verified WebAuthn endpoints are implemented behind independent feature flags. The /account screen includes password, invitation, passkey and key-entry flows; the Android WebView can request native Web Authentication on supported devices. Actual biometric passkey enrollment still requires a verified app-signing certificate, Digital Asset Links, a controlled pilot and independent device testing. Production tenant cutover, account-scoped background workers, recovery and two-device acceptance testing are **not complete**.
 
 The tenant vault can be enabled only behind explicit server-side feature gates; storing an unverified credential there does not connect or verify a brokerage account. Synthetic multi-user tests are not equivalent to an activated shared platform. The existing owner connection must never be silently assigned to another user.
 
@@ -142,7 +142,7 @@ cd backend
 python -m unittest discover -s tests -v
 ~~~
 
-CI additionally checks Python compilation and frontend JavaScript syntax. The inactive multi-user and broker-safety modules have separate synthetic/negative tests to exercise isolation, malformed requests, revoked access, stale operations, and failure handling. Passing automated tests does not replace real brokerage-contract verification or mobile-device acceptance testing.
+CI additionally checks Python compilation and the legacy and account-login JavaScript syntax. Android changes are independently built as a debug APK in a separate workflow. The inactive multi-user and broker-safety modules have separate synthetic/negative tests to exercise isolation, malformed requests, revoked access, stale operations, and failure handling. Passing automated tests does not replace real brokerage-contract verification or mobile-device acceptance testing.
 
 The included **render.yaml** and **backend/Dockerfile** describe the private hosted service. Deployment requires HTTPS, durable data storage, and securely configured server environment variables. Do not put live credentials in the repository or use sample configuration as a security guarantee. See [PHONE_DEPLOYMENT.md](PHONE_DEPLOYMENT.md) for the historical phone-oriented setup guide; some of its steps describe earlier versions and should be checked against current security requirements before use.
 
