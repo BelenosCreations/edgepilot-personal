@@ -399,7 +399,7 @@
     const secret = el("replacementSecret").value;
     try {
       if (secret.length < 20 || secret.length > 2048 ||
-          /[\\r\\n\\0]/.test(secret)) {
+          /[\r\n\x00]/.test(secret)) {
         throw new Error("Enter a valid replacement Public API secret.");
       }
       if (!window.confirm("Replace the saved secret for this connection? Existing linked Public accounts will need verification again.")) return;
