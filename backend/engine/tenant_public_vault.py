@@ -9,6 +9,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import sqlite3
 import uuid
+import hmac
+import time
 
 from cryptography.fernet import InvalidToken
 
@@ -109,6 +111,30 @@ class TenantPublicVault:
         return {"connectionId":connection_id,"status":"stored_unverified",
                 "secretReturned":False,"realOrdersEnabled":False}
 
+    @staticmethod
+    def _principal_locked(db, identity_token, csrf):
+        """Verify the current session inside the connection mutation lock.
+
+        Principal checks outside BEGIN IMMEDIATE may become stale when a
+        second device logs out, changes credentials, or disables this user.
+        The current identity and account must be valid at the mutation point.
+        """
+        if (not isinstance(identity_token, str) or not 25 < len(identity_token) < 256
+                or not isinstance(csrf, str) or not 20 < len(csrf) < 256):
+            raise TenantVaultDenied("Connection unavailable")
+        row=db.execute("""SELECT s.user_id,s.csrf_hash
+            FROM tenant_identity_sessions s
+            JOIN tenant_identities i ON i.user_id=s.user_id
+            JOIN tenant_users u ON u.user_id=s.user_id
+            WHERE s.token_hash=? AND s.expires_at>?
+            AND s.credential_version=i.credential_version
+            AND u.disabled_at IS NULL""",
+            (identity_auth._digest(identity_token), int(time.time()))).fetchone()
+        if row is None or not hmac.compare_digest(
+                row["csrf_hash"], identity_auth._digest(csrf)):
+            raise TenantVaultDenied("Connection unavailable")
+        return row["user_id"]
+
     def _rotate_or_revoke(self, identity_token, csrf, connection_id, secret=None):
         owner=self._principal(identity_token,csrf)
         conn_id=_uuid(connection_id)
@@ -122,6 +148,8 @@ class TenantPublicVault:
                 raise TenantVaultDenied("Credential could not be stored securely") from None
         with tenant_foundation._open(self.path) as db:
             db.execute("BEGIN IMMEDIATE")
+            if self._principal_locked(db, identity_token, csrf) != owner:
+                raise TenantVaultDenied("Connection unavailable")
             row=db.execute("""SELECT connection_id FROM tenant_connections
                 WHERE connection_id=? AND user_id=? AND provider='public'
                   AND revoked_at IS NULL""",
