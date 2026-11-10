@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
-from . import tenant_foundation, account_scope, migration_preflight, historical_reconciliation, shadow_storage, quarantine_review, tenant_history, tenant_history_details
+from . import tenant_foundation, account_scope, migration_preflight, historical_reconciliation, shadow_storage, quarantine_review, tenant_history, tenant_history_details, tenant_route_audit
 
 ENABLE_FLAG="EDGE_OWNER_MIGRATION_REHEARSAL_ENABLED"
 APPROVAL_PHRASE="SHADOW REHEARSAL ONLY"
@@ -284,6 +284,7 @@ def rehearse_owner_shadow(source_db, *, credential_key, phrase):
         raise ShadowMigrationError("Offline shadow rehearsal is disabled")
     try:
         path, ram_root=shadow_storage.require_isolated_source(source_db)
+        boundary_report=tenant_route_audit.inspect_repo()
         before=migration_preflight.inspect_database(path)
         with _conn(path,readonly=True) as original:
             source_fingerprint=historical_reconciliation.source_content_fingerprint(
@@ -319,7 +320,8 @@ def rehearse_owner_shadow(source_db, *, credential_key, phrase):
         # Reaching this point proves temporary files were cleaned up.
         if Path(root).exists():
             raise ShadowMigrationError("Disposable temporary storage was not removed")
-        return {**report,"sourceLogicalInventoryUnchanged":True,
+        return {**report,"routeAndWorkerBoundaryAudit":boundary_report,
+            "sourceLogicalInventoryUnchanged":True,
             "sourceContentsUnchanged":True,
             "sourceToCopyContentsMatched":True,
             "historicalRowFingerprintsVerified":True,
@@ -334,7 +336,8 @@ def rehearse_owner_shadow(source_db, *, credential_key, phrase):
     except (shadow_storage.MemoryStorageError,
             historical_reconciliation.HistoryReconciliationError,
             tenant_history.TenantHistoryError,
-            tenant_history_details.DetailSafetyError) as error:
+            tenant_history_details.DetailSafetyError,
+            tenant_route_audit.ApiBoundaryError) as error:
         raise ShadowMigrationError(str(error)) from None
     except ShadowMigrationError:
         raise
