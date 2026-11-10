@@ -15,8 +15,11 @@ class StagingIsolationDenied(RuntimeError):
 
 def validate(environment=None):
     env=os.environ if environment is None else environment
-    if str(env.get("EDGE_ISOLATED_STAGING","false")).lower()!="true":
+    stage_mode=str(env.get("EDGE_ISOLATED_STAGING","false")).lower()
+    if stage_mode=="false" or stage_mode=="":
         return False
+    if stage_mode!="true":
+        raise StagingIsolationDenied("Staging isolation flag must be explicit true or false")
     rp=str(env.get("EDGE_WEBAUTHN_RP_ID","")).lower()
     origin=str(env.get("EDGE_WEBAUTHN_ORIGIN",""))
     hostname=re.fullmatch(r"(?:[a-z0-9]+(?:-[a-z0-9]+)*\.)+belenoscreations\.biz",rp)
