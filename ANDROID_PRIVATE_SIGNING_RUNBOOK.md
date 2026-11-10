@@ -25,7 +25,8 @@ funds transfers or any operational production change.
 ## One-time trusted signing prerequisites
 
 A trusted operator must generate a long-lived Android release signing
-key **outside the repository** using trustworthy tooling, retain the
+key **outside the repository** using trustworthy tooling (explicit JKS store
+type, not the newer keytool default PKCS12 type), retain the
 private key in a protected offline backup and record its SHA-256
 certificate digest. Google recommends retaining and protecting signing
 keys since losing or rotating a key affects future Android app updates.
