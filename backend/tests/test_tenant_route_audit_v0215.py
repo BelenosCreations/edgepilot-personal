@@ -46,11 +46,14 @@ class TenantBoundaryAuditTests(unittest.TestCase):
         with self.assertRaises(tenant_route_audit.ApiBoundaryError):
             tenant_route_audit.inspect_sources(self.app,changed)
 
-    def test_new_dormant_router_or_monitor_cannot_be_wired_silently(self):
+    def test_unreviewed_gateway_and_live_monitor_worker_import_fail_closed(self):
+        # Gated read-only monitor planning is now reviewed for HTTP; the
+        # dormant gateway remains prohibited and BOTH must stay out of worker.
+        self.assertIn("tenant_monitor_blueprint",self.app)
+        with self.assertRaises(tenant_route_audit.ApiBoundaryError):
+            tenant_route_audit.inspect_sources(
+                self.app + "\nfrom engine import tenant_api_gateway\n",self.worker)
         for name in ("tenant_api_gateway","tenant_monitor_blueprint"):
-            with self.assertRaises(tenant_route_audit.ApiBoundaryError):
-                tenant_route_audit.inspect_sources(
-                    self.app + "\nfrom engine import "+name+"\n",self.worker)
             with self.assertRaises(tenant_route_audit.ApiBoundaryError):
                 tenant_route_audit.inspect_sources(
                     self.app,self.worker + "\nfrom engine import "+name+"\n")
