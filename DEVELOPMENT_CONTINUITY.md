@@ -147,3 +147,19 @@ devices; do not flip tenant or Public/trading flags automatically. Continue
 account-specific worker/backup isolation development without broad activation.
 Review ANDROID_PRIVATE_SIGNING_RUNBOOK.md and latest CI before acting.
 
+
+## v0.2.39 — Test-only encrypted tenant backup/restore validation
+
+A synthetic two-member fixture can now be snapshotted into an authenticated
+Fernet archive and restored to a new private SQLite database only on verified
+/dev/shm tmpfs. Archived identity sessions, pending WebAuthn challenges,
+unredeemed invitations and worker leases are invalidated on restore;
+all stored provider connections/accounts and passkey credentials are
+quarantined pending explicit fresh verification/re-enrollment, preventing
+resurrection of formerly revoked broker keys or authenticators;
+cross-member account and encrypted credential isolation must remain intact.
+Production Render DB paths and non-tmpfs destinations are explicitly rejected.
+This is NOT production offsite backup or key-management readiness. No live
+brokerage request, transfer or trading was enabled. Review
+TENANT_BACKUP_REHEARSAL_RUNBOOK.md and latest CI for the exact commit.
+
