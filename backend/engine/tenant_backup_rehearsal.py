@@ -6,13 +6,15 @@ production database. No HTTP route, real API key, transfer, scanner, or worker
 imports this module. The sealed in-memory archive uses a separate caller-held
 Fernet key, not EdgePilot's Public credential encryption key.
 
-The restore intentionally destroys all saved login sessions, pending WebAuthn
-challenges and unredeemed invitations: a copied old session must not become
-valid merely because an older database was restored.
+Restore destroys saved login sessions, pending WebAuthn challenges,
+unredeemed invitations and worker leases. It also quarantines ALL Public
+connections and linked accounts: an older backup must never resurrect a key
+that was revoked after the snapshot. No real provider reconnect is possible.
 """
 from __future__ import annotations
 
 from contextlib import closing
+from datetime import datetime, timezone
 import os
 from pathlib import Path
 import sqlite3
@@ -157,6 +159,15 @@ def restore_sealed_fixture(token, archive_key, destination_path):
             for name in _INVALIDATE_RESTORED:
                 if name in tables:
                     restored.execute("DELETE FROM "+name)
+            # An older archive may predate an API-key revocation or account
+            # unlink. Restoring it must NEVER revive brokerage visibility.
+            # Keep encrypted ciphertext for the test, but quarantine every
+            # restored connection/account until freshly verified elsewhere.
+            quarantined_at = datetime.now(timezone.utc).isoformat()
+            restored.execute("""UPDATE tenant_accounts
+                SET disabled_at=COALESCE(disabled_at,?)""",(quarantined_at,))
+            restored.execute("""UPDATE tenant_connections
+                SET revoked_at=COALESCE(revoked_at,?)""",(quarantined_at,))
             _check_contents(restored,require_quiescent=True)
             restored.commit()
         return target
