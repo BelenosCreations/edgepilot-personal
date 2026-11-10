@@ -189,6 +189,66 @@ class OfflineDurableSafetyTests(unittest.TestCase):
         with self.assertRaises(offline.OfflineSafetyDenied):
             offline.OfflineDurableSafetyRehearsal(self.path)
 
+    def test_lease_validation_rejects_backward_clock(self):
+        lease = self.guard.admit_synthetic(self.owner_a,self.account_a)["leaseId"]
+        self.now[0] -= 1
+        with self.assertRaises(offline.OfflineSafetyDenied) as caught:
+            self.guard.revalidate_synthetic(self.owner_a,self.account_a,lease)
+        self.assertEqual(caught.exception.code,"CLOCK_INVALID")
+
+    def test_expired_leases_pruned_on_next_safe_admission(self):
+        stale = self.guard.admit_synthetic(self.owner_a,self.account_a)["leaseId"]
+        self.now[0] += offline.LEASE_SECONDS + 1
+        current = self.guard.admit_synthetic(self.owner_a,self.account_a)["leaseId"]
+        with sqlite3.connect(self.guard.db_path) as con:
+            ids = [row[0] for row in con.execute("SELECT lease_id FROM offline_leases")]
+        self.assertNotIn(stale,ids)
+        self.assertEqual(ids,[current])
+        with self.assertRaises(offline.OfflineSafetyDenied) as caught:
+            self.guard.revalidate_synthetic(self.owner_a,self.account_a,stale)
+        self.assertEqual(caught.exception.code,"STALE_LEASE")
+
+    def test_sqlite_handle_closes_on_inode_validation_failure(self):
+        from unittest.mock import patch
+        original_connect = sqlite3.connect
+        opened = []
+
+        class TrackedConnection:
+            def __init__(self, inner):
+                self.inner = inner
+                self.closed = False
+
+            def __getattr__(self, name):
+                return getattr(self.inner,name)
+
+            def close(self):
+                self.closed = True
+                return self.inner.close()
+
+        def tracked_connect(*args,**kwargs):
+            wrapped = TrackedConnection(original_connect(*args,**kwargs))
+            opened.append(wrapped)
+            return wrapped
+
+        original_private_file = self.guard._private_file
+        db_checks = [0]
+
+        def changed_inode(path):
+            result = original_private_file(path)
+            if path == self.guard.db_path:
+                db_checks[0] += 1
+                if db_checks[0] == 2:
+                    return (result[0],result[1] + 1)
+            return result
+
+        with patch.object(offline.sqlite3,"connect",side_effect=tracked_connect):
+            with patch.object(self.guard,"_private_file",side_effect=changed_inode):
+                with self.assertRaises(offline.OfflineSafetyDenied) as caught:
+                    self.guard.is_stopped()
+        self.assertEqual(caught.exception.code,"STATE_UNAVAILABLE")
+        self.assertEqual(len(opened),1)
+        self.assertTrue(opened[0].closed)
+
     def test_fixture_requires_standard_scratch_even_if_tmpdir_redirected(self):
         # No external mount or custom TMPDIR may turn this fixture into a
         # production-disk store. It is not a persistent service.
