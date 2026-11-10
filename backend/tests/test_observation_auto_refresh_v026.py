@@ -36,7 +36,7 @@ class ObservationRefreshTests(unittest.TestCase):
         self.assertNotIn("api('automation/auto/start'",interval)
         self.assertNotIn("api('funds/",interval)
         self.assertIn("'liveTradingAvailable':False",APP)
-        self.assertIn("0.2.37-device-session-controls-opt-in",APP)
+        self.assertIn("0.2.38-private-android-signing-preflight-opt-in",APP)
 
 
 if __name__=='__main__':
