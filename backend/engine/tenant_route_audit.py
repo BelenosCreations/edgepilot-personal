@@ -70,6 +70,8 @@ def inspect_sources(app_source,worker_source):
         "tenant_test_public_binding", "tenant_test_recovery",
         "tenant_test_binding_rehearsal", "tenant_legacy_dependency_audit",
         "tenant_public_readonly_preflight", "tenant_public_preflight_batch",
+        "tenant_public_https_wire", "tenant_public_access_controller",
+        "tenant_public_https_account_adapter",
     )):
         raise ApiBoundaryError("Dormant historical store exposed in legacy HTTP app")
     if ("appmod.selected_account()" not in worker_source or
@@ -86,7 +88,10 @@ def inspect_sources(app_source,worker_source):
             "tenant_test_binding_rehearsal" in worker_source or
             "tenant_legacy_dependency_audit" in worker_source or
             "tenant_public_readonly_preflight" in worker_source or
-            "tenant_public_preflight_batch" in worker_source):
+            "tenant_public_preflight_batch" in worker_source or
+            "tenant_public_https_wire" in worker_source or
+            "tenant_public_access_controller" in worker_source or
+            "tenant_public_https_account_adapter" in worker_source):
         raise ApiBoundaryError("Legacy worker authorization surface changed")
     legacy={r for r in routes if r not in identity}
     if not legacy:
@@ -109,6 +114,9 @@ def inspect_sources(app_source,worker_source):
         "realProviderOwnershipProved":False,
         "readOnlyPublicPreflightConnectedToLive":False,
         "realPublicCredentialUsedByTestAdapter":False,
+        "publicHTTPSNetworkEnabled":False,
+        "publicHTTPSAdapterConnectedToProduction":False,
+        "emergencyStopIsSyntheticOnly":True,
         "httpIntegrationOnlyInIsolatedFixture":True,
         "legacyApiStillGlobalSingleOwner":True,
         "sessionScopedSelectionCannotReplaceLegacyAccountYet":True,
