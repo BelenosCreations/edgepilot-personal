@@ -623,10 +623,32 @@ def android_passkey_asset_links():
     fingerprint=os.getenv('EDGE_ANDROID_CERT_SHA256','').upper().strip()
     if not re.fullmatch(r'(?:[0-9A-F]{2}:){31}[0-9A-F]{2}',fingerprint):
         return fail('Not found',404)
+    package='com.edgepilot.mobile'
+    requested_package=os.getenv('EDGE_ANDROID_ASSOCIATION_PACKAGE','').strip()
+    if requested_package:
+        # Isolated WebAuthn phone testing needs a separate installable package
+        # and a distinct HTTPS host, never the legacy owner deployment.
+        # These guards publish only a public app association, not an auth grant.
+        rp=os.getenv('EDGE_WEBAUTHN_RP_ID','').strip().lower()
+        if (requested_package!='com.edgepilot.mobile.staging' or
+            os.getenv('EDGE_ISOLATED_STAGING','false').lower()!='true' or
+            not rp.endswith('.belenoscreations.biz') or
+            rp=='edgepilot.belenoscreations.biz' or
+            request.host.lower()!=rp or
+            os.getenv('EDGE_WEBAUTHN_ORIGIN','')!='https://'+rp or
+            os.getenv('EDGE_DB_PATH','').startswith('/data/') or
+            os.getenv('EDGE_APP_TOKEN','') or
+            os.getenv('PUBLIC_API_SECRET','') or
+            os.getenv('EDGE_AUTOMATION_WORKER_ENABLED','false').lower()!='false' or
+            os.getenv('ENABLE_LIVE_ORDERS','false').lower()!='false' or
+            os.getenv('EDGE_TENANT_PUBLIC_VAULT_ENABLED','false').lower()!='false' or
+            os.getenv('EDGE_TENANT_PUBLIC_READONLY_ENABLED','false').lower()!='false'):
+            return fail('Not found',404)
+        package=requested_package
     return jsonify([{
       'relation':['delegate_permission/common.get_login_creds'],
       'target':{'namespace':'android_app',
-                'package_name':'com.edgepilot.mobile',
+                'package_name':package,
                 'sha256_cert_fingerprints':[fingerprint]}
     }])
 @app.get('/icon-192.png')
