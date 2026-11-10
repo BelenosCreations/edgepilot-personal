@@ -403,6 +403,8 @@ def identity_monitor_watchlist(account_id):
             request.cookies.get(identity_auth.COOKIE_NAME,''),
             request.headers.get('X-Edge-Identity-CSRF',''),
             account_id,body['symbols'])
+    except tenant_watchlist.WatchlistInvalid:
+        return fail('Invalid watchlist',400)
     except tenant_watchlist.WatchlistDenied:
         return fail('Account unavailable',404)
 
