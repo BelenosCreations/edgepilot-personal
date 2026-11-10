@@ -2,6 +2,7 @@
 (() => {
   let identityCsrf = "";
   let busy = false;
+  let identityViewGeneration = 0;
   const el = id => document.getElementById(id);
   const status = (message, error = false) => {
     const box = el("status");
@@ -84,6 +85,8 @@
     clearReadOnly();
   }
   function clearReadOnly() {
+    // Invalidate pending fetches from a previous identity before clearing DOM.
+    identityViewGeneration += 1;
     el("connections").replaceChildren();
     el("connectionChoice").replaceChildren();
     el("discoveredAccounts").replaceChildren();
@@ -94,7 +97,9 @@
     el("connectionInfo").textContent = "";
   }
   async function showSession() {
+    const startedGeneration = identityViewGeneration;
     const data = await api("/session");
+    if (startedGeneration !== identityViewGeneration) return;
     identityCsrf = data.csrf;
     el("authPane").hidden = true;
     el("accountPane").hidden = false;
@@ -106,6 +111,7 @@
     await loadLinkedAccounts();
   }
   async function loadConnections() {
+    const generation = identityViewGeneration;
     const items = el("connections");
     const select = el("connectionChoice");
     items.replaceChildren();
@@ -116,6 +122,7 @@
     select.appendChild(blank);
     try {
       const data = await api("/public/connections");
+      if (generation !== identityViewGeneration) return;
       if (!Array.isArray(data.connections) || data.secretsReturned !== false) {
         throw new Error("Unexpected connection response");
       }
@@ -134,17 +141,20 @@
       el("connectionInfo").textContent = items.children.length ?
         "Encrypted connections belonging to your account:" : "No Public key saved for this account.";
     } catch (error) {
+      if (generation !== identityViewGeneration) return;
       items.replaceChildren();
       el("connectionInfo").textContent = "Public key setup is not enabled for this account yet.";
     }
   }
   async function loadLinkedAccounts() {
+    const generation = identityViewGeneration;
     const items = el("linkedAccounts");
     items.replaceChildren();
     el("holdings").replaceChildren();
     el("portfolioSummary").textContent = "";
     try {
       const data = await api("/accounts");
+      if (generation !== identityViewGeneration) return;
       if (data.readOnly !== true || !Array.isArray(data.accounts)) {
         throw new Error("Invalid read-only account list");
       }
@@ -166,7 +176,9 @@
         button.type = "button";
         button.textContent = "View read-only portfolio";
         button.addEventListener("click", () => action(async () => {
+          const requestGeneration = identityViewGeneration;
           const portfolio = await api("/public/read/accounts/" + encodeURIComponent(id) + "/portfolio");
+          if (requestGeneration !== identityViewGeneration) return;
           if (portfolio.readOnly !== true || portfolio.ordersEnabled !== false ||
               portfolio.transfersEnabled !== false || portfolio.accountId !== id ||
               !Array.isArray(portfolio.holdings)) {
@@ -188,15 +200,18 @@
         items.appendChild(li);
       }
     } catch (error) {
+      if (generation !== identityViewGeneration) return;
       el("portfolioSummary").textContent = "Read-only Public account viewing is not enabled for this user yet.";
     }
   }
   async function discoverPublicAccounts() {
+    const generation = identityViewGeneration;
     const connectionId = el("connectionChoice").value;
     if (!connectionId) throw new Error("Choose one of your encrypted Public connections first.");
     el("discoveredAccounts").replaceChildren();
     const discovered = await api("/public/read/connections/" +
       encodeURIComponent(connectionId) + "/accounts");
+    if (generation !== identityViewGeneration) return;
     if (discovered.readOnly !== true || discovered.ordersEnabled !== false ||
         discovered.connectionId !== connectionId || !Array.isArray(discovered.accounts)) {
       throw new Error("Public account discovery response rejected");
@@ -212,10 +227,12 @@
       button.type = "button";
       button.textContent = "Link read-only";
       button.addEventListener("click", () => action(async () => {
+        const requestGeneration = identityViewGeneration;
         const label = ("Public " + type).slice(0,64);
         const result = await api("/public/read/connections/" +
           encodeURIComponent(connectionId) + "/accounts","POST",
           {accountId:providerId,label},true);
+        if (requestGeneration !== identityViewGeneration) return;
         if (result.verifiedByPublic !== true || result.readOnly !== true ||
             result.ordersEnabled !== false) throw new Error("Public account link not verified");
         status("Your Public account was verified and linked read-only.");
@@ -246,6 +263,7 @@
       const username = el("loginUser").value.trim();
       const password = el("loginPassword").value;
       try {
+        clearReadOnly();
         const result = await api("/login","POST",{username,password});
         identityCsrf = result.csrf;
         await showSession();
@@ -267,6 +285,7 @@
   });
   el("passkeySignIn").addEventListener("click", () => action(async () => {
     if (!supported()) throw new Error("Passkeys are not supported by this device or browser.");
+    clearReadOnly();
     const begin = await api("/passkeys/authenticate/options","POST",{});
     const credential = await navigator.credentials.get({
       publicKey:optionsForBrowser(begin.publicKey,false)
