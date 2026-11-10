@@ -9,8 +9,12 @@ from urllib.parse import quote
 import requests
 from flask import Flask, jsonify, request, send_from_directory, g
 from dotenv import load_dotenv
-from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, tenant_password_change, tenant_session_controls, tenant_registration, tenant_passkeys, account_scope, tenant_monitor_blueprint, tenant_watchlist, tenant_public_vault, tenant_public_live_readonly
-ROOT=Path(__file__).parent; load_dotenv(ROOT/'.env'); DB=Path(os.getenv('EDGE_DB_PATH',str(ROOT/'edgepilot.db'))); DB.parent.mkdir(parents=True,exist_ok=True)
+from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, tenant_password_change, tenant_session_controls, tenant_registration, tenant_passkeys, account_scope, tenant_monitor_blueprint, tenant_watchlist, tenant_public_vault, tenant_public_live_readonly, staging_isolation
+ROOT=Path(__file__).parent; load_dotenv(ROOT/'.env')
+# Refuse unsafe isolated-test configuration before opening any database,
+# owner credential store or background-worker state. Production is unchanged.
+staging_isolation.validate(os.environ)
+DB=Path(os.getenv('EDGE_DB_PATH',str(ROOT/'edgepilot.db'))); DB.parent.mkdir(parents=True,exist_ok=True)
 app=Flask(__name__,static_folder='static',static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # CSV/history research limit
 BASE='https://api.public.com'; lock=threading.RLock(); cached_token=None; expires=0
@@ -623,10 +627,35 @@ def android_passkey_asset_links():
     fingerprint=os.getenv('EDGE_ANDROID_CERT_SHA256','').upper().strip()
     if not re.fullmatch(r'(?:[0-9A-F]{2}:){31}[0-9A-F]{2}',fingerprint):
         return fail('Not found',404)
+    package='com.edgepilot.mobile'
+    requested_package=os.getenv('EDGE_ANDROID_ASSOCIATION_PACKAGE','').strip()
+    if (os.getenv('EDGE_ISOLATED_STAGING','false').lower()=='true' and
+        not requested_package):
+        return fail('Not found',404)
+    if requested_package:
+        # Isolated WebAuthn phone testing needs a separate installable package
+        # and a distinct HTTPS host, never the legacy owner deployment.
+        # These guards publish only a public app association, not an auth grant.
+        rp=os.getenv('EDGE_WEBAUTHN_RP_ID','').strip().lower()
+        if (requested_package!='com.edgepilot.mobile.staging' or
+            os.getenv('EDGE_ISOLATED_STAGING','false').lower()!='true' or
+            not rp.endswith('.belenoscreations.biz') or
+            rp=='edgepilot.belenoscreations.biz' or
+            request.host.lower()!=rp or
+            os.getenv('EDGE_WEBAUTHN_ORIGIN','')!='https://'+rp or
+            os.getenv('EDGE_DB_PATH','').startswith('/data/') or
+            os.getenv('EDGE_APP_TOKEN','') or
+            os.getenv('PUBLIC_API_SECRET','') or
+            os.getenv('EDGE_AUTOMATION_WORKER_ENABLED','false').lower()!='false' or
+            os.getenv('ENABLE_LIVE_ORDERS','false').lower()!='false' or
+            os.getenv('EDGE_TENANT_PUBLIC_VAULT_ENABLED','false').lower()!='false' or
+            os.getenv('EDGE_TENANT_PUBLIC_READONLY_ENABLED','false').lower()!='false'):
+            return fail('Not found',404)
+        package=requested_package
     return jsonify([{
       'relation':['delegate_permission/common.get_login_creds'],
       'target':{'namespace':'android_app',
-                'package_name':'com.edgepilot.mobile',
+                'package_name':package,
                 'sha256_cert_fingerprints':[fingerprint]}
     }])
 @app.get('/icon-192.png')

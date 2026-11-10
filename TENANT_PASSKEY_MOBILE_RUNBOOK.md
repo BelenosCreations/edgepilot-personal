@@ -59,6 +59,21 @@ Android Credential Manager. The tenant identity/passkey routes are still
 disabled by default and must not be enabled broadly on the legacy
 production account. See MULTIUSER_PLATFORM_ACCEPTANCE.md.
 
+## Isolated Android app build prepared — v0.2.42
+
+An opt-in `EdgePilot Staging` Android build now uses a different package
+`com.edgepilot.mobile.staging` and a distinct owner-controlled staging
+HTTPS hostname to avoid overwriting the owner's already signed/login-tested
+production Android application. Its separate manual certificate-pinned
+signed workflow has not yet been dispatched. The backend's optional
+staging association serves that package only if explicit isolated staging
+config, correct RP/host and no legacy/providing brokerage secrets,
+workers or live orders are present. See ANDROID_ISOLATED_STAGING_RUNBOOK.md.
+
+No isolated HTTPS deployment, actual staging installation or physical
+passkey enrollment has happened; the owner-approved production service
+remains unchanged.
+
 ## End-to-end validation plan
 
 1. Verify the app is signed and website association validates.

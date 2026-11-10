@@ -290,3 +290,29 @@ real website session operation or two independent physical phones.
 The existing owner APK and Render feature flags remain unchanged; do not
 misrepresent synthetic credentials as a real user's passkey. Follow
 WEBAUTHN_REAL_CRYPTO_ACCEPTANCE_RUNBOOK.md for scope and next steps.
+
+## v0.2.42 — Separate Android staging package and guarded website association
+
+After the owner reported a successful login in the permanently signed
+production-host Android app, development added a distinct Android staging
+build type with package com.edgepilot.mobile.staging and app label
+EdgePilot Staging. Production app ID, stable-signed workflow, HTTPS host,
+installed app and login credentials remain unchanged. Staging host is a
+compile-time, owner-controlled distinct belenoscreations.biz subdomain;
+missing configuration compiles only a nonfunctional .invalid host.
+A new manual-only workflow can sign the staging package with the same
+operator-owned certificate after a separate staging HTTPS service exists.
+PR Android CI compiles the unsigned staging build without exposing a
+signed staging artifact. A process-startup staging guard refuses unsafe configuration **before**
+opening the database or initializing legacy owner credentials, while the
+optional backend staging association responds only when explicitly
+isolated with exact RP/host and all live credentials, workers, orders
+and provider paths absent.
+
+No separate paid Render service or DNS has been provisioned in this
+milestone; neither staging signed build, physical Android biometrics nor
+two-user/two-device acceptance has been validated. Do not overwrite the
+owner's existing APK. Review ANDROID_ISOLATED_STAGING_RUNBOOK.md and
+request operator input for new hosting/domain provisioning and costs
+before actual staging rollout. Never enable real brokerage trading or
+transfers as part of this test.
