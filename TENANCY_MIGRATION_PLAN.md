@@ -1,3 +1,22 @@
+## Phase 19 (v0.2.25): Shared tenant account architecture and passkey identity (inactive)
+
+Confirmed product objective: a single EdgePilot service, separate sign-in
+identity for every user, each user's own encrypted Public key, tenant-scope for
+every account/history/worker/cache/recovery action, and Android passkey/biometric
+login. Engineering can proceed on an assumed Public multi-user entitlement;
+the assumption is not provider permission or permission to enable trading.
+
+A dormant WebAuthn module now supports user-authenticated registration,
+single-use short-lived challenges, per-user credential public-key records,
+cryptographic signature/origin/ID/user verification, and session issuance only
+to the isolated identity system. Existing single-owner HTTP/worker/broker paths
+remain unchanged and do not import the passkey store. Native Android
+Credential Manager, secure account signup/recovery, read-only Public
+multi-user access, full production tenant refactor and two-device tests are
+still acceptance blockers. The shared-backend design supersedes a separate
+Render service per device; do not deploy a second live user on global single-
+owner credentials. See TENANT_PASSKEY_SHARED_PLATFORM_RUNBOOK.md.
+
 ## Phase 18 (v0.2.24): Atomic fake work checkpoints vs stop/pause/revocation (inactive)
 
 A disconnected offline-only work-stage recorder shares the v0.2.23
