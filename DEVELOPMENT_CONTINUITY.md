@@ -117,3 +117,16 @@ STATE_UNAVAILABLE denial in the disconnected multi-process SQLite rehearsal.
 The patch retains exactly two durable admissions and checks fail-closed
 denial types. Verify v0.2.35.1 PR and post-merge CI before continuing.
 No production broker or Android behavior changed.
+
+## v0.2.37 session-management checkpoint
+
+Verified tenant identity sessions can now be listed by the logged-in member
+and other sessions can be revoked through a separately default-off,
+CSRF-protected identity API. The account page displays timestamps only;
+no physical-device fingerprints, IPs or biometric data are collected.
+Changes are serialized with identity revocation and a secret-free immutable
+audit records other-session logouts. The main app/worker, Public account
+authorization, real trading and transfers are unchanged. See
+TENANT_SESSION_CONTROLS_RUNBOOK.md. The two-physical-phone acceptance target
+remains open.
+
