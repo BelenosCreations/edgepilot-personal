@@ -1,3 +1,15 @@
+## Phase 11 (v0.2.17): Inactive tenant request and worker admission contracts
+
+`backend/engine/tenant_request_boundary.py` now models explicit,
+session-authorized read and account-selection operations with canonical
+account IDs and denial of unknown or executable routes.
+`backend/engine/tenant_worker_boundary.py` models hard-disabled,
+fair per-owner account admission and rechecks account eligibility before
+RAM-only synthetic replay. Both are excluded from the live Flask API
+and worker. Production multi-account cutover remains prohibited.
+See TENANT_REQUEST_WORKER_BOUNDARIES_RUNBOOK.md for exact limitations.
+
+
 # EdgePilot v0.2.16 — Dormant session/account API and monitor isolation
 
 **Safety status: INACTIVE.** This release introduces future-only service
