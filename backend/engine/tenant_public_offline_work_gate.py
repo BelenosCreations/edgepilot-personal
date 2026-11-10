@@ -8,8 +8,6 @@ distributed request cancellation or a production safety architecture.
 """
 from __future__ import annotations
 
-import sqlite3
-
 from .tenant_public_durable_safety_rehearsal import (
     OfflineDurableSafetyRehearsal,
     OfflineSafetyDenied,
@@ -49,8 +47,11 @@ class OfflineSyntheticWorkGate:
         """Explicit fixture-only schema installation; never auto-migrates live data."""
         with self.safety._transaction() as con:
             self.safety._guard(con)
-            con.executescript("""
-                CREATE TABLE IF NOT EXISTS offline_work_progress(
+            # sqlite3.executescript implicitly commits and could release the
+            # guard transaction before setup finishes. Use execute() for every
+            # DDL statement to keep STOP ordering atomic.
+            statements = (
+                """CREATE TABLE IF NOT EXISTS offline_work_progress(
                     lease_id TEXT PRIMARY KEY,
                     owner_id TEXT NOT NULL,
                     account_id TEXT NOT NULL,
@@ -60,19 +61,21 @@ class OfflineSyntheticWorkGate:
                     FOREIGN KEY(lease_id) REFERENCES offline_leases(lease_id),
                     FOREIGN KEY(owner_id,account_id)
                       REFERENCES offline_accounts(owner_id,account_id)
-                );
-                CREATE TABLE IF NOT EXISTS offline_work_events(
+                )""",
+                """CREATE TABLE IF NOT EXISTS offline_work_events(
                     id INTEGER PRIMARY KEY,
                     stage TEXT NOT NULL CHECK(stage IN ('BEGIN','CHECK','FINISH')),
                     at_seconds INTEGER NOT NULL
-                );
-                CREATE TRIGGER IF NOT EXISTS no_offline_work_event_delete
+                )""",
+                """CREATE TRIGGER IF NOT EXISTS no_offline_work_event_delete
                   BEFORE DELETE ON offline_work_events
-                  BEGIN SELECT RAISE(ABORT,'synthetic audit cannot be deleted'); END;
-                CREATE TRIGGER IF NOT EXISTS no_offline_work_event_update
+                  BEGIN SELECT RAISE(ABORT,'synthetic audit cannot be deleted'); END""",
+                """CREATE TRIGGER IF NOT EXISTS no_offline_work_event_update
                   BEFORE UPDATE ON offline_work_events
-                  BEGIN SELECT RAISE(ABORT,'synthetic audit cannot be rewritten'); END;
-            """)
+                  BEGIN SELECT RAISE(ABORT,'synthetic audit cannot be rewritten'); END""",
+            )
+            for statement in statements:
+                con.execute(statement)
         return {"syntheticSchemaReady":True, "productionMigrationPerformed":False}
 
     def stage(self, owner_id, account_id, lease_id, stage):
