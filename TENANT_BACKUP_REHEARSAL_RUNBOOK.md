@@ -18,8 +18,8 @@ The new module `backend/engine/tenant_backup_rehearsal.py` provides:
   keys or tampering, write exclusively to a NEW mode-0600 file in verified
   `/dev/shm`, verify SQLite and cross-table integrity, and invalidate
   ALL archived sessions, pending passkey challenges, unredeemed invitation
-  codes and stale worker leases; quarantine every restored broker connection
-  and account to prevent older snapshots from resurrecting revoked keys.
+  codes and stale worker leases; quarantine every restored broker connection, linked account and registered
+  passkey to prevent older snapshots from resurrecting revoked keys or authenticators.
 - A 16-MiB maximum fixture size; no production data, online broker
   requests, worker activation, trades, transfers or HTTP integration.
 
