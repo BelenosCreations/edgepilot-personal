@@ -99,6 +99,8 @@
     el("portfolioSummary").textContent = "";
     el("monitorPlanInfo").textContent = "";
     el("connectionInfo").textContent = "";
+    el("deviceSessions").replaceChildren();
+    el("deviceSessionStatus").textContent = "";
     el("replacementSecret").value = "";
   }
   async function showSession() {
@@ -114,6 +116,66 @@
     status("Secure EdgePilot account session active. Brokerage execution remains disabled.");
     await loadConnections();
     await loadLinkedAccounts();
+    await loadDeviceSessions();
+  }
+  async function loadDeviceSessions() {
+    const generation = identityViewGeneration;
+    const list = el("deviceSessions");
+    list.replaceChildren();
+    try {
+      const result = await api("/sessions", "GET", undefined, true);
+      if (generation !== identityViewGeneration) return;
+      if (result.readOnly !== true || result.publicKeysReturned !== false ||
+          result.deviceDetailsStored !== false || result.legacyOwnerAccess !== false ||
+          !Array.isArray(result.sessions) || result.count !== result.sessions.length) {
+        throw new Error("Session listing response rejected");
+      }
+      const valid = result.sessions.every(item =>
+        typeof item.sessionId === "string" && /^[0-9a-f]{32}$/.test(item.sessionId) &&
+        Number.isInteger(item.issuedAt) && Number.isInteger(item.expiresAt) &&
+        typeof item.current === "boolean");
+      if (!valid) throw new Error("Invalid session information");
+      el("deviceSessionStatus").textContent = result.count ?
+        "Active EdgePilot sessions: " + result.count :
+        "No active sessions reported";
+      for (const session of result.sessions) {
+        const entry = document.createElement("li");
+        const when = new Date(session.issuedAt * 1000).toLocaleString();
+        entry.appendChild(document.createTextNode(
+          (session.current ? "This session" : "Other session") +
+          " · signed in " + when + " "));
+        if (!session.current) {
+          const revokeButton = document.createElement("button");
+          revokeButton.type = "button";
+          revokeButton.textContent = "Sign out this session";
+          revokeButton.addEventListener("click", () => action(async () => {
+            if (!window.confirm("Sign out this other EdgePilot session?")) return;
+            const requestGeneration = identityViewGeneration;
+            const revoked = await api("/sessions/" + encodeURIComponent(session.sessionId),
+              "DELETE", undefined, true);
+            if (requestGeneration !== identityViewGeneration) return;
+            if (revoked.otherSessionRevoked !== true ||
+                revoked.currentSessionRevoked !== false ||
+                revoked.otherUserAffected !== false ||
+                revoked.publicConnectionChanged !== false ||
+                revoked.liveTradingEnabled !== false ||
+                revoked.fundTransfersEnabled !== false) {
+              throw new Error("Session revocation response rejected");
+            }
+            await loadDeviceSessions();
+            status("The selected EdgePilot session was signed out. Your current session remains active.");
+          }));
+          entry.appendChild(revokeButton);
+        }
+        list.appendChild(entry);
+      }
+    } catch (error) {
+      if (generation !== identityViewGeneration) return;
+      list.replaceChildren();
+      el("deviceSessionStatus").textContent = error.status === 404 ?
+        "Device session management is not enabled on this server yet." :
+        "Session list is unavailable. No session changes were made.";
+    }
   }
   async function loadConnections() {
     const generation = identityViewGeneration;
@@ -465,6 +527,9 @@
       }
     });
   });
+  el("refreshDeviceSessions").addEventListener("click", () => action(async () => {
+    await loadDeviceSessions();
+  }));
   el("findPublicAccounts").addEventListener("click", () => action(async () => {
     await discoverPublicAccounts();
   }));
