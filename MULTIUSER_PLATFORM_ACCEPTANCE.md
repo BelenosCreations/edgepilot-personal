@@ -97,6 +97,18 @@ physical-device user acceptance are still unverified. The current
 debug-signed APK may require uninstall/reinstall to change signatures,
 so no installation instruction should claim safe in-place updates.
 
+## Single-phone signed APK smoke test — owner report on November 10, 2026
+
+After the independently verified permanent-signing CI attempt, the owner
+reported installing that v0.19.17 APK on the same Android phone used for
+earlier debug tests, then successfully logging into the legacy dashboard
+with their existing saved owner token. This closes the **owner-reported
+single-device app install and legacy login** subcheck only. It does not
+prove the installed signing fingerprint, HTTPS Digital Asset Links,
+Credential Manager passkey login, two separate tenant identities or
+independent Public connections. The full multi-user acceptance gate
+remains open.
+
 ## Milestone acceptance criteria — not complete until verified
 
 - Two separately provisioned EdgePilot users can register and sign in from
