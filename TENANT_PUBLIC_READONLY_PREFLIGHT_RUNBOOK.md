@@ -1,3 +1,16 @@
+## Phase 15 (v0.2.21): Real HTTPS request code behind an unconditional network-disabled gate
+
+Prepared a strictly allowlisted, certificate-verified Public HTTPS client
+for personal-token exchange and account listings. The only working
+request/response test path uses socket-free fake connections and encrypted
+synthetic credentials on verified /dev/shm. The actual network entrypoint
+unconditionally fails closed; no real Public credentials or accounts
+are contacted. Added per-account test budgets, a latched failure guard,
+a process-local irreversible emergency stop, and a route-audit ban on
+production imports. See TENANT_PUBLIC_HTTPS_ADAPTER_RUNBOOK.md for
+documented limits, provider terms, and future approval gates.
+
+
 # EdgePilot v0.2.20 — Public read-only response contract, offline only
 
 **Hard state: INACTIVE. NO REAL PUBLIC AUTHENTICATION.**
