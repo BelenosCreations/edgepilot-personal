@@ -1,3 +1,14 @@
+## Phase 12 (v0.2.18): Isolated Flask tenant routes and offline account worker orchestration
+
+A new test-gated Flask factory exercises *real HTTP request handling* for
+the session-authorized tenant request contract, exclusively with verified
+memory-backed synthetic databases. A synchronous, fair per-owner test
+orchestrator performs only zero-quote synthetic account observations.
+Neither is imported into the live API or Observe worker. Production
+account cutover and trading remain prohibited. See
+TENANT_ISOLATED_HTTP_ORCHESTRATOR_RUNBOOK.md for test-only limits and blockers.
+
+
 ## Phase 11 (v0.2.17): Inactive tenant request and worker admission contracts
 
 `backend/engine/tenant_request_boundary.py` now models explicit,
