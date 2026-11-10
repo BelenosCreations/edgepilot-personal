@@ -139,9 +139,13 @@ class TenantPasskeyTests(unittest.TestCase):
                 self.sessions[1]["token"],self.sessions[1]["csrf"],self.cred_ids[0],now=NOW)
         self.assertEqual(self.store.redacted_own_status(
             self.sessions[1]["token"],self.sessions[1]["csrf"],now=NOW)["activePasskeys"],1)
-        self.assertTrue(self.store.revoke_for_user(
+        revocation=self.store.revoke_for_user(
             self.sessions[0]["token"],self.sessions[0]["csrf"],self.cred_ids[0],
-            now=NOW)["revoked"])
+            now=NOW)
+        self.assertTrue(revocation["revoked"])
+        self.assertTrue(revocation["identitySessionsRevoked"])
+        self.assertIsNone(self.identities.principal(self.sessions[0]["token"],now=NOW))
+        self.assertIsNotNone(self.identities.principal(self.sessions[1]["token"],now=NOW))
         with self.assertRaises(tenant_passkeys.PasskeyDenied):
             self.login(self.cred_ids[0],user_id=self.users[0])
         b=self.login(self.cred_ids[1],user_id=self.users[1])
