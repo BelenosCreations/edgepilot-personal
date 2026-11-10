@@ -154,6 +154,8 @@ A synthetic two-member fixture can now be snapshotted into an authenticated
 Fernet archive and restored to a new private SQLite database only on verified
 /dev/shm tmpfs. Archived identity sessions, pending WebAuthn challenges,
 unredeemed invitations and worker leases are invalidated on restore;
+all stored provider connections/accounts are quarantined pending explicit
+fresh verification, preventing resurrection of formerly revoked keys;
 cross-member account and encrypted credential isolation must remain intact.
 Production Render DB paths and non-tmpfs destinations are explicitly rejected.
 This is NOT production offsite backup or key-management readiness. No live
