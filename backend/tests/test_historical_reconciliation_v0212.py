@@ -70,14 +70,18 @@ class Phase6HistoricalReconciliationTests(unittest.TestCase):
             c.execute("INSERT INTO engine_configs VALUES('auto','{}',?)",(UTC,))
             c.execute("INSERT INTO observation_cycles VALUES(1,?,'observe','OK','CLOSED','[\"SPY\"]',1,0,1,NULL)",(UTC,))
             c.execute("INSERT INTO paper_positions(id,engine,asset_class,symbol,strategy,qty,entry_ask,entry_fee,opened_at,last_bid,last_ask,status) VALUES('paper1','auto','stock','SPY','TEST','1','100','0',?,'99','100','OPEN')",(UTC,))
-        # This is an already RESTORED, detached SQLite rehearsal source,
-        # not a live WAL-backed database. Finalize fixture writes before
-        # taking byte-level source-preservation hashes.
+        # Capture a detached RESTORED snapshot instead of using the
+        # WAL-backed fixture itself as an offline migration input.
         c.close()
-        with sqlite3.connect(self.path) as checkpoint:
-            checkpoint.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-            checkpoint.execute("PRAGMA journal_mode=DELETE")
-        checkpoint.close()
+        restored=Path(self.temp.name)/"restored-offline-source.db"
+        producer=sqlite3.connect(self.path)
+        receiver=sqlite3.connect(restored)
+        try:
+            producer.backup(receiver)
+        finally:
+            receiver.close()
+            producer.close()
+        self.path=restored
         self.flags=patch.dict(os.environ,{shadow.ENABLE_FLAG:"true"})
         self.flags.start()
 
