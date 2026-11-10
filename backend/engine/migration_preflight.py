@@ -19,7 +19,7 @@ import os
 import sqlite3
 import stat
 import tempfile
-from contextlib import contextmanager
+from contextlib import contextmanager, closing
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -117,7 +117,7 @@ def inspect_database(path):
     """Read-only, sanitized report. Never return credential or account values."""
     source = _source(path)
     try:
-        with _connection(source) as con:
+        with closing(_connection(source)) as con:
             return _checks(con)
     except (sqlite3.Error, OSError) as exc:
         raise MigrationSafetyError("Database inspection failed") from None
