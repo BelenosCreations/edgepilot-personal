@@ -270,3 +270,23 @@ passkey flags. Do not activate those on the personal live service simply
 because the public association file is available. Test account recovery,
 passkey registration and login on an actual Android device, then use a
 second independent user/device. Live orders/transfers stay disabled.
+
+## v0.2.41 — Fully offline, real-crypto two-user WebAuthn verification
+
+A new test-only software-authenticator harness generates actual ES256
+P-256 signing keys and CBOR WebAuthn attestation/assertion data and exercises
+the production py_webauthn verification routines behind the Flask tenant
+identity routes without mocks. Two separate synthetic users enroll and log
+in on separate in-process browser cookie jars. The test verifies exact RP
+origin, signed challenges, required UV, distinct identity-only sessions,
+no legacy account inheritance, and fail-closed behavior for wrong origin,
+missing UV, forged signatures, foreign handles, reused challenges, counter
+rollback and credential revocation. External requests are denied during
+the fixture; no Public credential, real account, trade or transfer is used.
+
+This validates actual *cryptographic protocol processing*, not Android
+Credential Manager, OS-level Digital Asset Links, physical biometrics,
+real website session operation or two independent physical phones.
+The existing owner APK and Render feature flags remain unchanged; do not
+misrepresent synthetic credentials as a real user's passkey. Follow
+WEBAUTHN_REAL_CRYPTO_ACCEPTANCE_RUNBOOK.md for scope and next steps.
