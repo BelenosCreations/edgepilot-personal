@@ -158,7 +158,11 @@ class OfflinePublicControlsTests(unittest.TestCase):
                          "SYNTHETIC-REPLACEMENT-OWNER-A-123")
         self.assertEqual(other_after,other)
         for aid,appr in ((self.a1,approval_a1),(self.a2,approval_a2)):
-            with self.assertRaises(consent.OfflineConsentDenied):
+            with account_scope._db(self.path) as con:
+                row=con.execute("""SELECT state FROM tenant_test_public_consents
+                    WHERE consent_id=? AND account_id=?""",(appr,aid)).fetchone()
+                self.assertEqual(row["state"],"REVOKED")
+            with self.assertRaises(safety.SafetyGateDenied):
                 self.consent.assert_confirmed(self.sa["token"],aid,appr)
             with self.assertRaises(safety.SafetyGateDenied):
                 self.safety.require_ready(self.ua,aid)
@@ -259,7 +263,7 @@ class OfflinePublicControlsTests(unittest.TestCase):
         self.assertFalse(wire.NETWORK_ENABLED)
         with self.assertRaises(PermissionError):
             self.readiness.enable_public(self.sa["token"],self.a1)
-        with self.assertRaises(consent.OfflineConsentDenied):
+        with self.assertRaises(tenant_foundation.TenantAccessError):
             self.readiness.assess(self.sb["token"],self.a1,approval)
 
     def test_revoked_connection_and_disabled_user_deny_all_operations(self):
