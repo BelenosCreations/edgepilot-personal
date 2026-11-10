@@ -46,6 +46,12 @@ class AccountScopedReadOnlyUiTests(unittest.TestCase):
         self.assertIn('el("connectionChoice").replaceChildren()',js)
         # Both logout and new authenticated session reset UI state.
         self.assertGreaterEqual(js.count("clearReadOnly();"),2)
+        self.assertIn("let identityViewGeneration = 0",js)
+        self.assertIn("identityViewGeneration += 1",js)
+        self.assertIn("startedGeneration !== identityViewGeneration",js)
+        self.assertIn("requestGeneration !== identityViewGeneration",js)
+        # Async Public account/connection reads must reject stale completions.
+        self.assertGreaterEqual(js.count("generation !== identityViewGeneration"),4)
 
     def test_backend_only_discloses_sanitized_verified_account_scoped_data(self):
         from engine import tenant_public_live_readonly
