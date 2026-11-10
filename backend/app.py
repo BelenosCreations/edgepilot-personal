@@ -9,7 +9,7 @@ from urllib.parse import quote
 import requests
 from flask import Flask, jsonify, request, send_from_directory, g
 from dotenv import load_dotenv
-from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, tenant_registration, tenant_passkeys, account_scope, tenant_monitor_blueprint, tenant_public_vault, tenant_public_live_readonly
+from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, tenant_registration, tenant_passkeys, account_scope, tenant_monitor_blueprint, tenant_watchlist, tenant_public_vault, tenant_public_live_readonly
 ROOT=Path(__file__).parent; load_dotenv(ROOT/'.env'); DB=Path(os.getenv('EDGE_DB_PATH',str(ROOT/'edgepilot.db'))); DB.parent.mkdir(parents=True,exist_ok=True)
 app=Flask(__name__,static_folder='static',static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # CSV/history research limit
@@ -51,6 +51,7 @@ tenant_signup_enabled=os.getenv('EDGE_TENANT_SIGNUP_ENABLED','false').lower()=='
 tenant_passkeys_enabled=os.getenv('EDGE_TENANT_PASSKEYS_ENABLED','false').lower()=='true'
 tenant_read_enabled=os.getenv('EDGE_TENANT_ACCOUNT_READS_ENABLED','false').lower()=='true'
 tenant_monitor_preview_enabled=os.getenv('EDGE_TENANT_MONITOR_PREVIEW_ENABLED','false').lower()=='true'
+tenant_watchlist_edit_enabled=os.getenv('EDGE_TENANT_WATCHLIST_EDIT_ENABLED','false').lower()=='true'
 tenant_public_vault_enabled=os.getenv('EDGE_TENANT_PUBLIC_VAULT_ENABLED','false').lower()=='true'
 tenant_public_read_enabled=os.getenv('EDGE_TENANT_PUBLIC_READONLY_ENABLED','false').lower()=='true'
 if identity_auth_enabled and not tenant_schema_enabled:
@@ -63,6 +64,8 @@ if tenant_read_enabled and not identity_auth_enabled:
     raise RuntimeError('Tenant account reads require identity authentication')
 if tenant_monitor_preview_enabled and not tenant_read_enabled:
     raise RuntimeError('Tenant monitor preview requires account-scoped identity reads')
+if tenant_watchlist_edit_enabled and not tenant_monitor_preview_enabled:
+    raise RuntimeError('Tenant watchlist editing requires inactive monitoring preview')
 if tenant_public_vault_enabled and not identity_auth_enabled:
     raise RuntimeError('Tenant Public vault requires identity authentication')
 if tenant_public_read_enabled and not (tenant_public_vault_enabled and tenant_read_enabled):
@@ -72,6 +75,7 @@ tenant_registration_store=None
 tenant_passkey_store=None
 tenant_account_store=None
 tenant_monitor_planner=None
+tenant_watchlist_editor=None
 tenant_connection_vault=None
 tenant_public_reader=None
 if tenant_schema_enabled:
@@ -93,6 +97,8 @@ if tenant_schema_enabled:
             tenant_account_store=account_scope.AccountScopeStore(str(DB),identity_store)
             if tenant_monitor_preview_enabled:
                 tenant_monitor_planner=tenant_monitor_blueprint.DormantAccountMonitorPlanner(str(DB))
+                if tenant_watchlist_edit_enabled:
+                    tenant_watchlist_editor=tenant_watchlist.TenantWatchlistEditor(str(DB),identity_store)
         if tenant_public_vault_enabled:
             tenant_public_vault.setup(str(DB))
             tenant_connection_vault=tenant_public_vault.TenantPublicVault(str(DB),identity_store)
@@ -382,6 +388,27 @@ def identity_monitor_preview(account_id):
         return fail('Account unavailable',404)
 
 
+# Account-scoped watchlist settings are NOT a scheduler or worker activation.
+# Authenticated identity and CSRF are independently revalidated under the
+# database write lock before any change, including revocation-race protection.
+@app.put('/api/identity/accounts/<account_id>/monitor/watchlist')
+def identity_monitor_watchlist(account_id):
+    if not tenant_watchlist_edit_enabled:
+        return fail('Not found',404)
+    body=request.get_json(silent=True)
+    if not isinstance(body,dict) or set(body)!={'symbols'}:
+        return fail('Invalid watchlist',400)
+    try:
+        return tenant_watchlist_editor.replace(
+            request.cookies.get(identity_auth.COOKIE_NAME,''),
+            request.headers.get('X-Edge-Identity-CSRF',''),
+            account_id,body['symbols'])
+    except tenant_watchlist.WatchlistInvalid:
+        return fail('Invalid watchlist',400)
+    except tenant_watchlist.WatchlistDenied:
+        return fail('Account unavailable',404)
+
+
 # Identity-only Public key storage. Never sends a broker request and never
 # returns plaintext or encrypted credentials to the client.
 @app.get('/api/identity/public/connections')
@@ -545,7 +572,7 @@ def healthz():
     return {'ok':True}
 
 @app.get('/api/health')
-def health(): return {'ok':True,'version':'0.2.32-monitor-preview-opt-in','time':datetime.now(timezone.utc).isoformat()}
+def health(): return {'ok':True,'version':'0.2.33-account-watchlist-edit-opt-in','time':datetime.now(timezone.utc).isoformat()}
 def token():
     global cached_token,expires
     with lock:

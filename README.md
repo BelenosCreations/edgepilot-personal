@@ -6,7 +6,14 @@ EdgePilot is a personal trading-intelligence platform designed to bring brokerag
 
 The goal is not simply to display prices or place trades. EdgePilot is intended to provide a traceable decision system: understand what the broker actually reported, distinguish observation from simulated results, evaluate a strategy against costs and risk, and refuse activity when data or authorization is uncertain.
 
-> **Development status:** The repository is currently developing **v0.2.32**. The existing owner-facing application supports brokerage research and experimental Observe/Paper modes; **real brokerage order submission, autonomous live trading, and bank transfers remain disabled**. A separate, gated multi-user identity platform now includes invitation registration, individually encrypted Public connections, read-only account integration, and WebAuthn passkey endpoints. An Android-capable passkey account screen provides owner-scoped Public account discovery, verified read-only linking, sanitized portfolio views, and an independently gated **inactive** monitoring-plan preview. Actual multi-device biometric sign-in, account-specific running workers, and live multi-user acceptance are not yet verified. See [CHANGELOG.md](CHANGELOG.md) for release history, and [DEVELOPMENT_CONTINUITY.md](DEVELOPMENT_CONTINUITY.md) for a durable new-conversation development checkpoint.
+> **Development status:** The repository is currently developing **v0.2.33**. The existing owner-facing application supports brokerage research and experimental Observe/Paper modes; **real brokerage order submission, autonomous live trading, and bank transfers remain disabled**. A separate, gated multi-user identity platform now includes invitation registration, individually encrypted Public connections, read-only account integration, and WebAuthn passkey endpoints. An Android-capable passkey account screen provides owner-scoped Public account discovery, verified read-only linking, sanitized portfolio views, an independently gated **inactive** monitoring-plan preview, and per-account watchlist editing that cannot activate any scanner, trade, or fund transfer. Actual multi-device biometric sign-in, account-specific running workers, and live multi-user acceptance are not yet verified. See [CHANGELOG.md](CHANGELOG.md) for release history, and [DEVELOPMENT_CONTINUITY.md](DEVELOPMENT_CONTINUITY.md) for a durable new-conversation development checkpoint.
+
+The shared-user development path now includes strict owner-scoped account watchlists:
+each member can save a validated stock-symbol list for a linked account without
+touching another account or starting any monitor. The preview and editing APIs
+are separately disabled by default. See
+[TENANT_WATCHLIST_EDIT_RUNBOOK.md](TENANT_WATCHLIST_EDIT_RUNBOOK.md) for the
+security and operational requirements.
 
 ## The project vision
 
