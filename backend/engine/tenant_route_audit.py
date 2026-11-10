@@ -75,6 +75,7 @@ def inspect_sources(app_source,worker_source):
         "tenant_public_safety_state", "tenant_public_offline_consent",
         "tenant_public_synthetic_rotation", "tenant_public_connection_readiness",
         "tenant_public_durable_safety_rehearsal",
+        "tenant_public_offline_work_gate",
     )):
         raise ApiBoundaryError("Dormant historical store exposed in legacy HTTP app")
     if ("appmod.selected_account()" not in worker_source or
@@ -99,7 +100,8 @@ def inspect_sources(app_source,worker_source):
             "tenant_public_offline_consent" in worker_source or
             "tenant_public_synthetic_rotation" in worker_source or
             "tenant_public_connection_readiness" in worker_source or
-            "tenant_public_durable_safety_rehearsal" in worker_source):
+            "tenant_public_durable_safety_rehearsal" in worker_source or
+            "tenant_public_offline_work_gate" in worker_source):
         raise ApiBoundaryError("Legacy worker authorization surface changed")
     legacy={r for r in routes if r not in identity}
     if not legacy:
@@ -126,6 +128,7 @@ def inspect_sources(app_source,worker_source):
         "publicHTTPSAdapterConnectedToProduction":False,
         "emergencyStopIsSyntheticOnly":True,
         "publicSafetyAndConsentActiveInProduction":False,
+        "offlineSyntheticWorkGateMountedInProduction":False,
         "productionKillSwitchDeployed":False,
         "productionPublicRotationEnabled":False,
         "realPublicAuthorizationGranted":False,
