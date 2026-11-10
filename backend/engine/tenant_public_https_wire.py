@@ -159,7 +159,10 @@ def _perform_with_connection(req,conn):
         raw=response.read(MAX_JSON_BYTES+1)
         if len(raw)>MAX_JSON_BYTES:
             raise PublicWireDenied("PAYLOAD_TOO_LARGE")
-        body=json.loads(raw.decode("utf-8"),object_pairs_hook=_pairs_unique)
+        try:
+            body=json.loads(raw.decode("utf-8"),object_pairs_hook=_pairs_unique)
+        except (ValueError,UnicodeError):
+            raise PublicWireDenied("INVALID_RESPONSE") from None
         if not isinstance(body,dict):
             raise PublicWireDenied("INVALID_RESPONSE")
         return WireReply(body)
