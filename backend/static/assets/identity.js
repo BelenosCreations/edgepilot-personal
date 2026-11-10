@@ -94,6 +94,7 @@
     el("holdings").replaceChildren();
     el("discoveryInfo").textContent = "";
     el("portfolioSummary").textContent = "";
+    el("monitorPlanInfo").textContent = "";
     el("connectionInfo").textContent = "";
   }
   async function showSession() {
@@ -152,6 +153,7 @@
     items.replaceChildren();
     el("holdings").replaceChildren();
     el("portfolioSummary").textContent = "";
+    el("monitorPlanInfo").textContent = "";
     try {
       const data = await api("/accounts");
       if (generation !== identityViewGeneration) return;
@@ -197,6 +199,25 @@
           }
         }));
         li.appendChild(button);
+        const previewButton = document.createElement("button");
+        previewButton.type = "button";
+        previewButton.textContent = "Preview inactive monitor";
+        previewButton.addEventListener("click", () => action(async () => {
+          const requestGeneration = identityViewGeneration;
+          const plan = await api("/accounts/" + encodeURIComponent(id) + "/monitor/preview");
+          if (requestGeneration !== identityViewGeneration) return;
+          if (plan.accountId !== id || plan.readOnly !== true ||
+              plan.simulatedPlanOnly !== true || plan.mode !== "observe" ||
+              plan.scheduled !== false || plan.workerActive !== false ||
+              plan.brokerRequestsAllowed !== false || plan.paperEnabled !== false ||
+              plan.liveTradingEnabled !== false || !Array.isArray(plan.watchlist)) {
+            throw new Error("Inactive monitor plan rejected");
+          }
+          el("monitorPlanInfo").textContent = String(account.label || "Public account") +
+            " · watchlist: " + (plan.watchlist.join(", ") || "none") +
+            " · inactive preview only; no scans, broker requests or orders";
+        }));
+        li.appendChild(previewButton);
         items.appendChild(li);
       }
     } catch (error) {
