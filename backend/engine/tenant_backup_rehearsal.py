@@ -8,7 +8,7 @@ Fernet key, not EdgePilot's Public credential encryption key.
 
 Restore destroys saved login sessions, pending WebAuthn challenges,
 unredeemed invitations and worker leases. It also quarantines ALL Public
-connections and linked accounts: an older backup must never resurrect a key
+connections, linked accounts and registered passkeys: an older backup must never resurrect a key
 that was revoked after the snapshot. No real provider reconnect is possible.
 """
 from __future__ import annotations
@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 import os
 from pathlib import Path
 import sqlite3
+import time
 import tempfile
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -168,6 +169,12 @@ def restore_sealed_fixture(token, archive_key, destination_path):
                 SET disabled_at=COALESCE(disabled_at,?)""",(quarantined_at,))
             restored.execute("""UPDATE tenant_connections
                 SET revoked_at=COALESCE(revoked_at,?)""",(quarantined_at,))
+            # A backup can also predate a passkey revocation. Public-key
+            # credentials retain forensic provenance but can no longer sign
+            # in until the user enrolls fresh authenticators.
+            if "tenant_passkey_credentials" in tables:
+                restored.execute("""UPDATE tenant_passkey_credentials
+                    SET revoked_at=COALESCE(revoked_at,?)""",(int(time.time()),))
             _check_contents(restored,require_quiescent=True)
             restored.commit()
         return target
