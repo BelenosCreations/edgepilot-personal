@@ -79,6 +79,16 @@
         <button id="signOut" type="button">Sign out</button>
         <small id="passkeyInfo">Use a fingerprint, face unlock, or device screen lock through your credential provider. EdgePilot stores no biometric templates.</small>
       </div>
+      <form id="passwordChangeForm" class="panel">
+        <h2>Account security</h2>
+        <p class="muted">Change your EdgePilot password using the current password. This signs out every device currently signed in to your EdgePilot account. It does not modify your Public brokerage key or remove your passkeys.</p>
+        <label for="currentEdgePilotPassword">Current EdgePilot password</label>
+        <input id="currentEdgePilotPassword" type="password" autocomplete="current-password" required maxlength="128">
+        <label for="replacementEdgePilotPassword">New EdgePilot password (14–128 characters)</label>
+        <input id="replacementEdgePilotPassword" type="password" autocomplete="new-password" required minlength="14" maxlength="128">
+        <button id="changeEdgePilotPassword" type="submit">Change password and sign out devices</button>
+        <small>This requires your current password; forgotten-password recovery is not available yet. Never enter a Public API key here.</small>
+      </form>
       <form id="publicKeyForm" class="panel">
         <h2>Your Public connection</h2>
         <p class="muted">Connect your own Public brokerage account. Your API secret is encrypted separately on the server and is never displayed after saving.</p>
