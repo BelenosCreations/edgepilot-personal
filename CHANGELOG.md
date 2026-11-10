@@ -1,3 +1,8 @@
+## Operational Android website association configuration — 2026-11-10
+**Observed:** Owner's first real-phone HTTPS check returned `{"error":"Not found"}` from EdgePilot's intended fail-closed Digital Asset Links route.
+**Configured:** Extracted and cross-checked the public signing certificate in both v2 and v3 APK signing blocks of the privately verified APK. Updated only Render's `EDGE_ANDROID_CERT_SHA256` variable through a merge operation; deployment `dep-dbppig56e07s73b34d1g` reported `live`.
+**Open verification:** Fresh public `/.well-known/assetlinks.json` HTTP response on the real domain, Android app-to-site association and passkey biometric sign-in are not yet verified. Separate identity and Public credentials remain default-disabled; no real trading or transfer permissions changed. No private certificates, tokens or passwords were exposed.
+
 ## Owner-reported Android installation smoke test — 2026-11-10
 **Verified by owner:** The permanent-signing test APK from GitHub workflow #42888113943 (attempt 2) was downloaded to the owner's Android phone, installed after checking recovery of the existing EdgePilot owner token, and the user reported a successful login to the legacy EdgePilot dashboard.
 **Evidence boundary:** This is user-reported one-device installation/login, not a device-level signing-certificate measurement, Android Digital Asset Links verification, WebAuthn registration/authentication, new per-user EdgePilot login, or independent two-device brokerage acceptance. The signed-build CI artifact has already been validated independently. No real broker orders, transfers, auth flags or production secrets changed.

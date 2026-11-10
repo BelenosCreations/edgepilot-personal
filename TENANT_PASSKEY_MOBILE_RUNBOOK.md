@@ -41,6 +41,27 @@ It must return the expected package name and matching SHA-256 value. Do not
 claim biometrics work until verified on the intended device with a provider
 that supports passkeys.
 
+## Live Render association configuration checkpoint — November 10, 2026
+
+A permanent-signed v0.19.17 APK was successfully built (workflow
+#42888113943, attempt 2), and the owner reported it installed and
+logged into the legacy dashboard on their current Android phone.
+The first manual visit to /.well-known/assetlinks.json correctly returned
+`{"error":"Not found"}` while the signing-fingerprint environment
+variable was not set. The APK's Android v2 and v3 signature blocks were
+independently checked and shown to contain the same public X.509 signing
+certificate. Only `EDGE_ANDROID_CERT_SHA256` was configured in Render;
+deployment `dep-dbppig56e07s73b34d1g` reported `live`.
+
+**Outstanding external test:** Reload the exact HTTPS association URL
+and verify it responds with a JSON array using
+`delegate_permission/common.get_login_creds`, package
+`com.edgepilot.mobile`, and the same SHA-256 as the installed APK.
+This is a prerequisite, not proof of passkey support or functioning
+Android Credential Manager. The tenant identity/passkey routes are still
+disabled by default and must not be enabled broadly on the legacy
+production account. See MULTIUSER_PLATFORM_ACCEPTANCE.md.
+
 ## End-to-end validation plan
 
 1. Verify the app is signed and website association validates.
