@@ -22,4 +22,6 @@ jobs:
       - name: Compile backend sources
         run: python -m compileall -q backend
       - name: Validate browser JavaScript
-        run: node --check backend/static/assets/app.js
+        run: |
+          node --check backend/static/assets/app.js
+          node --check backend/static/assets/identity.js
