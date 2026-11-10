@@ -40,6 +40,12 @@ class TwoTenantEncryptedRestoreTests(unittest.TestCase):
         self.bob_session=self.login.authenticate(
             "restore_bob","example-bob-password-long-v039","phone-b")
         with sqlite3.connect(self.path) as con:
+            con.execute("""INSERT INTO tenant_passkey_credentials
+                (credential_id,user_id,public_key,sign_count,device_type,
+                 backed_up,created_at)
+                VALUES(?,?,?,?,?,?,?)""",
+                (b"fake-passkey-credential-a",self.a,b"test-only-public-key",
+                 0,"single_device",0,100))
             con.execute("""INSERT INTO tenant_passkey_challenges
                 (token_hash,operation,user_id,challenge,expires_at,rp_id,origin)
                 VALUES(?,?,?,?,?,?,?)""",
@@ -96,6 +102,11 @@ class TwoTenantEncryptedRestoreTests(unittest.TestCase):
             self.assertEqual(len(state),2)
             self.assertEqual({r[0] for r in state},{self.a,self.b})
             self.assertTrue(all(r[1] and r[2] for r in state))
+            passkeys=con.execute("""SELECT user_id,revoked_at
+                FROM tenant_passkey_credentials""").fetchall()
+            self.assertEqual(len(passkeys),1)
+            self.assertEqual(passkeys[0][0],self.a)
+            self.assertIsNotNone(passkeys[0][1])
             self.assertEqual({uid:Fernet(self.vault_key).decrypt(blob).decode()
                               for uid,blob in rows},
                 {self.a:"SYNTHETIC-ONLY-NOT-REAL-PUBLIC-ALICE-123",
