@@ -191,6 +191,17 @@ license, third-party key, data redistribution, hardware login, live broker
 access, subscription or payment acceptance is established. The original
 two-device/two-independently owned-Public-account criterion remains open.
 
+## v0.2.48 — No implied predictive performance or permission to trade
+
+A separate, non-networked evaluator can compare matching synthetic
+pre-settlement binary forecasts and measured optional-AI microUSD costs,
+but its Brier-score improvement is descriptive only, and independent
+data-source validation is not established by test fixtures. There is
+no claim of real accuracy, ROI, after-fee profit, risk-adjusted alpha,
+ongoing monitoring, subscription activation or a working trading bot.
+The two physical independent Android users/Public accounts remain the
+acceptance gate for this development phase.
+
 ## Milestone acceptance criteria — not complete until verified
 
 - Two separately provisioned EdgePilot users can register and sign in from
