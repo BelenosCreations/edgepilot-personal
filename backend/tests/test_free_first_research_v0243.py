@@ -178,7 +178,7 @@ class ResearchCoreTests(unittest.TestCase):
                 "at": (start + timedelta(days=day)).isoformat(),
                 "close": str(100 + day)
             })
-        result=research.chronological_momentum(bars, lookback=5)
+        result=research.chronological_momentum(bars, now=NOW, lookback=5)
         self.assertEqual(result["signal"], "positive-momentum")
         self.assertEqual(result["aiCalls"], 0)
         self.assertFalse(result["tradeAllowed"])
@@ -189,11 +189,13 @@ class ResearchCoreTests(unittest.TestCase):
             bars[:-1] + [{"at": bars[-1]["at"], "close": "NaN"}],
         ]:
             with self.assertRaises(research.ResearchUnavailable):
-                research.chronological_momentum(invalid)
+                research.chronological_momentum(invalid, now=NOW)
         with self.assertRaises(research.ResearchUnavailable):
-            research.chronological_momentum(bars[:6])
+            research.chronological_momentum(bars[:6], now=NOW)
         with self.assertRaises(research.ResearchUnavailable):
-            research.chronological_momentum(bars, lookback=0)
+            research.chronological_momentum(bars, now=NOW, lookback=0)
+        with self.assertRaises(research.ResearchUnavailable):
+            research.chronological_momentum(bars, now="2026-10-05T00:00:00Z")
 
 
 if __name__ == "__main__":
