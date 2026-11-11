@@ -1,3 +1,28 @@
+## CURRENT checkpoint — v0.2.59 (follows verified v0.2.58), November 11, 2026
+
+v0.2.58 merged via PR #78 with passing PR and post-merge GitHub tests;
+the same commit auto-deployed **live** on the existing paid Render Starter
+service. The separate `edgepilot-tenants.db` remains configuration-gated;
+default Render environment must not be described as an activated migration.
+Neither legacy owner data nor keys were moved.
+
+v0.2.59 is a distinct new development milestone. It adds a default-off
+`EDGE_PERMANENT_TENANTS_ONLY` routing option that can retire legacy
+owner HTTP APIs after safe migration and recovery, without allowing
+identity cookies to become owner cookies. The optional production
+signed-app WebAuthn origin is independently gated to the pinned real
+production Android certificate, exact owned RP, tenant-only identity
+and separate DB. There are new negative tests and a standalone runbook.
+Default production behavior, owner APK, credentials and paid resources
+are unchanged. Verify exact PR and merged-main CI before any merge.
+
+The next operational gate remains a fresh encrypted backup/restore
+checkpoint, owner identity recovery and controlled shared-disk split
+preparation. Do not enable tenant-only mode until the owner can sign
+into the migrated identity; do not accept legacy tokens as tenant IDs,
+enable any live order/transfer, claim a second physical device, or buy
+additional hosting.
+
 ## CURRENT checkpoint — v0.2.58, November 11, 2026
 
 **New explicit architecture approval:** Use the existing paid Starter Render

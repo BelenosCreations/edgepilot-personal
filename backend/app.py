@@ -16,6 +16,7 @@ ROOT=Path(__file__).parent; load_dotenv(ROOT/'.env')
 staging_isolation.validate(os.environ)
 DB=Path(os.getenv('EDGE_DB_PATH',str(ROOT/'edgepilot.db')))
 TENANT_DB=shared_storage_cutover.select_tenant_database(os.environ,DB)
+TENANT_POLICY=shared_storage_cutover.permanent_identity_policy(os.environ,DB,TENANT_DB)
 # A live paid /data deployment must never initialize tenant identities in the
 # legacy owner file. Existing local/offline tests retain the historic default.
 if (TENANT_DB == DB and DB.parent == shared_storage_cutover.PERSISTENT_ROOT
@@ -127,7 +128,7 @@ if tenant_schema_enabled:
                 staging_android_cert_sha256=(
                     os.getenv('EDGE_ANDROID_CERT_SHA256','')
                     if os.getenv('EDGE_ISOLATED_STAGING','false').lower()=='true'
-                    else None))
+                    else TENANT_POLICY['android_signer_sha256']))
         if tenant_read_enabled:
             account_scope.setup(str(TENANT_DB))
             tenant_account_store=account_scope.AccountScopeStore(str(TENANT_DB),identity_store)
@@ -166,6 +167,11 @@ def same_origin_request():
 def authenticate():
     if not request.path.startswith('/api/'):
         return
+    # Permanent tenant-only mode retires all legacy owner API entry points,
+    # including old login/session and global account/worker/order routes.
+    # Identity cookies were already independent and cannot bypass this gate.
+    if TENANT_POLICY['tenant_only'] and not request.path.startswith('/api/identity/'):
+        return fail('Not found',404)
     # All state-changing endpoints, including login, require same-origin browser calls.
     if request.method in ('POST','PUT','PATCH','DELETE') and not same_origin_request():
         return fail('Same-origin request required',403)
@@ -639,7 +645,8 @@ def logout():
 def index():
     # Keep the owner dashboard exactly as-is, but open the independent
     # identity interface by default on the staging-only Android package.
-    if os.getenv('EDGE_ISOLATED_STAGING','false').lower()=='true':
+    if (os.getenv('EDGE_ISOLATED_STAGING','false').lower()=='true' or
+            TENANT_POLICY['tenant_only']):
         return redirect('/account',code=302)
     return send_from_directory(ROOT/'static','index.html')
 
