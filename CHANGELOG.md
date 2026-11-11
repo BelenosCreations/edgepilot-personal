@@ -1,3 +1,8 @@
+## v0.2.69 — 2026-11-11 — Android-safe one-time first-owner bootstrap input
+**Changed:** Console bootstrap retains hidden password input but refuses blank, mismatched or invalid-length entries *before* final approval and any database write. The fixed nonsecret authorization phrase uses a visible terminal prompt with exact-match enforcement, and CLI displays only code-authored sanitized refusal reasons.
+**Tests:** Synthetic Android empty-input, mismatched/short password, blank approval, valid exact visible approval, no password disclosure and existing-tenant denial. Atomic first-owner provisioning and legacy data isolation remain unchanged.
+**Operator state:** Existing paid Render tenant storage was successfully initialized; schema preflight and zero-member owner readiness both passed. First owner creation was attempted but not confirmed. No production identity flags, Public migration, orders or transfers enabled. See FIRST_OWNER_MOBILE_INPUT_V0269.md.
+
 ## v0.2.68 — 2026-11-11 — Nonsecret stage-coded permanent tenant initializer diagnostics
 **Fixed:** The manual private tenant initializer previously returned one generic failure for every denied staging step. It now emits a fixed, sanitized phase identifier for blocked runtime flags, disk validation, legacy rechecks, staging/schema creation, isolated integrity, no-replace publication, or temporary-file cleanup. No exception text, environment values, file contents or account identifiers are printed.
 **Tests:** Synthetic errors carrying sensitive strings in tenant schema, identity schema and exclusive publication; verify exact safe stage codes, no leak, no owner mutation and removal of staging artifacts. Existing security and no-overwrite tests remain intact.
