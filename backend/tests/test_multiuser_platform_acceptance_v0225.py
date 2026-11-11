@@ -21,7 +21,7 @@ class SharedBackendArchitectureGates(unittest.TestCase):
         source = (ROOT / "backend/engine/tenant_passkeys.py").read_text(encoding="utf-8")
         for required in (
             "verify_registration_response(", "verify_authentication_response(",
-            "expected_rp_id=self.rp_id", "expected_origin=self.origin",
+            "expected_rp_id=self.rp_id", "expected_origin=self.allowed_origins",
             "require_user_verification=True", "ResidentKeyRequirement.REQUIRED",
             "UserVerificationRequirement.REQUIRED",
             "identity_store.principal(",
