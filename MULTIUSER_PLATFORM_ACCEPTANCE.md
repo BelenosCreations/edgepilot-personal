@@ -262,3 +262,18 @@ Routine code development, tests, pull-request merges and Render deploys are
 authorized as part of this approved development phase. A feature question
 alone does not authorize implementation; this multi-user goal is explicitly
 approved. Major out-of-scope features still require confirmation.
+
+
+## v0.2.52 — Backend staging live, acceptance remains open
+
+A separate Render **Free** backend now exists and starts normally
+with fail-closed staging settings and no owner/Public secrets.
+The public signer from the archived owner APK was verified and is
+configured for the distinct planned staging Android package.
+This is **not** complete acceptance: custom staging DNS/TLS is
+unverified, staging APK is not installed, passkeys were not tested
+on real devices, invitation provisioning is still blocked by the
+Free service's no-shell constraint, storage is disposable, and
+independent real Public accounts have not been linked. No new live
+trading or payment authorization. See
+STAGING_RENDER_LIVE_CHECKPOINT.md.
