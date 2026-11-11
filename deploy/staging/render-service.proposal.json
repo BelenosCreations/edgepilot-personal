@@ -1,0 +1,99 @@
+{
+  "_purpose": "PROPOSAL ONLY. NOT an auto-applied Render Blueprint. Verify hostname/TLS, public cert and costs before creation.",
+  "name": "edgepilot-passkey-staging",
+  "runtime": "docker",
+  "repo": "https://github.com/BelenosCreations/edgepilot-personal",
+  "branch": "main",
+  "autoDeploy": "no",
+  "plan": "free",
+  "region": "ohio",
+  "dockerContext": "./backend",
+  "dockerfilePath": "./backend/Dockerfile",
+  "candidateCustomHostname": "staging-edgepilot.belenoscreations.biz",
+  "envVars": [
+    {
+      "key": "EDGE_DB_PATH",
+      "value": "/tmp/edgepilot-staging.db"
+    },
+    {
+      "key": "EDGE_ISOLATED_STAGING",
+      "value": "true"
+    },
+    {
+      "key": "EDGE_WEBAUTHN_RP_ID",
+      "value": "staging-edgepilot.belenoscreations.biz"
+    },
+    {
+      "key": "EDGE_WEBAUTHN_ORIGIN",
+      "value": "https://staging-edgepilot.belenoscreations.biz"
+    },
+    {
+      "key": "EDGE_ANDROID_ASSOCIATION_PACKAGE",
+      "value": "com.edgepilot.mobile.staging"
+    },
+    {
+      "key": "EDGE_ANDROID_CERT_SHA256",
+      "value": "REQUIRES_VERIFIED_PUBLIC_CERT_BEFORE_DEPLOY"
+    },
+    {
+      "key": "EDGE_TENANT_SCHEMA_PREPARE",
+      "value": "true"
+    },
+    {
+      "key": "EDGE_IDENTITY_AUTH_ENABLED",
+      "value": "true"
+    },
+    {
+      "key": "EDGE_TENANT_SIGNUP_ENABLED",
+      "value": "true"
+    },
+    {
+      "key": "EDGE_TENANT_PASSKEYS_ENABLED",
+      "value": "true"
+    },
+    {
+      "key": "EDGE_TENANT_PASSWORD_CHANGE_ENABLED",
+      "value": "false"
+    },
+    {
+      "key": "EDGE_TENANT_SESSION_CONTROLS_ENABLED",
+      "value": "false"
+    },
+    {
+      "key": "EDGE_AUTOMATION_WORKER_ENABLED",
+      "value": "false"
+    },
+    {
+      "key": "ENABLE_LIVE_ORDERS",
+      "value": "false"
+    },
+    {
+      "key": "EDGE_TENANT_PUBLIC_VAULT_ENABLED",
+      "value": "false"
+    },
+    {
+      "key": "EDGE_TENANT_PUBLIC_READONLY_ENABLED",
+      "value": "false"
+    },
+    {
+      "key": "EDGE_TENANT_ACCOUNT_READS_ENABLED",
+      "value": "false"
+    },
+    {
+      "key": "EDGE_TENANT_MONITOR_PREVIEW_ENABLED",
+      "value": "false"
+    },
+    {
+      "key": "EDGE_TENANT_WATCHLIST_EDIT_ENABLED",
+      "value": "false"
+    }
+  ],
+  "blockedUntil": [
+    "Render billing/usage limit review and explicit approval before any potential additional charges",
+    "Staging custom DNS and HTTPS certificate confirmed separately from production",
+    "Real public APK signing certificate fingerprint verified against signed staging build",
+    "Separate two-device synthetic identity invitation provisioning procedure checked",
+    "No production app token, Public secret, encryption master key, disk or user data copied"
+  ],
+  "serviceCreationApprovedByThisFile": false
+}
