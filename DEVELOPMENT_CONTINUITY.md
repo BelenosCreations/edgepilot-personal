@@ -486,3 +486,38 @@ signed-APK certificate. No new service, DNS or signed staging app
 was created. Physical biometric/two-device independent Public
 account acceptance remains incomplete. Resume from latest verified
 merge/CI, not conversation claims.
+
+
+## v0.2.52 — Separate Free staging instance created, not yet hardware-ready
+
+With explicit user approval following a Render Billing screenshot,
+created `edgepilot-passkey-staging` (`srv-dbpupj2jnfac73ehv1v0`)
+under the confirmed workspace, `plan=free`, auto-deploy off, no disk,
+Ohio, Docker context `backend`, Dockerfile `backend/Dockerfile`,
+main commit `2a53250924c90d350a58ad84f966e08e521b9185`.
+Initial deploy `dep-dbpupjajnfac73ehv2og` reported `live`;
+Render logs show Gunicorn running and build/deploy events succeeded.
+Original owner service `edgepilot-private-h9tl` is unchanged.
+
+Independently extracted **public** SHA-256 signer certificate from the
+archived signed v0.19.17 GitHub APK, correcting an old configuration
+typo in the preliminary fingerprint: the correct value contains
+`...4A:F5:6E:A7...`, not `...4A:F5:6F:A7...`. The current staging
+Render environment uses the correct verified signer for
+`com.edgepilot.mobile.staging`. The private signing keystore or
+password was never accessed, copied or committed. Runtime has its
+own /tmp DB, no Public/owner credentials, no trading/broker workers.
+
+**Blockers to finish this stage:** Owner must add the distinct custom
+hostname to this staging service in Render, and a separate CNAME
+`staging-edgepilot` -> `edgepilot-passkey-staging.onrender.com`
+in Squarespace; verify TLS and staging-only Digital Asset Links.
+No Render connector action for custom domain or Squarespace DNS
+was available. Do not change production DNS. Free instances have no
+shell/one-off jobs, so trusted staging-only invitation provisioning
+must be designed before the two independent real-device ceremonies.
+Then run manual staging-signed Android workflow, verify package/
+cert/host, two physical devices and eventually independently allowed
+read-only Public accounts on durable storage under separate approval.
+No new paid plan, disk, live brokerage or bank transfers approved.
+For precise evidence and steps read STAGING_RENDER_LIVE_CHECKPOINT.md.

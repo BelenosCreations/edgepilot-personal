@@ -143,3 +143,18 @@ staging-edgepilot.belenoscreations.biz has not been DNS/TLS-verified.
 Do not copy production credentials, enable real brokerage reads,
 create a paid instance, change the original app or claim physical
 biometric acceptance based only on static tests.
+
+
+## v0.2.52 — Staging Free backend actually live
+
+After the owner's Render billing/Free-plan review, the separate
+`edgepilot-passkey-staging` backend was created on Render Free with
+auto-deploy off, no paid disk or secrets and a /tmp synthetic DB.
+Its initial deploy and Gunicorn startup succeeded on November 10
+Eastern time. See STAGING_RENDER_LIVE_CHECKPOINT.md for the
+service ID, verified public certificate fingerprint, no-cost
+usage constraints and one-time Squarespace CNAME + Render TLS
+verification instructions. This **updates** the prior
+`not deployed` status above; DNS, signed staging APK and hardware
+passkey trials are still open. Do not use the Render default
+`onrender.com` host for WebAuthn relying-party association.
