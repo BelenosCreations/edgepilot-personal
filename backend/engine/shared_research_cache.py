@@ -176,7 +176,8 @@ class SharedResearchCache:
         """
         current = _current(now)
         if (not isinstance(account_id, str) or not 1 <= len(account_id) <= 128 or
-                type(asset_class) is not str or\n                asset_class not in READABLE_ACCOUNT_ASSETS):
+                type(asset_class) is not str or
+                asset_class not in READABLE_ACCOUNT_ASSETS):
             raise SharedResearchDenied("Research account unavailable")
         try:
             trusted_rights = _shareable_rights(rights)
