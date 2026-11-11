@@ -356,3 +356,24 @@ Next: independently owner-funded vs per-user BYOK/allowance encrypted
 credentials and tenant budgets; never silently use the owner's
 OpenAI credential for other EdgePilot members. Two physical devices,
 independent Public accounts and Android passkeys remain open.
+
+## v0.2.45 — Dormant member-owned AI funding/vault groundwork
+
+The owner-approved up-to-ten-friends AI strategy now includes a fully
+offline encrypted per-member BYOK preference/budget module. All authority
+derives from independent server-side tenant session and CSRF,
+revalidated inside the SQLite BEGIN IMMEDIATE transaction. Each member's
+mode, analysis depth, own provider key and monthly microUSD cap are
+separate. The module does not import or fall back to legacy owner
+OPENAI_API_KEY or EDGE_APP_TOKEN. It stores encrypted owner-bound provider
+key material under a separate AI encryption key, returns only a configured
+boolean, and enforces a fail-closed per-member cost reserve for simulated
+requests; no payment, OpenAI HTTP call or schedule is activated.
+Managed-credit mode is deliberately refused. Ten-member concurrency
+and owner isolation tests reside in test_tenant_ai_byok_v0245.py.
+
+No Flask routes or production flags have been added to expose this store
+to real users. Future secure key management, rotation and recovery,
+ten-user load, provider billing opt-in, real hardware passkeys and
+real independent Public accounts remain outstanding.
+See TENANT_AI_BYOK_BUDGET_RUNBOOK.md.
