@@ -31,8 +31,12 @@ def main():
             os.environ, legacy, tenant, approval=approval)
         print(json.dumps(result, sort_keys=True))
         return 0
-    except (KeyError, EOFError, KeyboardInterrupt,
-            permanent_storage_init.PrivateStorageInitDenied):
+    except permanent_storage_init.PrivateStorageInitDenied as exc:
+        # The engine only emits vetted nonsecret stage identifiers.
+        print(str(exc), file=sys.stderr)
+        print("No production activation was authorized.", file=sys.stderr)
+        return 2
+    except (KeyError, EOFError, KeyboardInterrupt):
         print("Private tenant storage not prepared or cannot be verified.", file=sys.stderr)
         return 2
 

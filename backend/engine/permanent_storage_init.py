@@ -68,30 +68,36 @@ def prepare_private_tenant_storage(
     """
     if (approval != APPROVAL
             or str(env.get("EDGE_PERMANENT_STORAGE_INIT_ALLOWED", "")) != "true"):
-        raise PrivateStorageInitDenied("Private storage initialization not approved")
+        raise PrivateStorageInitDenied("PRIVATE_STORAGE_APPROVAL_DENIED")
+    phase = "RUNTIME_FLAGS"
     try:
         if any(storage._flag(env, key) for key in DORMANT_FLAGS):
             raise PrivateStorageInitDenied("Storage preparation requires every active feature disabled")
+        phase = "STORAGE_SELECTOR"
         root = storage.PERSISTENT_ROOT if persistent_root is None else Path(persistent_root)
         legacy, target = Path(legacy_path), Path(tenant_path)
         selected = storage.select_tenant_database(
             env, legacy, persistent_root=root)
+        phase = "DISK_LAYOUT"
         if (not root.is_absolute() or not root.is_dir() or root.is_symlink()
                 or selected != root / storage.TENANT_FILENAME
                 or target != selected
                 or legacy != root / storage.LEGACY_FILENAME
                 or not _private_owned(legacy)):
             raise PrivateStorageInitDenied("Unexpected or unprotected paid disk layout")
+        phase = "DESTINATION_EXISTS"
         if target.exists() or target.is_symlink():
             raise PrivateStorageInitDenied("Tenant database exists; nothing will be overwritten")
 
         # This read-only inspection must never run a legacy schema initializer.
+        phase = "LEGACY_READONLY_CHECK"
         preflight._verify_database(
             legacy, preflight.LEGACY_TABLES, frozenset(("tenant_users",)))
         original = legacy.lstat()
         staged = None
         old_umask = os.umask(0o077)
         try:
+            phase = "PRIVATE_STAGE_CREATE"
             fd, temp_name = tempfile.mkstemp(prefix=".edgepilot-tenant-stage-", dir=root)
             staged = Path(temp_name)
             try:
@@ -99,18 +105,24 @@ def prepare_private_tenant_storage(
             finally:
                 os.close(fd)
 
+            phase = "TENANT_SCHEMA_CREATE"
             tenant_foundation.setup(str(staged))
+            phase = "IDENTITY_SCHEMA_CREATE"
             identity_auth.setup(str(staged))
+            phase = "STAGE_PRIVATE_MODE"
             if not _private_owned(staged):
                 raise PrivateStorageInitDenied("Tenant staging permissions invalid")
+            phase = "TENANT_READONLY_CHECK"
             members = preflight._verify_database(staged, TENANT_REQUIRED, TENANT_FORBIDDEN)
             if members != 0:
                 raise PrivateStorageInitDenied("Tenant staging must contain zero members")
+            phase = "EMPTY_IDENTITY_CHECK"
             with sqlite3.connect(staged.as_uri() + "?mode=ro", uri=True) as db:
                 if db.execute("SELECT COUNT(*) FROM tenant_identities").fetchone()[0]:
                     raise PrivateStorageInitDenied("Tenant staging contains an identity")
 
             # Detect unexpected owner replacement before publishing any new file.
+            phase = "LEGACY_RECHECK"
             after = legacy.lstat()
             if (after.st_dev != original.st_dev or after.st_ino != original.st_ino
                     or not _private_owned(legacy)):
@@ -118,18 +130,25 @@ def prepare_private_tenant_storage(
             preflight._verify_database(
                 legacy, preflight.LEGACY_TABLES, frozenset(("tenant_users",))
             )
+            phase = "DESTINATION_RACE_CHECK"
             if target.exists() or target.is_symlink():
                 raise PrivateStorageInitDenied("Tenant storage appeared during preparation")
 
+            phase = "STAGE_FSYNC"
             with open(staged, "rb") as source:
                 os.fsync(source.fileno())
             # Atomic exclusive publication on the existing paid disk. A
             # competing initializer cannot overwrite or adopt its target.
+            phase = "NO_REPLACE_PUBLISH"
             os.link(staged, target, follow_symlinks=False)
         finally:
             os.umask(old_umask)
             if staged is not None:
-                staged.unlink(missing_ok=True)
+                try:
+                    staged.unlink(missing_ok=True)
+                except OSError:
+                    phase = "STAGE_CLEANUP"
+                    raise
         return {
             "prepared": True,
             "private_tenant_database": True,
@@ -143,7 +162,9 @@ def prepare_private_tenant_storage(
             "bank_transfers_enabled": False,
         }
     except PrivateStorageInitDenied:
-        raise
+        # Report ONLY a fixed, audited stage identifier. Do not disclose paths,
+        # environment values, SQL, account state, OS errors or stack traces.
+        raise PrivateStorageInitDenied("PRIVATE_STORAGE_BLOCKED_AT_" + phase) from None
     except (OSError, ValueError, RuntimeError, sqlite3.Error, storage.SharedStorageDenied,
             preflight.CutoverPreflightDenied):
-        raise PrivateStorageInitDenied("Private tenant storage initialization denied safely") from None
+        raise PrivateStorageInitDenied("PRIVATE_STORAGE_BLOCKED_AT_" + phase) from None
