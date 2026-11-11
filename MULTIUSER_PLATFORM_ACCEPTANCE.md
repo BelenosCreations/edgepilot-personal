@@ -156,6 +156,17 @@ and conservative scenario utilities, but does not activate any provider
 or worker. Explicitly preserve two physical devices/two separate
 identities/two permitted independent Public accounts as the core gate.
 
+## v0.2.45 — BYOK/budget separation is synthetically tested, not active
+
+Encrypted per-member AI keys, depth preferences and local budget reservations
+now have a separate identity-authenticated, no-HTTP test module. Ten
+synthetic users demonstrate independent concurrent budget admission
+and cross-user revocation boundaries. This does not enable a real person
+to fund/use AI or connect a Public account, and does not establish
+commercial billing, actual provider usage or ten-device scalability.
+Managed credits/payments are disabled. The existing physical two-device/
+two-independent-Public-account and Android biometric gate remains open.
+
 ## Milestone acceptance criteria — not complete until verified
 
 - Two separately provisioned EdgePilot users can register and sign in from
