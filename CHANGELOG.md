@@ -1,3 +1,8 @@
+## v0.2.62 — 2026-11-11 — Offline read-only permanent database preflight (inactive)
+**Added:** Gated private-console inspection of existing paid Render disk storage for separate legacy owner and tenant SQLite files, path and permission protections, schema segregation and integrity. No broker keys are read or copied, no HTTP endpoint or scheduled process, and no extra paid infrastructure.
+**Tests:** Synthetic owner/tenant integrity and non-mutation plus denial of worker/order flags, unexpected tenant credentials, permissions, missing files and symlinks. Validate exact PR and merged-main CI.
+**Limits:** Backup/restore and operator-controlled migration are NOT proved by this tool; output always states production activation unauthorized. No production feature flags, live trades, bank transfers, owner migration or tenant Public APIs enabled. See PERMANENT_CUTOVER_PREFLIGHT_V0262.md.
+
 ## v0.2.61 — 2026-11-11 — Optional permanent private ten-member owner invitations
 **Added:** A default-off `EDGE_PERMANENT_OWNER_INVITES_ENABLED` permission for first-owner sessions to issue one-hour, one-use, nonprivileged new-member invitations on the permanent separated tenant database. Requires exact same-origin POST, trusted EdgePilot owner session and CSRF; revalidates role and session under an atomic SQLite write lock. No user ID, account, or role is accepted from the client.
 **Isolation:** Hard ten-member ceiling includes the initial owner and active invitations, with registration enforcing the same ten-member maximum atomically. Owner invitation issuance is limited to nine per 24 hours; SHA-256 invite digests and append-only redacted audit history protect records, and concurrent issuers cannot overbook seats.
