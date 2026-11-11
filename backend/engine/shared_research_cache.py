@@ -76,7 +76,7 @@ def setup(path):
             "SELECT name FROM sqlite_master WHERE type='table'")}
         needed = {"tenant_users", "tenant_connections", "tenant_accounts",
                   "tenant_identity_sessions", "tenant_identities",
-                  "tenant_account_settings"}
+                  "tenant_account_settings", "tenant_runtime_status"}
         if not needed.issubset(tables):
             raise RuntimeError("Independent tenant and identity schema required")
         con.execute("""CREATE TABLE IF NOT EXISTS shared_research_signals(
@@ -176,7 +176,7 @@ class SharedResearchCache:
         """
         current = _current(now)
         if (not isinstance(account_id, str) or not 1 <= len(account_id) <= 128 or
-                asset_class not in READABLE_ACCOUNT_ASSETS):
+                type(asset_class) is not str or\n                asset_class not in READABLE_ACCOUNT_ASSETS):
             raise SharedResearchDenied("Research account unavailable")
         try:
             trusted_rights = _shareable_rights(rights)
