@@ -431,3 +431,16 @@ updated. No new provider HTTP, order, money flow, subscription,
 production tenant flag or worker was activated. Physical Android
 passkeys and independent two-device/two-Public-account acceptance
 remain incomplete.
+
+
+## v0.2.49 — Requested tier is not a commercial entitlement
+
+New standalone dormant tenant_tier_intent module stores authenticated
+member-specific requested Free/Plus/Pro/Custom concepts but never
+grants a paid plan, overrides data rights, funds AI from the owner,
+changes a Public account or enables trading. Ten synthetic members'
+preferences, CSRF, disabled/revoked session enforcement and hard paid
+grant refusal have negative tests. Real subscriptions/payment providers
+and any Play distribution have NOT been approved or activated; see
+TENANT_TIER_INTENT_RUNBOOK.md. README/CHANGELOG/VERSION updated.
+Physical two-device independent Public accounts remain outstanding.
