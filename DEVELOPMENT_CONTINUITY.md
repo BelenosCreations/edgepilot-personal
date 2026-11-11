@@ -633,3 +633,37 @@ only if required; do not use real Public brokerage credentials.
 The owner must retest native biometric register/sign-in after the
 verified staging fix is deployed. Prior test screenshot confirms
 account sign-in only, not successful passkey registration.
+
+
+## v0.2.56 — User-approved real-time passkey state and self-management
+
+After the owner registered a signed Android staging passkey for
+synthetic Test 1 and another for Test 2, screenshots showed the
+outdated "Add biometric passkey" button even after successful
+enrollment. User explicitly approved updating that UX.
+
+The authenticated account view now loads
+`GET /api/identity/passkeys` to get **only its current member's**
+active credential IDs, creation timestamps, device type and backup
+flags (no device name, biometric data or public/private keys). The
+legacy activePasskeys count remains stable; additionally responds
+with passkeys array and explicit broker/trading/biometric/identifier
+false flags. Client verifies response shape and count, displays
+"Set up biometric login" only at zero, otherwise a checkmarked
+passkey-enabled state and count. A new Account Security section
+lists registered passkeys and adds "Add another passkey" plus
+user-confirmed removal. On success, the UI refreshes status; removing
+a credential revokes all current member identity sessions and logs
+the current UI out, without affecting a second user's sessions.
+The UI explains that external credential-manager copies may need
+manual deletion. The old APK need not change.
+
+No real Public API credential, order, financial transfer, or live
+worker permission was changed. The Render Free staging SQLite is
+`/tmp/edgepilot-staging.db`: **backend redeployment can delete
+Test 1/Test 2 identities and passkeys**. Confirm account state
+after new staging deploy; recreate only synthetic accounts if
+necessary. The user's two screenshots demonstrate account
+registration and passkey enrollment, but do not by themselves
+prove independent physical phones or both passkey sign-ins.
+Maintain this distinction in later acceptance claims.

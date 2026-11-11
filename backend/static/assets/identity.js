@@ -3,6 +3,7 @@
   let identityCsrf = "";
   let busy = false;
   let identityViewGeneration = 0;
+  let knownPasskeyCount = null;
   const el = id => document.getElementById(id);
   const status = (message, error = false) => {
     const box = el("status");
@@ -101,6 +102,12 @@
     el("connectionInfo").textContent = "";
     el("deviceSessions").replaceChildren();
     el("deviceSessionStatus").textContent = "";
+    knownPasskeyCount = null;
+    el("passkeyList").replaceChildren();
+    el("passkeyState").textContent = "Checking passkey status…";
+    el("passkeyListStatus").textContent = "Checking registered passkeys…";
+    el("addPasskey").hidden = true;
+    el("addAnotherPasskey").hidden = true;
     el("replacementSecret").value = "";
   }
   async function showSession() {
@@ -114,9 +121,107 @@
     el("addPasskey").disabled = !supported();
     clearReadOnly();
     status("Secure EdgePilot account session active. Brokerage execution remains disabled.");
+    await loadPasskeys();
     await loadConnections();
     await loadLinkedAccounts();
     await loadDeviceSessions();
+  }
+  async function loadPasskeys() {
+    const generation = identityViewGeneration;
+    const list = el("passkeyList");
+    list.replaceChildren();
+    el("addPasskey").hidden = true;
+    el("addAnotherPasskey").hidden = true;
+    el("passkeyState").textContent = "Checking passkey status…";
+    el("passkeyListStatus").textContent = "Checking registered passkeys…";
+    try {
+      const response = await api("/passkeys", "GET", undefined, true);
+      if (generation !== identityViewGeneration) return false;
+      if (!response || !Array.isArray(response.passkeys) ||
+          !Number.isInteger(response.activePasskeys) ||
+          response.activePasskeys !== response.passkeys.length ||
+          response.activePasskeys < 0 || response.activePasskeys > 12 ||
+          response.brokerAccessAuthorized !== false ||
+          response.tradingEnabled !== false ||
+          response.deviceIdentifiersStored !== false ||
+          response.biometricsStoredOnServer !== false) {
+        throw new Error("Invalid passkey listing");
+      }
+      const seen = new Set();
+      for (const item of response.passkeys) {
+        if (!item || typeof item.credentialId !== "string" ||
+            !/^[A-Za-z0-9_-]{22,2731}$/.test(item.credentialId) ||
+            seen.has(item.credentialId) ||
+            !Number.isInteger(item.createdAt) || item.createdAt < 0 ||
+            typeof item.deviceType !== "string" ||
+            item.deviceType.length > 48 ||
+            typeof item.backedUp !== "boolean") {
+          throw new Error("Invalid passkey entry");
+        }
+        seen.add(item.credentialId);
+      }
+      const count = response.activePasskeys;
+      knownPasskeyCount = count;
+      el("passkeyState").textContent = count ?
+        "✓ Passkey login enabled — " + count +
+        (count === 1 ? " passkey registered" : " passkeys registered") +
+        " to your account." :
+        "Passkey login is not set up for this EdgePilot account.";
+      el("addPasskey").hidden = count !== 0;
+      el("addAnotherPasskey").hidden = count === 0;
+      el("addPasskey").disabled = !supported();
+      el("addAnotherPasskey").disabled = !supported() || count >= 12;
+      el("passkeyListStatus").textContent = count ?
+        "Registered passkeys: " + count :
+        "No passkeys registered yet. Use Set up biometric login above.";
+      let position = 0;
+      for (const item of response.passkeys) {
+        position += 1;
+        const row = document.createElement("li");
+        const when = new Date(item.createdAt * 1000);
+        const dateText = Number.isFinite(when.valueOf()) ?
+          when.toLocaleString() : "unknown date";
+        row.appendChild(document.createTextNode(
+          "Passkey " + position + " · Registered " + dateText + " "));
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.textContent = "Remove passkey " + position;
+        remove.addEventListener("click", () => action(async () => {
+          if (!window.confirm(
+            "Remove this passkey? You will be signed out of all sessions " +
+            "for this EdgePilot account. Other users are not affected. " +
+            "You can still sign in with your password. " +
+            "This does not erase the saved passkey from your device.")) return;
+          const requestGeneration = identityViewGeneration;
+          const revoked = await api("/passkeys/" +
+            encodeURIComponent(item.credentialId), "DELETE", undefined, true);
+          if (requestGeneration !== identityViewGeneration) return;
+          if (revoked.revoked !== true ||
+              revoked.otherUsersUnaffected !== true ||
+              revoked.identitySessionsRevoked !== true) {
+            throw new Error("Passkey removal response rejected");
+          }
+          // The server revokes every session of this member, including this
+          // one. Never retain the old CSRF or show the old account view.
+          showLoggedOut();
+          status("Passkey removed. All sessions for this account were " +
+                 "signed out. Sign in again with your password or another passkey.");
+        }));
+        row.appendChild(remove);
+        list.appendChild(row);
+      }
+      return true;
+    } catch (error) {
+      if (generation !== identityViewGeneration) return false;
+      knownPasskeyCount = null;
+      list.replaceChildren();
+      el("addPasskey").hidden = true;
+      el("addAnotherPasskey").hidden = true;
+      el("passkeyState").textContent = "Passkey status unavailable.";
+      el("passkeyListStatus").textContent =
+        "Unable to display registered passkeys. No changes were made.";
+      return false;
+    }
   }
   async function loadDeviceSessions() {
     const generation = identityViewGeneration;
@@ -390,6 +495,10 @@
       if (!supported()) {
         el("passkeySignIn").disabled = true;
         el("addPasskey").disabled = true;
+        el("addAnotherPasskey").disabled = true;
+      } else {
+        el("addAnotherPasskey").disabled = knownPasskeyCount === null ||
+          knownPasskeyCount >= 12;
       }
     }
   }
@@ -433,7 +542,7 @@
     identityCsrf = session.csrf;
     await showSession();
   }));
-  el("addPasskey").addEventListener("click", () => action(async () => {
+  async function registerPasskey() {
     if (!supported()) throw new Error("Passkeys are not supported by this device or browser.");
     const begin = await api("/passkeys/register/options","POST",{},true);
     const credential = await navigator.credentials.create({
@@ -443,8 +552,11 @@
     await api("/passkeys/register/finish","POST",{
       requestId:begin.requestId,credential:publicCredential(credential)
     },true);
+    await loadPasskeys();
     status("Your passkey was registered. You can use your device's credential provider to sign in.");
-  }));
+  }
+  el("addPasskey").addEventListener("click", () => action(registerPasskey));
+  el("addAnotherPasskey").addEventListener("click", () => action(registerPasskey));
   el("publicKeyForm").addEventListener("submit", event => {
     event.preventDefault();
     action(async () => {

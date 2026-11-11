@@ -75,9 +75,10 @@
       <div class="panel">
         <h2 id="welcome">Your EdgePilot account</h2>
         <p class="muted">This session belongs to your EdgePilot identity. No live trading or funds transfers are enabled.</p>
-        <button id="addPasskey" class="primary" type="button">Add biometric passkey</button>
+        <p id="passkeyState" class="muted" role="status" aria-live="polite">Checking passkey status…</p>
+        <button id="addPasskey" class="primary" type="button" hidden>Set up biometric login</button>
         <button id="signOut" type="button">Sign out</button>
-        <small id="passkeyInfo">Use a fingerprint, face unlock, or device screen lock through your credential provider. EdgePilot stores no biometric templates.</small>
+        <small id="passkeyInfo">Your device's credential provider handles fingerprint, face or screen-lock verification. EdgePilot does not store biometric templates.</small>
       </div>
       <form id="passwordChangeForm" class="panel">
         <h2>Account security</h2>
@@ -89,6 +90,14 @@
         <button id="changeEdgePilotPassword" type="submit">Change password and sign out devices</button>
         <small>This requires your current password; forgotten-password recovery is not available yet. Never enter a Public API key here.</small>
       </form>
+      <section id="passkeySecurityPane" class="panel">
+        <h2>Biometric login and passkeys</h2>
+        <p class="muted">Manage passkeys for this EdgePilot account. Each passkey is stored by your device or credential provider, not by EdgePilot.</p>
+        <p id="passkeyListStatus" class="muted" aria-live="polite">Checking registered passkeys…</p>
+        <ul id="passkeyList" aria-label="Your registered passkeys"></ul>
+        <button id="addAnotherPasskey" type="button" hidden>Add another passkey</button>
+        <small>Passkey entries show registration time, not a verified device name. Removing a passkey revokes its EdgePilot sign-in permission and signs out all sessions for this account. You may also need to delete the saved passkey from your phone or credential manager. Password sign-in remains available; other users are unaffected.</small>
+      </section>
       <section id="deviceSessionsPane" class="panel">
         <h2>Signed-in devices and sessions</h2>
         <p class="muted">Review active EdgePilot sessions. Only your own sessions are shown. An unfamiliar session can be signed out without changing your Public brokerage account or your current device.</p>

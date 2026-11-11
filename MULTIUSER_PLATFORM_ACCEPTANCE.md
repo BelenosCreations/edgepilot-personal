@@ -293,3 +293,19 @@ persistent recovery, real independent Public accounts, or
 authority to trade/fund transfers. Operator key setup, signed
 staging APK and real device acceptance remain separate gates.
 See STAGING_OPERATOR_INVITATIONS_RUNBOOK.md.
+
+
+## v0.2.56 — Account-specific passkey management UX
+
+A signed-in identity sees passkey enrollment status from the
+tenant-specific server store: count zero enables biometric setup,
+count above zero shows enabled state and offers additional
+passkeys under Account Security. Active passkeys can be revoked
+only by their own user. Existing revoke behavior invalidates all
+that user's identity sessions and requires re-authentication;
+another user's passkeys and sessions are unaffected. The list
+displays registration times, **not verified device names**, and
+does not expose credential public key bytes or biometric material.
+Physical two-device sign-in and fully isolated *real* Public
+connections remain open acceptance gates, and disposable Render
+staging is not suitable for durable real brokerage identities.
