@@ -148,7 +148,7 @@ class TenantPasskeyStore:
         self.allowed_origins = (
             [expected_origin, _android_native_origin_from_pinned_cert(
                 staging_android_cert_sha256)]
-            if staging_android_cert_sha256 is not None else [expected_origin]
+            if staging_android_cert_sha256 is not None else expected_origin
         )
 
     def _new_challenge(self, operation, user_id, challenge, now):
