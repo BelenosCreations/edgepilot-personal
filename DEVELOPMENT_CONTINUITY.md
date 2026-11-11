@@ -1,3 +1,23 @@
+## CURRENT checkpoint — v0.2.62, November 11, 2026
+
+v0.2.61 (private owner invitations, at most 10 members) was developed as
+PR #81 with passing PR tests and merged before this follow-on. v0.2.62
+adds an explicitly opt-in, console-only, read-only production cutover
+inspection for the existing paid Render Starter instance and attached
+/data disk. It inspects the isolated owner and tenant databases, checks
+paths/permissions/schema integrity and reports only nonsecret flags.
+No database data, credentials, live trading or transfers are touched.
+PR/main GitHub tests and Render deploy require independent verification.
+See PERMANENT_CUTOVER_PREFLIGHT_V0262.md.
+
+This is NOT a completed cutover. A fresh independently verified encrypted
+off-service backup, tested restore and stable credential encryption key
+must be confirmed before modifying the paid service environment, creating
+the first real owner identity or retiring legacy owner APIs. Do not turn on
+tenant Public access, passkey or order flags solely because this source
+and synthetic tests pass. Separate physical-device and Public-account
+acceptance remains required. No additional paid services.
+
 ## CURRENT checkpoint — v0.2.61, November 11, 2026
 
 v0.2.58: paid existing Render service reuse and private separate tenant DB
