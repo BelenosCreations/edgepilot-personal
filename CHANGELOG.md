@@ -1,3 +1,7 @@
+## v0.2.49 — 2026-11-10 — Dormant tenant tier intent separated from commercial grants
+**Added:** Independently authenticated per-member requested Free/Plus/Pro/Custom tier concept persistence, deliberately separate from actual grant, provider API budgets, permitted market-data rights and user-funded BYOK. Ten synthetic members have isolated preferences; session/CSRF/revocation checks occur within a single SQLite transaction.
+**Not activated:** All effective tiers remain Free, all premium grants fail closed and no payments, subscriptions, managed AI credits, commercial distribution, brokerage activity or production environment flags are enabled. Tier names are concepts without approved pricing or benefits. See TENANT_TIER_INTENT_RUNBOOK.md.
+
 ## v0.2.48 — 2026-11-10 — Offline paired forward research and optional AI quality/cost audit
 **Added:** Read-only matched forward binary-outcome evaluator comparing zero-paid-AI baseline and independently validated AI-assisted forecast Brier scores against the same externally verified settlements. Enforces chronological training/issuance/settlement, known attributable AI microUSD costs, identical outcome definition/source, no duplicate events and minimum descriptive evidence gates.
 **Limits:** Descriptive calibration comparisons do not prove AI causes better research, profit, net after-fee edge or live execution safety. Pure offline synthetic tests only; no provider requests, client routes, broker actions, payments or distribution activated. See PAIRED_RESEARCH_AUDIT_RUNBOOK.md.
