@@ -116,3 +116,18 @@ strictly validated host through GITHUB_ENV into Gradle. A successful
 signed APK has **not** been established by the failed run.
 Launch an entirely **new** workflow run on the updated main branch
 and inspect a green sign-and-upload job; do not install the ZIP itself.
+
+
+## November 11, 2026 — Signed staging APK now available
+
+The corrected manual workflow run
+[43013142566](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43013142566)
+completed successfully. The privately signed APK was independently
+downloaded and inspected, matching
+`com.edgepilot.mobile.staging`, version `0.19.17-staging`,
+the fixed staging HTTPS host and the configured public signer.
+It is available to install alongside the existing owner APK.
+No device installation, passkey enrollment, code redemption or
+independent account-linking success has yet been verified.
+The first failed workflow run #43011557930 remains a separate
+historical failed attempt. Do not reuse its nonexistent APK.
