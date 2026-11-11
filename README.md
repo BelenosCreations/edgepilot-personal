@@ -309,6 +309,20 @@ The signed staging APK, physical biometric sign-in and durable two-user
 Public accounts are **not** completed by this software alone. See
 [STAGING_OPERATOR_INVITATIONS_RUNBOOK.md](STAGING_OPERATOR_INVITATIONS_RUNBOOK.md).
 
+**Android staging APK ready for installation (November 11, 2026).**
+The separate `EdgePilot Staging` Android package is now successfully
+assembled and permanently signed through a manual GitHub Actions run
+[#43013142566](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43013142566).
+The archived APK artifact was independently downloaded and inspected:
+its package is `com.edgepilot.mobile.staging`, version
+`0.19.17-staging`, the embedded hostname is the separate staging
+domain, and the Android v2 certificate matches the approved public
+signing fingerprint. The production `com.edgepilot.mobile` package is
+not replaced, and no real trading credentials are included. The test
+APK has **not yet been installed or exercised on real phones**;
+WebAuthn/biometric acceptance and independent Public accounts remain
+open. The staged server still uses disposable synthetic storage.
+
 ## Multi-user accounts and biometric sign-in
 
 The intended destination is **one EdgePilot platform with distinct, independently authenticated users**. Each user will sign in to EdgePilot, provide their own Public API credential through a secure flow, and see only their authorized linked accounts and corresponding records. Different Android devices must be able to operate with different users and different Public accounts without sharing account selection, brokerage credentials, history, strategy settings, or monitoring state.
