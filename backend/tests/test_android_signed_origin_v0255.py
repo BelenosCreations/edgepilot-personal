@@ -13,7 +13,7 @@ import unittest
 from unittest.mock import patch
 
 from engine import identity_auth, tenant_foundation, tenant_passkeys
-from tests.test_two_user_real_crypto_webauthn_v0241 import LocalAuthenticator
+from test_two_user_real_crypto_webauthn_v0241 import LocalAuthenticator
 
 RP = "staging-edgepilot.belenoscreations.biz"
 ORIGIN = "https://" + RP
