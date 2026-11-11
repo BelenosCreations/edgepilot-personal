@@ -138,7 +138,7 @@ class NativeAndroidPasskeyOriginTests(unittest.TestCase):
                 self.assertEqual(response.get_json()["error"],
                                  "Passkey verification failed")
         self.assertEqual(self.module.tenant_passkey_store.redacted_own_status(
-            self.client.get_cookie(identity_auth.COOKIE_NAME).value,
+            self.client.get_cookie(identity_auth.COOKIE_NAME, domain=RP).value,
             self.csrf)["activePasskeys"], 0)
 
     def test_cryptographic_and_challenge_verification_not_bypassed(self):
@@ -162,11 +162,11 @@ class NativeAndroidPasskeyOriginTests(unittest.TestCase):
         self.assertEqual(https_only.allowed_origins, [ORIGIN])
         auth = StagingAuthenticator()
         begun = https_only.begin_registration(
-            self.client.get_cookie(identity_auth.COOKIE_NAME).value,
+            self.client.get_cookie(identity_auth.COOKIE_NAME, domain=RP).value,
             self.csrf)
         with self.assertRaises(tenant_passkeys.PasskeyDenied):
             https_only.finish_registration(
-                self.client.get_cookie(identity_auth.COOKIE_NAME).value,
+                self.client.get_cookie(identity_auth.COOKIE_NAME, domain=RP).value,
                 self.csrf, begun["requestId"],
                 auth.registration(begun["publicKey"], origin=NATIVE))
 
