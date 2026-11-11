@@ -107,3 +107,39 @@ def ensure_private_tenant_file(path, *, persistent_root=None):
     except (OSError, sqlite3.Error) as exc:
         raise SharedStorageDenied("Private tenant database could not be verified") from None
     return target
+
+
+def permanent_identity_policy(env, legacy_path, tenant_path):
+    """Gate permanent tenant-only routing and Android app-origin verification.
+
+    Both switches default off. Neither grants a Public connection, new member
+    enrollment, orders, transfers or legacy owner credential inheritance.
+    A prepared separate DB is required before either switch can activate.
+    """
+    tenant_only = _flag(env, "EDGE_PERMANENT_TENANTS_ONLY")
+    native = _flag(env, "EDGE_PERMANENT_ANDROID_PASSKEY_ORIGIN_ENABLED")
+    if not (tenant_only or native):
+        return {"tenant_only": False, "android_signer_sha256": None}
+    if (Path(tenant_path) == Path(legacy_path)
+            or not _flag(env, "EDGE_SHARED_TENANT_DB_PREPARE")
+            or not _flag(env, "EDGE_TENANT_SCHEMA_PREPARE")
+            or not _flag(env, "EDGE_IDENTITY_AUTH_ENABLED")
+            or _flag(env, "EDGE_ISOLATED_STAGING")
+            or _flag(env, "EDGE_AUTOMATION_WORKER_ENABLED")
+            or _flag(env, "ENABLE_LIVE_ORDERS")):
+        raise SharedStorageDenied("Permanent identity requires the isolated inactive shared backend")
+    if not native:
+        return {"tenant_only": tenant_only, "android_signer_sha256": None}
+    if not tenant_only or not _flag(env, "EDGE_TENANT_PASSKEYS_ENABLED"):
+        raise SharedStorageDenied("Production app passkeys require explicit tenant-only identity mode")
+    rp = str(env.get("EDGE_WEBAUTHN_RP_ID", ""))
+    origin = str(env.get("EDGE_WEBAUTHN_ORIGIN", ""))
+    package = str(env.get("EDGE_ANDROID_ASSOCIATION_PACKAGE", ""))
+    fingerprint = str(env.get("EDGE_ANDROID_CERT_SHA256", "")).upper()
+    import re
+    if (rp != "edgepilot.belenoscreations.biz"
+            or origin != "https://edgepilot.belenoscreations.biz"
+            or package != ""
+            or not re.fullmatch(r"(?:[0-9A-F]{2}:){31}[0-9A-F]{2}", fingerprint)):
+        raise SharedStorageDenied("Production signed app association is not independently pinned")
+    return {"tenant_only": True, "android_signer_sha256": fingerprint}
