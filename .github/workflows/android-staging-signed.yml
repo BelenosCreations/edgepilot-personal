@@ -26,14 +26,20 @@ jobs:
       - name: Verify distinct owned staging hostname
         shell: bash
         env:
-          EDGE_STAGING_HOST: ${{ inputs.staging_host }}
+          EDGE_STAGING_HOST_RAW: ${{ inputs.staging_host }}
         run: |
           set -euo pipefail
+          # Android phone keyboards may append accidental whitespace.
+          # Strip only the edges, then reject invalid domain syntax as before.
+          EDGE_STAGING_HOST="${EDGE_STAGING_HOST_RAW#"${EDGE_STAGING_HOST_RAW%%[![:space:]]*}"}"
+          EDGE_STAGING_HOST="${EDGE_STAGING_HOST%"${EDGE_STAGING_HOST##*[![:space:]]}"}"
           if [[ ! "$EDGE_STAGING_HOST" =~ ^([a-z0-9]+(-[a-z0-9]+)*\.)+belenoscreations\.biz$ ]] || \
              [[ "$EDGE_STAGING_HOST" == "edgepilot.belenoscreations.biz" ]]; then
             echo "::error::A different owned staging HTTPS hostname is required"
             exit 1
           fi
+          # Share only the validated hostname with the later Gradle step.
+          printf 'EDGE_STAGING_HOST=%s\n' "$EDGE_STAGING_HOST" >> "$GITHUB_ENV"
       - name: Use JDK 17
         uses: actions/setup-java@v4
         with:
@@ -48,8 +54,7 @@ jobs:
         with:
           gradle-version: '8.9'
       - name: Assemble unsigned isolated staging APK
-        env:
-          EDGE_STAGING_HOST: ${{ inputs.staging_host }}
+        # Uses the exact validated and normalized hostname from GITHUB_ENV.
         run: gradle --no-daemon -p android :app:assembleStaging "-PedgePilotStagingHost=$EDGE_STAGING_HOST"
       - name: Sign, verify, and pin staging-only test APK
         shell: bash
