@@ -277,3 +277,19 @@ Free service's no-shell constraint, storage is disposable, and
 independent real Public accounts have not been linked. No new live
 trading or payment authorization. See
 STAGING_RENDER_LIVE_CHECKPOINT.md.
+
+
+## v0.2.53 — Staging screen and operator one-use invitations
+
+For an isolated staging process only, the main URL now redirects
+to EdgePilot Accounts; an operator-key-gated endpoint can issue
+only two one-time synthetic test member invitations per temporary DB.
+Independent origin checks and attempts/quota limits apply;
+the production owner landing screen and Public permissions
+are unchanged. Domain Verified was reported by the user;
+it is not itself Android passkey validation. This milestone
+does not establish real phones, actual biometric authentication,
+persistent recovery, real independent Public accounts, or
+authority to trade/fund transfers. Operator key setup, signed
+staging APK and real device acceptance remain separate gates.
+See STAGING_OPERATOR_INVITATIONS_RUNBOOK.md.
