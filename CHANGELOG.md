@@ -1,3 +1,8 @@
+## v0.2.65 — 2026-11-11 — Read-only first-owner readiness audit (dormant)
+**Added:** Private, gated, console-only inspection for an existing isolated tenant SQLite database before and after manual first-owner enrollment. Checks file permissions, distinct inode, known schemas, integrity, owner role/identity pairing, and duplicate or partial records, without modifying owner or tenant data. Reports sanitized next operator stage.
+**Tests:** Synthetic empty and owner-enrolled tenant readiness, independent member counts, duplicate owners, orphaned identities, unsafe feature flags/permissions, and unchanged legacy ciphertext. GitHub PR and merged-main tests required.
+**Limits:** Readiness code does not execute on Render deployment, prove physical login/passkey, permit Public keys, migrate legacy data, activate multiuser routing, create paid services, or authorize live trading and transfers. See PERMANENT_OWNER_READINESS_V0265.md.
+
 ## v0.2.64 — 2026-11-11 — Dormant read-only owner Fernet key recovery proof
 **Added:** Private, gated console-only verification of an independently entered EDGE_CREDENTIAL_KEY against the running server key and any saved encrypted Public credential. The owner SQLite database is opened read-only; authenticated Fernet decryption occurs only in memory and no secrets are logged, exported or returned.
 **Tests:** Synthetic good and wrong keys, missing/corrupt encrypted credentials, tombstones, unsafe flags, approval mismatch, private-file and symlink protections, and owner-file byte nonmutation. Verify PR and merged-main GitHub tests before release.
