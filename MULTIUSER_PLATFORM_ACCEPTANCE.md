@@ -202,6 +202,16 @@ ongoing monitoring, subscription activation or a working trading bot.
 The two physical independent Android users/Public accounts remain the
 acceptance gate for this development phase.
 
+## v0.2.49 — Synthetic requested tiers do not prove paid entitlement
+
+A new tenant identity-scoped store tracks only requested future tier
+labels. Effective tier remains Free, and managed credits,
+subscriptions, payments, owner AI allocation, brokerage permissions
+and commercial distribution are all disabled. The ten-member tests
+do not activate or validate a retail billing program. Official policy,
+market-data rights and independent two-physical-device/Public-account
+acceptance remain separate required gates.
+
 ## Milestone acceptance criteria — not complete until verified
 
 - Two separately provisioned EdgePilot users can register and sign in from
