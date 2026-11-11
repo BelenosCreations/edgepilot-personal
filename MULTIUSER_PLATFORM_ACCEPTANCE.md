@@ -179,6 +179,18 @@ prediction market coverage exists, nor that a real phone can complete
 tenant onboarding. Real two-device independent Public acceptance remains
 required and no live orders, transfers or AI billing are enabled.
 
+## v0.2.47 — Offline proposal only, not connected scanning
+
+Provider-neutral scheduling groundwork can plan one licensed shared
+public fetch instead of ten duplicate requests, or isolated per-member
+quota-limited work, but ONLY for verified source rights and entitlements.
+All simulated calls remain proposed/not executed. Unknown sessions,
+rights, quotas, backoff, user entitlement and short-lived event-settlement
+conditions block planning. No autonomous worker, true market-data
+license, third-party key, data redistribution, hardware login, live broker
+access, subscription or payment acceptance is established. The original
+two-device/two-independently owned-Public-account criterion remains open.
+
 ## Milestone acceptance criteria — not complete until verified
 
 - Two separately provisioned EdgePilot users can register and sign in from
