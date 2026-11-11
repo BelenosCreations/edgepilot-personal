@@ -6,7 +6,7 @@ EdgePilot is a personal trading-intelligence platform designed to bring brokerag
 
 The goal is not simply to display prices or place trades. EdgePilot is intended to provide a traceable decision system: understand what the broker actually reported, distinguish observation from simulated results, evaluate a strategy against costs and risk, and refuse activity when data or authorization is uncertain.
 
-> **Development status:** The repository is currently developing **v0.2.43**. The existing owner-facing application supports brokerage research and experimental Observe/Paper modes; **real brokerage order submission, autonomous live trading, and bank transfers remain disabled**. A separate, gated multi-user identity platform now includes invitation registration, individually encrypted Public connections, read-only account integration, and WebAuthn passkey endpoints. An Android-capable passkey account screen provides owner-scoped Public account discovery, verified read-only linking, sanitized portfolio views, an independently gated **inactive** monitoring-plan preview, and per-account watchlist editing that cannot activate any scanner, trade, or fund transfer. The account screen links to Public's verified signup and API-key instructions, and now supports user-confirmed replacement or disconnection of only the current user's encrypted Public credentials. Previously verified account bindings are disabled after either action. Android opens only the two Public-owned help pages outside its authenticated WebView. The account security screen also supports a user-confirmed password change that revokes every session belonging to that member without changing other users' sessions or Public keys. A separately gated device-session screen now lets members review their own active identity sessions and selectively sign out other sessions without affecting another user's identity. It deliberately does not fingerprint or identify physical devices. This is not forgotten-password recovery. The manual-only Android signing workflow has now produced a certificate-pinned, privately signed v0.19.17 test APK on November 10, 2026 (GitHub run #42888113943, attempt 2). The verification and upload passed after correcting a mismatched configured fingerprint; the owner reports installing the APK and logging into the legacy dashboard on one physical phone. Physical-device passkeys and Digital Asset Links remain unverified. Account-specific running workers and real multi-user acceptance are also incomplete. Offline cross-process tests recognize fail-closed SQLite lock contention while continuing to enforce the synthetic admission limits. See [CHANGELOG.md](CHANGELOG.md) for release history, and [DEVELOPMENT_CONTINUITY.md](DEVELOPMENT_CONTINUITY.md) for a durable new-conversation development checkpoint.
+> **Development status:** The repository is currently developing **v0.2.44**. The existing owner-facing application supports brokerage research and experimental Observe/Paper modes; **real brokerage order submission, autonomous live trading, and bank transfers remain disabled**. A separate, gated multi-user identity platform now includes invitation registration, individually encrypted Public connections, read-only account integration, and WebAuthn passkey endpoints. An Android-capable passkey account screen provides owner-scoped Public account discovery, verified read-only linking, sanitized portfolio views, an independently gated **inactive** monitoring-plan preview, and per-account watchlist editing that cannot activate any scanner, trade, or fund transfer. The account screen links to Public's verified signup and API-key instructions, and now supports user-confirmed replacement or disconnection of only the current user's encrypted Public credentials. Previously verified account bindings are disabled after either action. Android opens only the two Public-owned help pages outside its authenticated WebView. The account security screen also supports a user-confirmed password change that revokes every session belonging to that member without changing other users' sessions or Public keys. A separately gated device-session screen now lets members review their own active identity sessions and selectively sign out other sessions without affecting another user's identity. It deliberately does not fingerprint or identify physical devices. This is not forgotten-password recovery. The manual-only Android signing workflow has now produced a certificate-pinned, privately signed v0.19.17 test APK on November 10, 2026 (GitHub run #42888113943, attempt 2). The verification and upload passed after correcting a mismatched configured fingerprint; the owner reports installing the APK and logging into the legacy dashboard on one physical phone. Physical-device passkeys and Digital Asset Links remain unverified. Account-specific running workers and real multi-user acceptance are also incomplete. Offline cross-process tests recognize fail-closed SQLite lock contention while continuing to enforce the synthetic admission limits. See [CHANGELOG.md](CHANGELOG.md) for release history, and [DEVELOPMENT_CONTINUITY.md](DEVELOPMENT_CONTINUITY.md) for a durable new-conversation development checkpoint.
 
 The shared-user development path now includes strict owner-scoped account watchlists:
 each member can save a validated stock-symbol list for a linked account without
@@ -112,6 +112,26 @@ implied by the existence of this layer. See
 [FREE_FIRST_RESEARCH_RUNBOOK.md](FREE_FIRST_RESEARCH_RUNBOOK.md).
 Legacy optional AI accounting and future member-owned BYOK budgets will be
 improved in separate gated milestones.
+
+**Optional AI is budgeted separately from free research.**
+The on-demand legacy owner AI assistant is disabled by default and
+never places orders or transmits credentials. v0.2.44 replaces its
+previous fixed-$0.20 request hold with an SQLite-serialized,
+**model-aware, token-informed** preflight estimate using manually
+verified public Standard API text rates for an allowlist of low-cost
+OpenAI models. Estimates and reconciled token usage are stored in
+integer micro-US-dollar units, with conservative pending/uncertain
+holds for timeouts or missing provider usage, no automatic retries,
+UTC monthly rollovers and preservation of historical reservations.
+The monthly dashboard displays remaining *local* budget, estimated
+token spend, blocked requests, and price-check dates. The default
+owner budget remains unchanged and **AI remains off** until explicitly
+enabled by the owner. Rate snapshots require periodic re-verification
+and fail closed when stale; this is **not a provider-side billing cap**.
+Separate per-user AI funding and encrypted BYOK remain a future
+gated milestone, not a capability of the current owner login.
+See [AI_COST_ACCOUNTING_RUNBOOK.md](AI_COST_ACCOUNTING_RUNBOOK.md)
+for priced models, assumptions, security boundaries and tests.
 
 ## Market data, research, and accounting
 

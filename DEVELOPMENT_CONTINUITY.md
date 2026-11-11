@@ -335,3 +335,24 @@ consent/licensing-conscious shared signals and deferred commercial
 entitlements. Do NOT enable trades, transfers, public distribution or
 actual billing. Physical Android passkeys and independent Public accounts
 still need real-device acceptance. See FREE_FIRST_RESEARCH_RUNBOOK.md.
+
+## v0.2.44 — Owner AI pricing and local budget accounting
+
+Legacy ai_analysis.py now uses public Standard short-context text
+price snapshots (checked 2026-11-10) for the allowlisted
+gpt-6-luna and gpt-6-sol models, conservative byte-bound input
+cost and 500-token output ceiling, microUSD integer ledger
+with SQLite BEGIN IMMEDIATE reservations. Successful replies need
+provider input/output token counts to finalize usage-cost estimates;
+unknown charges/timeouts/HTTP errors retain their reservation.
+Historic $0.20 rows are preserved, including original budget
+consumption. This adds no automated AI calls. The current optional
+owner AI setting remains disabled by default; the $2 default budget
+is unchanged; the local limit is not guaranteed third-party billing.
+Pricing expires review 2026-12-10 and fails closed on expired rates.
+
+Read AI_COST_ACCOUNTING_RUNBOOK.md before any model/cost work.
+Next: independently owner-funded vs per-user BYOK/allowance encrypted
+credentials and tenant budgets; never silently use the owner's
+OpenAI credential for other EdgePilot members. Two physical devices,
+independent Public accounts and Android passkeys remain open.
