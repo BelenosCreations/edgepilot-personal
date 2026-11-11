@@ -521,3 +521,28 @@ cert/host, two physical devices and eventually independently allowed
 read-only Public accounts on durable storage under separate approval.
 No new paid plan, disk, live brokerage or bank transfers approved.
 For precise evidence and steps read STAGING_RENDER_LIVE_CHECKPOINT.md.
+
+
+## v0.2.53 — Disposable operator invite bootstrap prepared
+
+After the owner reported the new staging custom domain **Verified**,
+prepared staging-only home redirect to /account, a distinct
+/staging-operator page and POST /api/staging/invitations. This
+test-only path requires a 256-bit token, only its SHA-256 hash in
+EDGE_STAGING_OPERATOR_SHA256, exact configured staging origin and
+host, atomic quota of two one-use invites, attempt throttling.
+Production / remains the owner dashboard; the operator path
+cannot work outside EDGE_ISOLATED_STAGING. No change to the
+actual signed production APK or brokerage configuration.
+
+The user reported Render domain verified; HTTP response and Android
+OS association are **not independently confirmed** by that statement
+alone. No staging signed APK or physical passkey validation yet.
+Follow STAGING_OPERATOR_INVITATIONS_RUNBOOK.md to activate the
+digest in staging only, deploy the verified GitHub commit
+manually because staging auto-deploy is off, and have the user
+run the manual signed Android workflow on main with the
+exact staging host. Do not claim a GitHub/Render action succeeded
+unless the corresponding logs or resulting artifact prove it.
+Any Render Free instance spin-down can erase ephemeral invites,
+accounts and passkeys; only synthetic trial data allowed.

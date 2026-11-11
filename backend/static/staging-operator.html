@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>EdgePilot Staging — Test Invitations</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; background:#0c1423; color:#f0f7fb; }
+    body { margin: 0 auto; padding: 25px 18px 48px; max-width: 680px; line-height:1.5; }
+    .panel { padding: 20px; background:#172538; border:1px solid #355067; border-radius:12px; margin:18px 0; }
+    input { background:#0c1423; color:white; border:1px solid #6796a8; font:inherit; width:100%; box-sizing:border-box; padding:12px; border-radius:8px; }
+    button { background:#186e71; color:white; padding:13px 18px; border:0; font:inherit; border-radius:8px; margin:12px 0 4px; min-height:46px; }
+    button:disabled { opacity:.45; }
+    .code { display:block; font:12px/1.6 monospace; overflow-wrap:anywhere; user-select:all; padding:10px; background:#07151e; border-radius:6px; }
+    a { color:#8be5de; }
+    .muted { color:#b6c8d7; }
+    #status { margin-top:12px; white-space:pre-line; }
+  </style>
+  <script src="/assets/staging-operator.js" defer></script>
+</head>
+<body>
+  <h1>EdgePilot Staging</h1>
+  <p class="muted">Private operator page for two disposable test members. This page does not enable Public brokerage access, trades, or fund transfers.</p>
+  <section class="panel">
+    <h2>Create two one-use test invitations</h2>
+    <p>Enter the separate staging operator key. The key must be generated privately and its SHA-256 digest configured in Render. The key is sent only over this verified HTTPS origin and never stored by the page.</p>
+    <form id="operatorForm" autocomplete="off">
+      <label for="operatorKey">Staging operator key</label>
+      <input type="password" id="operatorKey" name="operatorKey" minlength="43" maxlength="43" spellcheck="false" autocomplete="off" autocapitalize="off" required>
+      <button id="issue" type="submit">Issue two test invitations</button>
+    </form>
+    <div role="status" id="status" aria-live="polite"></div>
+  </section>
+  <section class="panel" id="results" hidden>
+    <h2>Private, one-time codes</h2>
+    <p>These invitations expire one hour after issuance and are each redeemable only once. Share one with each test user; do not post them publicly or paste them in GitHub.</p>
+    <p><strong>Test user 1</strong><span id="invite1" class="code"></span></p>
+    <button type="button" id="copy1">Copy first invitation</button>
+    <p><strong>Test user 2</strong><span id="invite2" class="code"></span></p>
+    <button type="button" id="copy2">Copy second invitation</button>
+    <p><a href="/account">Open the staging account registration screen</a></p>
+  </section>
+  <p class="muted">This Free instance stores these codes and identities temporarily. Staging accounts may disappear after an idle spin-down, restart or redeploy. Use synthetic identities only.</p>
+</body>
+</html>

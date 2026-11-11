@@ -7,9 +7,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
 import requests
-from flask import Flask, jsonify, request, send_from_directory, g
+from flask import Flask, jsonify, request, send_from_directory, redirect, g
 from dotenv import load_dotenv
-from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, tenant_password_change, tenant_session_controls, tenant_registration, tenant_passkeys, account_scope, tenant_monitor_blueprint, tenant_watchlist, tenant_public_vault, tenant_public_live_readonly, staging_isolation
+from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, tenant_password_change, tenant_session_controls, tenant_registration, tenant_passkeys, account_scope, tenant_monitor_blueprint, tenant_watchlist, tenant_public_vault, tenant_public_live_readonly, staging_isolation, staging_operator
 ROOT=Path(__file__).parent; load_dotenv(ROOT/'.env')
 # Refuse unsafe isolated-test configuration before opening any database,
 # owner credential store or background-worker state. Production is unchanged.
@@ -151,6 +151,13 @@ def authenticate():
     # All state-changing endpoints, including login, require same-origin browser calls.
     if request.method in ('POST','PUT','PATCH','DELETE') and not same_origin_request():
         return fail('Same-origin request required',403)
+    if request.path=='/api/staging/invitations':
+        # Only the explicitly isolated synthetic operator bootstrap is public
+        # to the legacy-login guard. The route still requires the separate
+        # high-entropy operator capability, exact host and same-origin request.
+        if os.getenv('EDGE_ISOLATED_STAGING','false').lower()!='true':
+            return fail('Not found',404)
+        return
     if request.path.startswith('/api/identity/'):
         # Identity account reads require a second independently enabled gate.
         if request.path.startswith('/api/identity/sessions') and not tenant_session_controls_enabled:
@@ -611,7 +618,42 @@ def logout():
     response.delete_cookie(session_auth.COOKIE_NAME,path='/',secure=True,httponly=True,samesite='Strict')
     return response
 @app.get('/')
-def index(): return send_from_directory(ROOT/'static','index.html')
+def index():
+    # Keep the owner dashboard exactly as-is, but open the independent
+    # identity interface by default on the staging-only Android package.
+    if os.getenv('EDGE_ISOLATED_STAGING','false').lower()=='true':
+        return redirect('/account',code=302)
+    return send_from_directory(ROOT/'static','index.html')
+
+
+@app.get('/staging-operator')
+def staging_operator_page():
+    if (os.getenv('EDGE_ISOLATED_STAGING','false').lower()!='true' or
+            request.host.lower()!=os.getenv('EDGE_WEBAUTHN_RP_ID','').lower() or
+            not re.fullmatch(r'[a-f0-9]{64}',
+                             os.getenv('EDGE_STAGING_OPERATOR_SHA256',''))):
+        return fail('Not found',404)
+    return send_from_directory(ROOT/'static','staging-operator.html')
+
+
+@app.post('/api/staging/invitations')
+def staging_operator_invites():
+    # A synthetic-only owner provisioning path for a Free instance which
+    # has no SSH/one-off shell. No public invitation issuance is possible.
+    if (os.getenv('EDGE_ISOLATED_STAGING','false').lower()!='true' or
+            request.host.lower()!=os.getenv('EDGE_WEBAUTHN_RP_ID','').lower() or
+            os.getenv('EDGE_WEBAUTHN_ORIGIN','')!='https://'+request.host.lower() or
+            request.get_json(silent=True)!={}):
+        return fail('Not found',404)
+    try:
+        return jsonify(staging_operator.issue_two(
+            str(DB),
+            request.headers.get('X-Edge-Staging-Operator',''),
+            os.getenv('EDGE_STAGING_OPERATOR_SHA256',''),
+            source=request.remote_addr or 'unknown'
+        ))
+    except staging_operator.StagingOperatorDenied:
+        return fail('Staging operator unavailable',403)
 
 @app.get('/account')
 def identity_account_page():
