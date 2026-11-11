@@ -571,3 +571,33 @@ staging signed workflow on new main; don't rerun the previous
 SHA. Only then verify a successful artifact and actual signed APK
 package/cert/embedded host before installing alongside the
 unchanged production app.
+
+
+## November 11, 2026 — v0.2.54 signed staging APK verified
+
+The owner dispatched a **new** staging GitHub Actions workflow on
+updated main commit `1a3c6a2ba0bfe3390ed8c23d4a9a416d8457fe58`.
+Workflow run `43013142566` **completed/success**, including the
+strict normalized owned-host check, Android staging assemble,
+`apksigner` signing verification and private uploaded artifact
+`EdgePilot-v0.19.17-isolated-staging-signed-test`
+(artifact ID `13850459385`). The APK was downloaded and independently
+inspected. It is `com.edgepilot.mobile.staging`,
+`0.19.17-staging`, embeds
+`https://staging-edgepilot.belenoscreations.biz/`, and its
+v2 signing certificate SHA-256 is
+`B1:D5:C5:60:11:10:D4:B3:BF:5A:22:D4:4A:F5:6E:A7:BA:8C:24:F0:46:FA:DB:27:95:2A:EA:18:E7:EC:D3:3F`
+matching the verified staging Render association setting. Full APK
+SHA-256: `5f1b64ad8c584afb93c72f6c9450567c5dc4a3f853b4aa5651cf47cb05de471a`.
+The user received a directly installable APK copy in ChatGPT.
+
+**Open:** On the first Android phone install the second app
+**EdgePilot Staging** without removing the owner's production
+EdgePilot. Verify staging account login UI and actual custom-domain
+HTTPS/Digital Asset Links. Next issue two disposable 60-minute invites
+using the separate saved staging operator key, then test both phones'
+Android Credential Manager passkeys and session isolation. Free staging
+DB remains ephemeral; no live brokerage keys or real trades. Real
+Public accounts require durable storage and provider approval.
+The earlier workflow run #43011557930 failed before APK compilation
+from a trailing hostname space; it is not the successful run.
