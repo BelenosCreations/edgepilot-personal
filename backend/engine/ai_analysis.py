@@ -109,7 +109,7 @@ def _nonnegative_token(value, label):
     return value
 
 
-def _charge_micro(input_tokens, output_tokens, model, now):
+def _charge_micro(input_tokens, output_tokens, model, now=None):
     price_in, price_out = _rate(model, now)
     inp = _nonnegative_token(input_tokens, "input")
     out = _nonnegative_token(output_tokens, "output")
@@ -339,4 +339,4 @@ def analyze(path, s, question, market, asset, context, secret, model):
             pass
         if isinstance(error, AIError):
             raise
-        raise AIError("AI request failed (" + type(error).__name__ + "); reservation retained for uncertain provider charges") from None
+        raise AIError("AI request failed; reservation retained for uncertain provider charges") from None
