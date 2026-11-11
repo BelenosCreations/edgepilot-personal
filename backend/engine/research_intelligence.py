@@ -167,8 +167,7 @@ class Observation:
                 "executableQuote": False, "tradeAllowed": False,
                 "cacheAllowed": self.rights.allowed_cache,
                 "redistributionAllowed": self.rights.allowed_redistribution,
-                "settlementVerified": self.asset_class != "prediction" or bool(
-                    self.settlement_rules)}
+                "settlementDetailsProvided": bool(self.settlement_rules) if self.asset_class == "prediction" else None}
 
 
 def prediction_yes_scenario(observation, *, calibrated_probability,
@@ -217,7 +216,7 @@ def prediction_yes_scenario(observation, *, calibrated_probability,
             "warning": "Fill, payout, fees and calibrated probability are uncertain; no order submitted."}
 
 
-def chronological_momentum(bars, *, lookback=5, min_bars=20):
+def chronological_momentum(bars, *, now, lookback=5, min_bars=20):
     """Deterministic, no-AI baseline; timestamps must be increasing, no future bars.
 
     Not a calibrated probability, order instruction or assertion of alpha.
@@ -227,12 +226,18 @@ def chronological_momentum(bars, *, lookback=5, min_bars=20):
             not isinstance(bars, list) or not min_bars <= len(bars) <= MAX_INPUT_BARS or
             len(bars) < lookback + 1):
         raise ResearchUnavailable("Insufficient or invalid chronological history")
+    cutoff = utc_time(now, "now") if isinstance(now, str) else now
+    if not isinstance(cutoff, datetime) or cutoff.tzinfo is None or (
+            cutoff.utcoffset().total_seconds() != 0):
+        raise ResearchUnavailable("Explicit UTC evaluation cutoff required")
     times, closes = [], []
     for row in bars:
         if not isinstance(row, Mapping) or set(row) != {"at", "close"}:
             raise ResearchUnavailable("Historical bars must include exact timestamps and close")
         at = utc_time(row["at"], "at")
         close = decimal(row["close"], "close", positive=True)
+        if at > cutoff:
+            raise ResearchUnavailable("Future bars cannot enter historical research")
         if times and at <= times[-1]:
             raise ResearchUnavailable("History is duplicated or not chronological")
         times.append(at)
