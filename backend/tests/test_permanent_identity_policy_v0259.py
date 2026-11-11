@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from engine import shared_storage_cutover
+from engine import shared_storage_cutover, tenant_foundation, identity_auth
 
 
 CERT = ":".join(["A1"] * 32)
@@ -29,6 +29,15 @@ class PermanentIdentityPolicyTests(unittest.TestCase):
                 ciphertext BLOB, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
             db.execute("INSERT INTO broker_credentials(provider,ciphertext) VALUES('public',?)",
                        (b'SYNTHETIC-OWNER-CIPHERTEXT',))
+        # Permanent retirement requires a previously prepared private tenant
+        # DB and first independent owner, not a synthetic empty-file shortcut.
+        tenant_foundation.setup(str(self.tenant))
+        identity_auth.setup(str(self.tenant))
+        owner = tenant_foundation.TenantStore(str(self.tenant)).provision_user(
+            "Synthetic Owner", role="owner")
+        identity_auth.IdentityStore(str(self.tenant)).provision(
+            owner, "synthetic-owner", "synthetic-permanent-owner-password-2026")
+        os.chmod(self.tenant, 0o600)
         self.env = {
             "EDGE_SHARED_TENANT_DB_PREPARE": "true",
             "EDGE_TENANT_SCHEMA_PREPARE": "true",

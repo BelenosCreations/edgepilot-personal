@@ -1,3 +1,24 @@
+## CURRENT checkpoint — v0.2.66, November 11, 2026
+
+v0.2.65 PR #86 implemented the dormant read-only owner readiness
+inspection, passed PR and merged-main CI, and deployed on paid
+Render. The actual v0.2.63 protected storage initialization still
+requires trusted operator input and has not been confirmed.
+v0.2.66 makes the separately gated tenant-only route retirement
+fail closed if no prepared private tenant DB and independently
+enrolled active owner Argon2id identity exist. This is source-only
+protection; normal v0.2.64/v0.2.65 owner routes remain unchanged
+until environment flags are independently activated.
+
+The operator's legacy database backup, new owner access token GPG
+file, and Fernet key GPG file were verified and uploaded off-phone.
+Render can decrypt the existing Public ciphertext. Neither this
+nor owner existence proves login recovery or two-device test.
+Next operator tasks: create tenant file, read-only schema check,
+readiness audit, manual first-owner bootstrap, and actual login.
+Do not enable tenant-only, live Public tenant APIs, workers/orders
+or bank transfers solely due to GitHub CI. No new paid service.
+
 ## CURRENT checkpoint — v0.2.65, November 11, 2026
 
 v0.2.64 merged with passing GitHub tests and verified live Render

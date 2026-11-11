@@ -101,12 +101,16 @@ class PermanentPrivateInvitationTests(unittest.TestCase):
         script="""
 import json,sqlite3,sys
 from pathlib import Path
-from engine import shared_storage_cutover
+from engine import shared_storage_cutover,tenant_foundation,identity_auth
 shared_storage_cutover.PERSISTENT_ROOT=Path(sys.argv[1])
+tenant=Path(sys.argv[1])/'edgepilot-tenants.db'
+tenant_foundation.setup(str(tenant))
+identity_auth.setup(str(tenant))
+owner=tenant_foundation.TenantStore(str(tenant)).provision_user('Owner',role='owner')
+identity_auth.IdentityStore(str(tenant)).provision(owner,'owner-person','long-synthetic-password-for-tests')
+tenant.chmod(0o600)
 import app
-owner=app.tenant_foundation.TenantStore(str(app.TENANT_DB)).provision_user('Owner',role='owner')
 member=app.tenant_foundation.TenantStore(str(app.TENANT_DB)).provision_user('Member',role='member')
-app.identity_store.provision(owner,'owner-person','long-synthetic-password-for-tests')
 app.identity_store.provision(member,'member-person','long-synthetic-password-for-tests')
 client=app.app.test_client()
 base='https://edgepilot.belenoscreations.biz'
