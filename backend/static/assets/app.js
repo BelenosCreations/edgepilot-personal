@@ -460,7 +460,36 @@ async function runOrderAudit(){const el=$('orderAuditStatus');el.textContent='Fe
 async function loadOrderAudit(){try{const r=await api('orders/audit');$('orderAuditStatus').textContent=r.lastRun?`Last audit: ${r.lastRun.ts} · ${r.orders.length} recently observed orders · ${r.trades.length} observed executions · READ ONLY`:'No order audit recorded.';const out=$('orderAuditDetails');out.replaceChildren();for(const a of (r.alerts||[]).slice(0,10)){const row=document.createElement('div');row.className='rule';row.textContent=a.kind+': '+a.message;out.append(row)}for(const t of (r.trades||[]).slice(0,10)){const row=document.createElement('div');row.className='log';row.textContent=`${t.symbol} ${t.side} ${t.quantity} @ ${t.price} · ${t.origin} · fees ${t.fees_status}`;out.append(row)}}catch(e){$('orderAuditStatus').textContent='Order audit unavailable: '+e.message}}
 
 // v0.19.3 — on-demand, opt-in AI analysis; no broker order capabilities.
-async function loadAI(){try{const s=await api('ai/status');$('aiEnabled').checked=s.enabled;$('aiBudget').value=s.monthlyBudgetUsd;$('aiStatus').textContent=`${s.enabled?'Enabled':'Disabled'} · Provider key ${s.credentialConfigured?'configured':'missing'} · Local reserved ${money(s.estimatedBudgetReservedUsd)} / ${money(s.monthlyBudgetUsd)} for ${s.month}. This is not an API billing cap.`;const h=await api('ai/history');const out=$('aiHistory');out.replaceChildren();for(const a of h.history){const row=document.createElement('div');row.className='rule';const heading=document.createElement('b');heading.textContent=`${a.market} ${a.asset}: ${a.question}`;const p=document.createElement('p');p.className='muted';p.style.whiteSpace='pre-wrap';p.textContent=a.reply;row.append(heading,p);out.append(row);}if(!h.history.length)out.textContent='No AI research questions yet.'}catch(e){$('aiStatus').textContent=e.message;}}
+async function loadAI(){
+  try {
+    const s=await api('ai/status');
+    $('aiEnabled').checked=s.enabled;
+    $('aiBudget').value=Number(s.monthlyBudgetUsd).toFixed(2);
+    const precise=value=>'$'+Number(value||0).toFixed(6);
+    $('aiStatus').textContent=(s.enabled?'Enabled':'Disabled')+
+      ' · Provider key '+(s.credentialConfigured?'configured':'missing')+
+      ' · Monthly local budget '+money(s.monthlyBudgetUsd)+
+      ' · Counted '+precise(s.estimatedBudgetReservedUsd)+
+      ' · Provider token cost estimate '+precise(s.actualTokenCostEstimateUsd)+
+      ' · Remaining '+precise(s.remainingLocalBudgetUsd)+
+      ' · Pending/uncertain '+s.unresolvedRequestCount+
+      ' · Blocked '+s.blockedRequestCount+
+      ' · Rates checked '+s.pricingCheckedAt+
+      ', review due '+s.pricingReviewExpiresAt+
+      '. This is a local risk circuit breaker, NOT an API provider billing cap.';
+    const h=await api('ai/history');
+    const out=$('aiHistory');out.replaceChildren();
+    for(const a of h.history){
+      const row=document.createElement('div');row.className='rule';
+      const heading=document.createElement('b');
+      heading.textContent=a.market+' '+a.asset+': '+a.question;
+      const p=document.createElement('p');p.className='muted';
+      p.style.whiteSpace='pre-wrap';p.textContent=a.reply;
+      row.append(heading,p);out.append(row);
+    }
+    if(!h.history.length)out.textContent='No AI research questions yet.';
+  }catch(e){$('aiStatus').textContent=e.message;}
+}
 async function saveAISettings(){try{if($('aiEnabled').checked&&!confirm('Enable external OpenAI analysis? Any questions and context you submit will be sent to your configured AI provider and may incur separate API charges.'))return;await api('settings','POST',{ai_enabled:$('aiEnabled').checked?'1':'0',ai_monthly_budget_usd:$('aiBudget').value});await loadAI();}catch(e){alertError(e)}}
 async function askEdgeAI(){const el=$('aiResponse');el.textContent='Requesting analysis…';try{const r=await api('ai/analyze','POST',{market:$('aiMarket').value,asset:$('aiAsset').value,context:$('aiContext').value,question:$('aiQuestion').value});el.textContent=r.answer+'\n\nAI interpretation only. No trades placed.';await loadAI()}catch(e){el.textContent='AI request stopped: '+e.message;}}
 
