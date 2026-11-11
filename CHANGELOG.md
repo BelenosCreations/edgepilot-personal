@@ -1,3 +1,8 @@
+## v0.2.66 — 2026-11-11 — Fail-closed permanent tenant-only owner lockout guard
+**Fixed:** Tenant-only legacy API retirement now refuses startup unless the separate existing private tenant SQLite DB has integrity, correctly isolated schema, one active owner and a corresponding Argon2id identity; duplicate/disabled/unpaired owners or members fail closed. The original owner's current single-user mode is unchanged.
+**Tests:** Synthetic missing/empty tenant file, broken/duplicated owner, disabled owner, unpaired members, file permissions/symlinks, ciphertext nonmutation, plus updated existing permanent HTTP invitation and passkey tests to seed a legitimate independent owner before tenant-only import. Verify GitHub PR/merged-main CI before release.
+**Limits:** Does not run owner bootstrap or prove login, passkeys, provider authorization, actual two-device isolation or account migration. No tenant-only flags activated, live trades, bank transfers or paid resources. See PERMANENT_TENANT_OWNER_LOCKOUT_GUARD_V0266.md.
+
 ## v0.2.65 — 2026-11-11 — Read-only first-owner readiness audit (dormant)
 **Added:** Private, gated, console-only inspection for an existing isolated tenant SQLite database before and after manual first-owner enrollment. Checks file permissions, distinct inode, known schemas, integrity, owner role/identity pairing, and duplicate or partial records, without modifying owner or tenant data. Reports sanitized next operator stage.
 **Tests:** Synthetic empty and owner-enrolled tenant readiness, independent member counts, duplicate owners, orphaned identities, unsafe feature flags/permissions, and unchanged legacy ciphertext. GitHub PR and merged-main tests required.

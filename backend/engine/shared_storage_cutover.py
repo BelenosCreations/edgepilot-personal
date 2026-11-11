@@ -109,6 +109,47 @@ def ensure_private_tenant_file(path, *, persistent_root=None):
     return target
 
 
+
+def _verify_first_permanent_owner(tenant_path):
+    """Fail closed before retiring the old login without an enrolled owner.
+
+    Read-only by design: no automatic member creation, token migration or
+    password reset. Caller must independently prove a real login and recovery.
+    """
+    tenant = Path(tenant_path)
+    try:
+        info = tenant.lstat()
+        if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+                or stat.S_IMODE(info.st_mode) & 0o077):
+            raise SharedStorageDenied("Permanent owner identity storage unsafe")
+        with sqlite3.connect(tenant.as_uri() + "?mode=ro", uri=True, timeout=10) as db:
+            db.execute("PRAGMA query_only=ON")
+            tables = {row[0] for row in db.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+            if (not {"tenant_schema_meta", "tenant_users", "tenant_identities"}.issubset(tables)
+                    or {"broker_credentials", "settings", "orders"} & tables):
+                raise SharedStorageDenied("Independent owner identity schema unavailable")
+            if db.execute("PRAGMA integrity_check").fetchone() != ("ok",):
+                raise SharedStorageDenied("Independent owner identity integrity unavailable")
+            if db.execute("PRAGMA foreign_key_check").fetchone() is not None:
+                raise SharedStorageDenied("Independent owner identity integrity unavailable")
+            owner_total = db.execute(
+                "SELECT COUNT(*) FROM tenant_users WHERE role='owner'").fetchone()[0]
+            owner_active = db.execute("""SELECT COUNT(*) FROM tenant_users u
+                JOIN tenant_identities i ON i.user_id=u.user_id
+                WHERE u.role='owner' AND u.disabled_at IS NULL
+                  AND i.password_hash LIKE '$argon2id$%'""").fetchone()[0]
+            user_total = db.execute("SELECT COUNT(*) FROM tenant_users").fetchone()[0]
+            identity_total = db.execute("SELECT COUNT(*) FROM tenant_identities").fetchone()[0]
+            if (owner_total != 1 or owner_active != 1 or user_total != identity_total
+                    or user_total < 1 or user_total > 10):
+                raise SharedStorageDenied("Independent first owner is not safely enrolled")
+    except SharedStorageDenied:
+        raise
+    except (OSError, ValueError, sqlite3.Error):
+        raise SharedStorageDenied("Permanent first owner cannot be verified") from None
+
+
 def permanent_identity_policy(env, legacy_path, tenant_path):
     """Gate permanent tenant-only routing and Android app-origin verification.
 
@@ -128,6 +169,11 @@ def permanent_identity_policy(env, legacy_path, tenant_path):
             or _flag(env, "EDGE_AUTOMATION_WORKER_ENABLED")
             or _flag(env, "ENABLE_LIVE_ORDERS")):
         raise SharedStorageDenied("Permanent identity requires the isolated inactive shared backend")
+    # Never retire the known working legacy owner login before a valid
+    # independently enrolled tenant owner exists. Read-only; cannot prove
+    # the human can log in or recover their identity.
+    if tenant_only:
+        _verify_first_permanent_owner(tenant_path)
     if not native:
         return {"tenant_only": tenant_only, "android_signer_sha256": None}
     if not tenant_only or not _flag(env, "EDGE_TENANT_PASSKEYS_ENABLED"):
