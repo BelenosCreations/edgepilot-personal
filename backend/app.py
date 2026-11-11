@@ -9,7 +9,7 @@ from urllib.parse import quote
 import requests
 from flask import Flask, jsonify, request, send_from_directory, redirect, g
 from dotenv import load_dotenv
-from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, tenant_password_change, tenant_session_controls, tenant_registration, tenant_passkeys, account_scope, tenant_monitor_blueprint, tenant_watchlist, tenant_public_vault, tenant_public_live_readonly, staging_isolation, staging_operator, shared_storage_cutover
+from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, tenant_password_change, tenant_session_controls, tenant_registration, tenant_passkeys, account_scope, tenant_monitor_blueprint, tenant_watchlist, tenant_public_vault, tenant_public_live_readonly, staging_isolation, staging_operator, shared_storage_cutover, permanent_admin_invitations
 ROOT=Path(__file__).parent; load_dotenv(ROOT/'.env')
 # Refuse unsafe isolated-test configuration before opening any database,
 # owner credential store or background-worker state. Production is unchanged.
@@ -72,6 +72,9 @@ tenant_monitor_preview_enabled=os.getenv('EDGE_TENANT_MONITOR_PREVIEW_ENABLED','
 tenant_watchlist_edit_enabled=os.getenv('EDGE_TENANT_WATCHLIST_EDIT_ENABLED','false').lower()=='true'
 tenant_public_vault_enabled=os.getenv('EDGE_TENANT_PUBLIC_VAULT_ENABLED','false').lower()=='true'
 tenant_public_read_enabled=os.getenv('EDGE_TENANT_PUBLIC_READONLY_ENABLED','false').lower()=='true'
+permanent_admin_invites_enabled=os.getenv('EDGE_PERMANENT_OWNER_INVITES_ENABLED','false').lower()=='true'
+if permanent_admin_invites_enabled and not (TENANT_POLICY['tenant_only'] and identity_auth_enabled and tenant_signup_enabled):
+    raise RuntimeError('Permanent owner invitations require tenant-only invitation authentication')
 if identity_auth_enabled and not tenant_schema_enabled:
     raise RuntimeError('Identity subsystem requires the prepared tenant schema')
 if tenant_password_change_enabled and not identity_auth_enabled:
@@ -96,6 +99,7 @@ identity_store=None
 tenant_password_manager=None
 tenant_session_manager=None
 tenant_registration_store=None
+permanent_admin_invites=None
 tenant_passkey_store=None
 tenant_account_store=None
 tenant_monitor_planner=None
@@ -115,7 +119,12 @@ if tenant_schema_enabled:
             tenant_session_manager=tenant_session_controls.TenantSessionControls(str(TENANT_DB),identity_store)
         if tenant_signup_enabled:
             tenant_registration.setup(str(TENANT_DB))
-            tenant_registration_store=tenant_registration.TenantRegistration(str(TENANT_DB))
+            tenant_registration_store=tenant_registration.TenantRegistration(
+                str(TENANT_DB), max_users=10 if TENANT_POLICY['tenant_only'] else None)
+            if permanent_admin_invites_enabled:
+                permanent_admin_invitations.setup(str(TENANT_DB))
+                permanent_admin_invites=permanent_admin_invitations.PermanentAdminInvitations(
+                    str(TENANT_DB),identity_store)
         if tenant_passkeys_enabled:
             tenant_passkeys.setup(str(TENANT_DB))
             tenant_passkey_store=tenant_passkeys.TenantPasskeyStore(
@@ -184,6 +193,8 @@ def authenticate():
         return
     if request.path.startswith('/api/identity/'):
         # Identity account reads require a second independently enabled gate.
+        if request.path=='/api/identity/admin/invitations' and not permanent_admin_invites_enabled:
+            return fail('Not found',404)
         if request.path.startswith('/api/identity/sessions') and not tenant_session_controls_enabled:
             return fail('Not found',404)
         if request.path=='/api/identity/password/change' and not tenant_password_change_enabled:
@@ -308,6 +319,23 @@ def identity_register():
         return fail('Registration temporarily unavailable',429)
     except tenant_registration.RegistrationDenied:
         return fail('Registration unavailable',400)
+
+
+# Opt-in permanent owner invitation issuance. The verified member's role,
+# session version and CSRF are rechecked inside the atomic tenant DB lock.
+# The client cannot request another role, identify an owner, or submit a key.
+@app.post('/api/identity/admin/invitations')
+def identity_issue_private_invitation():
+    if not permanent_admin_invites_enabled:
+        return fail('Not found',404)
+    if request.get_json(silent=True)!={}:
+        return fail('Invitation request unavailable',400)
+    try:
+        return jsonify(permanent_admin_invites.issue(
+            request.cookies.get(identity_auth.COOKIE_NAME,''),
+            request.headers.get('X-Edge-Identity-CSRF',''))),201
+    except permanent_admin_invitations.PermanentInvitationDenied:
+        return fail('Owner invitation unavailable',403)
 
 
 # Optional verified WebAuthn ceremonies. All four routes are separately
