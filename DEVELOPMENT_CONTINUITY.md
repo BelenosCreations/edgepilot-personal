@@ -601,3 +601,35 @@ DB remains ephemeral; no live brokerage keys or real trades. Real
 Public accounts require durable storage and provider approval.
 The earlier workflow run #43011557930 failed before APK compilation
 from a trailing hostname space; it is not the successful run.
+
+
+## v0.2.55 — First physical Android test revealed likely WebAuthn native-origin mismatch
+
+User installed signed `com.edgepilot.mobile.staging` on the real Android
+phone, created and signed into the synthetic `Test 1` account,
+and tapped "Add biometric passkey". The screen displayed
+"Passkey verification failed". **Password/session UI worked**; the
+failure was at passkey verification. Do not claim passkeys work.
+
+Code inspection established that `TenantPasskeyStore` used
+`expected_origin=self.origin` (the HTTPS website) for both
+registration and authentication, while Android Credential Manager
+may return `android:apk-key-hash:<base64url(SHA256 app signer)>`.
+Google's official passkey guide documents the Android origin.
+Prepare a narrowly scoped origin allowlist in v0.2.55 using the
+already independently verified **public** staging APK signing
+certificate fingerprint. In production, or without strict staging
+startup validation, keep only HTTPS. Test with real cryptographic
+software WebAuthn fixtures for both origins and reject wrong
+native fingerprint, altered challenge and spoofed browser origin.
+Do not log clientData/credential material and never accept a
+client-selected origin.
+
+**Critical deployment warning:** Render Free staging uses
+`/tmp/edgepilot-staging.db`. Any redeploy/spin down can erase Test 1,
+passkeys and used invitations. Preserve the owner's original production
+service and APK. Recreate Test 1 with newly minted synthetic invitation
+only if required; do not use real Public brokerage credentials.
+The owner must retest native biometric register/sign-in after the
+verified staging fix is deployed. Prior test screenshot confirms
+account sign-in only, not successful passkey registration.

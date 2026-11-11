@@ -131,3 +131,24 @@ No device installation, passkey enrollment, code redemption or
 independent account-linking success has yet been verified.
 The first failed workflow run #43011557930 remains a separate
 historical failed attempt. Do not reuse its nonexistent APK.
+
+
+## v0.2.55 — Android native WebAuthn verification gate
+
+A real `EdgePilot Staging` Android installation successfully
+registered and signed in synthetic Test 1, but `Add biometric
+passkey` returned the generic passkey verification failure.
+The server previously accepted only the HTTPS website origin.
+Android's clientData may instead identify the **signed application**
+using `android:apk-key-hash:<base64url SHA-256 cert digest>`.
+The v0.2.55 fix explicitly pins this **one actual staging signer**
+as an additional origin **only** for the fail-closed isolated
+staging process. Both the verification challenge and relying-party
+ID are still required. Untrusted native origins are rejected.
+Retest on the physical phone before calling passkey support complete.
+
+**Test-account persistence:** Redeploying Render Free can erase
+the temporary Test 1 account and both invitation records. Do not
+enter real Public API keys or assume account recovery. The operator
+may need to mint two new synthetic invitations after redeploy,
+using the private operator key in the user's custody.

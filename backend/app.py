@@ -109,7 +109,14 @@ if tenant_schema_enabled:
             tenant_passkey_store=tenant_passkeys.TenantPasskeyStore(
                 str(DB),identity_store,
                 rp_id=os.getenv('EDGE_WEBAUTHN_RP_ID',''),
-                expected_origin=os.getenv('EDGE_WEBAUTHN_ORIGIN',''))
+                expected_origin=os.getenv('EDGE_WEBAUTHN_ORIGIN',''),
+                # Only the independently verified, fail-closed staging process
+                # can enable Android's signed-app origin. Production keeps
+                # accepting the original HTTPS origin exclusively.
+                staging_android_cert_sha256=(
+                    os.getenv('EDGE_ANDROID_CERT_SHA256','')
+                    if os.getenv('EDGE_ISOLATED_STAGING','false').lower()=='true'
+                    else None))
         if tenant_read_enabled:
             account_scope.setup(str(DB))
             tenant_account_store=account_scope.AccountScopeStore(str(DB),identity_store)

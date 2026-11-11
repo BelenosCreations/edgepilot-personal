@@ -8,6 +8,7 @@ session. A login response NEVER selects a brokerage account or authorizes tradin
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import re
@@ -43,6 +44,20 @@ MAX_CREDENTIAL_JSON_BYTES = 16_384
 
 class PasskeyDenied(PermissionError):
     """Intentionally generic: no credential, username or token details."""
+
+
+def _android_native_origin_from_pinned_cert(fingerprint):
+    """Android's fixed signed-app WebAuthn origin, never client supplied.
+
+    This is a public certificate digest (NOT a key or secret), encoded as
+    RFC 4648 base64url without '='. Fail closed for malformed digests.
+    """
+    if (not isinstance(fingerprint, str) or
+        re.fullmatch(r"(?:[0-9A-Fa-f]{2}:){31}[0-9A-Fa-f]{2}", fingerprint) is None):
+        raise ValueError("A verified Android certificate fingerprint is required")
+    certificate_digest = bytes.fromhex(fingerprint.replace(":", ""))
+    return ("android:apk-key-hash:" +
+            base64.urlsafe_b64encode(certificate_digest).decode("ascii").rstrip("="))
 
 
 def _digest(value):
@@ -107,7 +122,8 @@ def setup(path):
 class TenantPasskeyStore:
     """User-scoped passkey ceremonies; never accepts a client-provided owner ID."""
 
-    def __init__(self, path, identity_store, *, rp_id, expected_origin):
+    def __init__(self, path, identity_store, *, rp_id, expected_origin,
+                 staging_android_cert_sha256=None):
         if not isinstance(identity_store, identity_auth.IdentityStore):
             raise TypeError("Verified identity store required")
         if identity_store.path != str(path):
@@ -125,6 +141,15 @@ class TenantPasskeyStore:
         self.identity_store = identity_store
         self.rp_id = rp_id
         self.origin = expected_origin
+        # Production remains HTTPS-only. In separately gated staging only,
+        # app.py may pass the verified public signer digest to accept the
+        # Android Credential Manager native origin in addition to HTTPS.
+        # Neither request headers nor credential clientData can extend this.
+        self.allowed_origins = (
+            [expected_origin, _android_native_origin_from_pinned_cert(
+                staging_android_cert_sha256)]
+            if staging_android_cert_sha256 is not None else expected_origin
+        )
 
     def _new_challenge(self, operation, user_id, challenge, now):
         token = secrets.token_urlsafe(36)
@@ -206,7 +231,7 @@ class TenantPasskeyStore:
         try:
             verified = verify_registration_response(
                 credential=data,expected_challenge=challenge,
-                expected_rp_id=self.rp_id,expected_origin=self.origin,
+                expected_rp_id=self.rp_id,expected_origin=self.allowed_origins,
                 require_user_verification=True)
             credential_id = bytes(verified.credential_id)
             public_key = bytes(verified.credential_public_key)
@@ -281,7 +306,7 @@ class TenantPasskeyStore:
                     raise ValueError("User handle mismatch")
             verified = verify_authentication_response(
                 credential=data,expected_challenge=challenge,
-                expected_rp_id=self.rp_id,expected_origin=self.origin,
+                expected_rp_id=self.rp_id,expected_origin=self.allowed_origins,
                 credential_public_key=bytes(row["public_key"]),
                 credential_current_sign_count=row["sign_count"],
                 require_user_verification=True)
