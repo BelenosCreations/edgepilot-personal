@@ -377,3 +377,21 @@ to real users. Future secure key management, rotation and recovery,
 ten-user load, provider billing opt-in, real hardware passkeys and
 real independent Public accounts remain outstanding.
 See TENANT_AI_BYOK_BUDGET_RUNBOOK.md.
+
+
+## v0.2.46 — Licensed shared, account-neutral research sample cache
+
+A separate dormant module now validates strictly public provider-neutral
+observations, requires affirmative verified analysis/cache/redistribution
+rights, rejects personal keys/holdings/account identifiers, records only a
+short-lived spread feature, and fences all stock/ETF watchlist previews by
+independent identity, CSRF, account linkage and watchlist owner in one
+SQLite transaction. Ten independent synthetic users reuse one feature with
+zero AI/provider calls. Crypto/prediction account entitlement is NOT
+implied, and no provider terms have been accepted by this code.
+No real shared market data, external provider requests, HTTP UI, worker,
+orders, bank transfers or production gates activated. Follow
+SHARED_RESEARCH_CACHE_RUNBOOK.md and the main AI_ANALYSIS_COST_STRATEGY.md.
+Before continuing verify PR/CI and resume from highest verified main commit.
+The two-physical-device/two-independent-Public-account acceptance goal
+and physical biometric checks remain open.
