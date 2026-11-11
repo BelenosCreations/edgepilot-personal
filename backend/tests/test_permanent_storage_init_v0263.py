@@ -121,6 +121,32 @@ class PermanentStorageInitTests(unittest.TestCase):
         self.assertFalse(list(self.root.glob(".edgepilot-tenant-stage-*")))
         self.assertEqual(self.owner.read_bytes(), before)
 
+    def test_stage_diagnostics_are_sanitized_and_staging_is_removed(self):
+        # Trigger the same generic failure path seen in production, without
+        # relying on unknown SQL/OS errors being safe to display.
+        secret = "SYNTHETIC-DO-NOT-LOG-BROKER-CIPHERTEXT"
+        for phase, target, side_effect in [
+            ("TENANT_SCHEMA_CREATE", init.tenant_foundation, OSError(secret)),
+            ("IDENTITY_SCHEMA_CREATE", init.identity_auth, sqlite3.DatabaseError(secret)),
+        ]:
+            with self.subTest(phase=phase):
+                with mock.patch.object(target, "setup", side_effect=side_effect):
+                    with self.assertRaises(init.PrivateStorageInitDenied) as caught:
+                        self.prepare()
+                self.assertEqual(str(caught.exception),
+                                 "PRIVATE_STORAGE_BLOCKED_AT_" + phase)
+                self.assertNotIn(secret, str(caught.exception))
+                self.assertFalse(self.tenant.exists())
+                self.assertFalse(list(self.root.glob(".edgepilot-tenant-stage-*")))
+        with mock.patch.object(init.os, "link", side_effect=OSError(secret)):
+            with self.assertRaises(init.PrivateStorageInitDenied) as caught:
+                self.prepare()
+        self.assertEqual(str(caught.exception),
+                         "PRIVATE_STORAGE_BLOCKED_AT_NO_REPLACE_PUBLISH")
+        self.assertNotIn(secret, str(caught.exception))
+        self.assertFalse(self.tenant.exists())
+        self.assertFalse(list(self.root.glob(".edgepilot-tenant-stage-*")))
+
     def test_exclusive_publish_race_cannot_replace_existing_file(self):
         before = self.owner.read_bytes()
         with mock.patch.object(init.os, "link", side_effect=FileExistsError):

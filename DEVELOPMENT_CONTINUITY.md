@@ -1,3 +1,32 @@
+## CURRENT checkpoint — v0.2.68, November 11, 2026
+
+v0.2.67 deployed with passed PR and merged-main tests on existing
+paid Render service. The owner explicitly approved a temporary pause
+to the Observe/Paper worker; EDGE_AUTOMATION_WORKER_ENABLED was changed
+to false through the Render connector and a live Render deployment was
+confirmed. The owner verified /data/edgepilot.db permissions corrected
+from 0644 to 0600 and the worker setting false via trusted SSH. The
+separate /data/edgepilot-tenants.db was still absent.
+
+The protected v0.2.63 tenant initializer was attempted twice after
+the worker/permissions fix, with the exact approval phrase, but
+returned its undifferentiated generic denial. A careful operator
+read-only diagnostic found NO blocking runtime flags, valid private
+owner DB and SQLite integrity, successful isolated schema and identity
+creation on the same paid disk, valid temporary 0600 permissions,
+successful fsync and hardlink; no production tenant file was created.
+v0.2.68 adds fixed, nonsecret phase identifiers to THIS manual
+initializer only, and tests error sanitization. It does not relax
+the checks, perform initialization or change live flags.
+
+NEXT: verify PR/main CI and Render deployment for v0.2.68, then
+request the operator to execute the original protected interactive
+initializer once, recording only the fixed safe stage result. Do not
+enable identity, Public reads, live orders, bank transfers or a
+second paid service. If the initializer succeeds, run the v0.2.62
+read-only cutover preflight then v0.2.65 owner readiness before
+any manual independent-owner bootstrap.
+
 ## CURRENT checkpoint — v0.2.67, November 11, 2026
 
 v0.2.66 PR #87 passed PR CI and merged, adding a startup guard that
