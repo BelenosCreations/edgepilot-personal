@@ -167,6 +167,18 @@ commercial billing, actual provider usage or ten-device scalability.
 Managed credits/payments are disabled. The existing physical two-device/
 two-independent-Public-account and Android biometric gate remains open.
 
+## v0.2.46 — Licensed shared feature reuse only, not tenant activation
+
+A dormant account-neutral cache now reuses one provider-rights-asserted,
+short-lived synthetic public spread feature across ten isolated authenticated
+identities. Reads check current licensed rights, individual account linkage,
+CSRF, watchlist ownership and inactive worker status. No personal portfolio
+data, API key or AI budget is shared. This is NOT evidence that any real
+market-data provider permits caching/redistribution, nor that crypto or
+prediction market coverage exists, nor that a real phone can complete
+tenant onboarding. Real two-device independent Public acceptance remains
+required and no live orders, transfers or AI billing are enabled.
+
 ## Milestone acceptance criteria — not complete until verified
 
 - Two separately provisioned EdgePilot users can register and sign in from
