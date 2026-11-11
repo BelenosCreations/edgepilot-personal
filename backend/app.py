@@ -1271,7 +1271,7 @@ def research_analyze_snapshot():
         if not snapshot['completeTopOfBook'] or snapshot.get('knownStale'):return fail('Bid/ask incomplete or stale: AI analysis blocked; refresh data',409)
         if kind=='prediction' and not snapshot['openForTrading']:return fail('Event is closed or halted',409)
         context=market_snapshot.text_context(snapshot)
-        result=ai_analysis.analyze(str(DB),settings(),question,kind,symbol,context,os.getenv('OPENAI_API_KEY',''),os.getenv('OPENAI_MODEL','gpt-4.1-mini'))
+        result=ai_analysis.analyze(str(DB),settings(),question,kind,symbol,context,os.getenv('OPENAI_API_KEY',''),os.getenv('OPENAI_MODEL','gpt-6-luna'))
         result['dataSource']='Public market snapshot retrieved on demand; provider quote timestamps may differ'
         result['capturedAt']=snapshot['capturedAt']
         return result
