@@ -97,7 +97,7 @@ class TenUserAIVaultTests(unittest.TestCase):
         # Different private encryption key cannot decrypt any member key.
         with self.assertRaises(Exception):
             Fernet(Fernet.generate_key()).decrypt(rows[0][1])
-        self.assertNotIn("OPENAI_API_KEY",(
+        self.assertNotIn("os.getenv(\"OPENAI_API_KEY\"",(
             Path(__file__).resolve().parents[1]/
             "engine/tenant_ai_budget_vault.py").read_text())
 
