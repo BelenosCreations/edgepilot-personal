@@ -104,3 +104,15 @@ See `STAGING_RENDER_LIVE_CHECKPOINT.md` for the actual Free
 service and earlier DNS checkpoint. This bootstrap is limited
 to two synthetic invitations per ephemeral database and is
 not a general-purpose multi-tenant administration endpoint.
+
+
+## v0.2.54 — Mobile entry spaces in the staging APK workflow
+
+On November 11 the first manually dispatched signed staging build
+#43011557930 **failed** before compilation because the form
+contained a trailing space after the otherwise-correct hostname.
+A revised workflow trims only external whitespace and passes the
+strictly validated host through GITHUB_ENV into Gradle. A successful
+signed APK has **not** been established by the failed run.
+Launch an entirely **new** workflow run on the updated main branch
+and inspect a green sign-and-upload job; do not install the ZIP itself.

@@ -546,3 +546,28 @@ exact staging host. Do not claim a GitHub/Render action succeeded
 unless the corresponding logs or resulting artifact prove it.
 Any Render Free instance spin-down can erase ephemeral invites,
 accounts and passkeys; only synthetic trial data allowed.
+
+
+## v0.2.54 — GitHub signed Android staging run failed safely (phone trailing space)
+
+The owner reported "APK built", but inspection of the actual GitHub
+workflow showed run #43011557930 on `main`, event
+`workflow_dispatch`, **completed/failure**. The failing step was
+"Verify distinct owned staging hostname"; later compile, signing
+and artifact steps were skipped. The log showed
+`EDGE_STAGING_HOST: staging-edgepilot.belenoscreations.biz `
+with one trailing space. Do not claim a signed staging APK exists
+from that run.
+
+Fix the manual-only GitHub workflow to normalize *surrounding*
+whitespace once, validate the pinned hostname/production exclusion,
+write the checked value to GITHUB_ENV, and build with the checked
+value rather than the raw workflow form input. Regression tests
+execute the real Bash block with trailing spaces, CRLF, malicious
+injection, external hosts and production host. No signing key,
+provider credential or Render environment change.
+After verified PR and main CI, the owner must launch a **fresh**
+staging signed workflow on new main; don't rerun the previous
+SHA. Only then verify a successful artifact and actual signed APK
+package/cert/embedded host before installing alongside the
+unchanged production app.
