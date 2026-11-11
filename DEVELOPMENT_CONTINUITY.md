@@ -1,3 +1,28 @@
+## CURRENT checkpoint — v0.2.61, November 11, 2026
+
+v0.2.58: paid existing Render service reuse and private separate tenant DB
+code merged, tests green, deployed live while feature flags stayed off.
+v0.2.59: future tenant-only legacy API denial and signed production
+passkey-origin policy merged; gated and unchanged in live config.
+v0.2.60: one-time offline first-owner role/bootstrap CLI merged after
+green PR tests; no real operator bootstrap has executed.
+
+v0.2.61 adds a separate **disabled** first-owner invitation issuance
+API for a bounded private ten-user pilot. It does not trust Public or
+legacy token for roles. Issuance is tied to owner-only identity and CSRF
+inside SQLite BEGIN IMMEDIATE; private registration refuses a race above
+ten users. Nine per 24-hour invite issuance and append-only audit. All
+brokers, workers, orders and transfers remain inactive by default.
+See PERMANENT_PRIVATE_INVITATIONS_V0261.md.
+
+The NEXT real-world required milestone remains verified current
+encrypted off-service legacy backup and restore rehearsal; initial
+owner enrollment from a trusted Render console; deliberate shared
+database flags, independent passwordless login and two-device
+isolation, then provider-approved read-only brokerage checks.
+No additional paid hosting/storage. Do not claim code CI alone
+proves any real user or broker account migrated.
+
 ## CURRENT checkpoint — v0.2.60, November 11, 2026
 
 v0.2.58 PR #78 merged and verified on paid Render and GitHub. v0.2.59
