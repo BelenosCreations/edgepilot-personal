@@ -144,6 +144,18 @@ APK workflow. This is a code/CI readiness step, not a deployed staging
 service, OS association test, Android biometric assertion, or evidence of
 two actual independently owned accounts. See ANDROID_ISOLATED_STAGING_RUNBOOK.md.
 
+## Free-first AI intelligence and cost strategy (approved 2026-11-10)
+
+The approved AI_ANALYSIS_COST_STRATEGY.md requires rights-checked zero-paid-AI
+research, out-of-sample statistical validation and risk-adjusted after-fee
+signals, followed by optional per-user AI with independent budgeting/BYOK
+and commercial-readiness abstractions. It never grants orders, fund
+movement, public distribution or customer billing. v0.2.43 begins this
+research contract with standalone source-provenance, market-data quality
+and conservative scenario utilities, but does not activate any provider
+or worker. Explicitly preserve two physical devices/two separate
+identities/two permitted independent Public accounts as the core gate.
+
 ## Milestone acceptance criteria — not complete until verified
 
 - Two separately provisioned EdgePilot users can register and sign in from

@@ -6,7 +6,7 @@ EdgePilot is a personal trading-intelligence platform designed to bring brokerag
 
 The goal is not simply to display prices or place trades. EdgePilot is intended to provide a traceable decision system: understand what the broker actually reported, distinguish observation from simulated results, evaluate a strategy against costs and risk, and refuse activity when data or authorization is uncertain.
 
-> **Development status:** The repository is currently developing **v0.2.42**. The existing owner-facing application supports brokerage research and experimental Observe/Paper modes; **real brokerage order submission, autonomous live trading, and bank transfers remain disabled**. A separate, gated multi-user identity platform now includes invitation registration, individually encrypted Public connections, read-only account integration, and WebAuthn passkey endpoints. An Android-capable passkey account screen provides owner-scoped Public account discovery, verified read-only linking, sanitized portfolio views, an independently gated **inactive** monitoring-plan preview, and per-account watchlist editing that cannot activate any scanner, trade, or fund transfer. The account screen links to Public's verified signup and API-key instructions, and now supports user-confirmed replacement or disconnection of only the current user's encrypted Public credentials. Previously verified account bindings are disabled after either action. Android opens only the two Public-owned help pages outside its authenticated WebView. The account security screen also supports a user-confirmed password change that revokes every session belonging to that member without changing other users' sessions or Public keys. A separately gated device-session screen now lets members review their own active identity sessions and selectively sign out other sessions without affecting another user's identity. It deliberately does not fingerprint or identify physical devices. This is not forgotten-password recovery. The manual-only Android signing workflow has now produced a certificate-pinned, privately signed v0.19.17 test APK on November 10, 2026 (GitHub run #42888113943, attempt 2). The verification and upload passed after correcting a mismatched configured fingerprint; the owner reports installing the APK and logging into the legacy dashboard on one physical phone. Physical-device passkeys and Digital Asset Links remain unverified. Account-specific running workers and real multi-user acceptance are also incomplete. Offline cross-process tests recognize fail-closed SQLite lock contention while continuing to enforce the synthetic admission limits. See [CHANGELOG.md](CHANGELOG.md) for release history, and [DEVELOPMENT_CONTINUITY.md](DEVELOPMENT_CONTINUITY.md) for a durable new-conversation development checkpoint.
+> **Development status:** The repository is currently developing **v0.2.43**. The existing owner-facing application supports brokerage research and experimental Observe/Paper modes; **real brokerage order submission, autonomous live trading, and bank transfers remain disabled**. A separate, gated multi-user identity platform now includes invitation registration, individually encrypted Public connections, read-only account integration, and WebAuthn passkey endpoints. An Android-capable passkey account screen provides owner-scoped Public account discovery, verified read-only linking, sanitized portfolio views, an independently gated **inactive** monitoring-plan preview, and per-account watchlist editing that cannot activate any scanner, trade, or fund transfer. The account screen links to Public's verified signup and API-key instructions, and now supports user-confirmed replacement or disconnection of only the current user's encrypted Public credentials. Previously verified account bindings are disabled after either action. Android opens only the two Public-owned help pages outside its authenticated WebView. The account security screen also supports a user-confirmed password change that revokes every session belonging to that member without changing other users' sessions or Public keys. A separately gated device-session screen now lets members review their own active identity sessions and selectively sign out other sessions without affecting another user's identity. It deliberately does not fingerprint or identify physical devices. This is not forgotten-password recovery. The manual-only Android signing workflow has now produced a certificate-pinned, privately signed v0.19.17 test APK on November 10, 2026 (GitHub run #42888113943, attempt 2). The verification and upload passed after correcting a mismatched configured fingerprint; the owner reports installing the APK and logging into the legacy dashboard on one physical phone. Physical-device passkeys and Digital Asset Links remain unverified. Account-specific running workers and real multi-user acceptance are also incomplete. Offline cross-process tests recognize fail-closed SQLite lock contention while continuing to enforce the synthetic admission limits. See [CHANGELOG.md](CHANGELOG.md) for release history, and [DEVELOPMENT_CONTINUITY.md](DEVELOPMENT_CONTINUITY.md) for a durable new-conversation development checkpoint.
 
 The shared-user development path now includes strict owner-scoped account watchlists:
 each member can save a validated stock-symbol list for a linked account without
@@ -79,6 +79,39 @@ Supporting sections include **Markets**, **AI research**, **Funds & Transfers**,
 Markets provides configurable discovery across sampled brokerage instruments and user watchlists, quote-quality research, historical strategy studies, and walk-forward validation. Funds & Transfers is informational: money movement must still be performed through the brokerage's own supported channels. Settings covers connection management, account choice, risk parameters, appearance, and optional integrations.
 
 The bottom navigation is designed for an Android phone, with dedicated Overview, Auto-Trade, Micro-Trade, 15-Minute, and More destinations.
+
+## Free-first intelligence architecture — staged implementation
+
+EdgePilot's approved three-layer research strategy is designed for the
+private owner, up to ten independently funded private users, and possible
+future distribution without rebuilding its core. **Layer 1** is permission-
+and freshness-checked provider observations and zero-paid-AI calculations.
+**Layer 2** is chronological validation, after-fee/slippage expected-value
+scenarios and measured risk-adjusted paper-forward performance.
+**Layer 3** is optional explanations/context from AI, constrained by consent,
+user-specific budgets and independently secured credentials. AI text cannot
+authorize orders, move money or replace verified price facts.
+
+The v0.2.43 code adds a reusable **provider-neutral research interface**
+requiring explicit source rights, verified asset coverage, UTC timestamps,
+bid/ask, market state and staleness checks. It refuses future-dated or crossed
+books, disallows assumed cache/redistribution rights, and makes midpoints
+non-executable. Prediction-market scenarios require quoted ask, book depth,
+time to expiry, settlement descriptions and all explicitly supplied costs.
+An externally claimed chronological held-out probability is an unverified
+input—not a calibrated success claim. Free deterministic momentum and
+realized-dispersion descriptions are available with no AI requests.
+
+**Implementation status:** This is a locally tested module, not yet a
+live data feed, autonomous scanner, scheduled worker, complete prediction
+probability estimator or proven trading advantage. Crypto and 15-minute
+market access require their own independently confirmed provider rights
+and metadata. User-configurable $0 paid AI is a supported product goal;
+actual brokerage/data service licensing and continuous operation are not
+implied by the existence of this layer. See
+[FREE_FIRST_RESEARCH_RUNBOOK.md](FREE_FIRST_RESEARCH_RUNBOOK.md).
+Legacy optional AI accounting and future member-owned BYOK budgets will be
+improved in separate gated milestones.
 
 ## Market data, research, and accounting
 
