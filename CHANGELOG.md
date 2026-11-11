@@ -1,3 +1,8 @@
+## v0.2.64 — 2026-11-11 — Dormant read-only owner Fernet key recovery proof
+**Added:** Private, gated console-only verification of an independently entered EDGE_CREDENTIAL_KEY against the running server key and any saved encrypted Public credential. The owner SQLite database is opened read-only; authenticated Fernet decryption occurs only in memory and no secrets are logged, exported or returned.
+**Tests:** Synthetic good and wrong keys, missing/corrupt encrypted credentials, tombstones, unsafe flags, approval mismatch, private-file and symlink protections, and owner-file byte nonmutation. Verify PR and merged-main GitHub tests before release.
+**Limits:** The code itself cannot prove offsite custody, real Public access, two-device ownership, owner migration, or production cutover. No activation, trading, transfers or added paid services. See OWNER_VAULT_RECOVERY_PROOF_V0264.md.
+
 ## v0.2.63 — 2026-11-11 — Dormant console-only empty private tenant DB initializer
 **Added:** A protected, one-shot manual initializer for the existing paid /data disk: validates legacy owner DB read-only and file permissions; creates an empty, private tenant schema in a same-disk staging file; verifies integrity and zero users; publishes atomically without overwriting any existing destination. No owner records, broker secrets, orders or balances are copied, and no paid services created.
 **Tests:** Synthetic owner-ciphertext non-mutation, tenant schema and preflight compatibility, fail-closed active flags, wrong approvals, existing symlink/hardlink/destination, unsafe owner file, staged schema failure and exclusive-publication race. GitHub PR and merged-main CI required before considering release verified.
