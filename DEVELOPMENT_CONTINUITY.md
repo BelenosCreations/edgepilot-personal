@@ -395,3 +395,22 @@ SHARED_RESEARCH_CACHE_RUNBOOK.md and the main AI_ANALYSIS_COST_STRATEGY.md.
 Before continuing verify PR/CI and resume from highest verified main commit.
 The two-physical-device/two-independent-Public-account acceptance goal
 and physical biometric checks remain open.
+
+
+## v0.2.47 — Offline, provider-quota-aware sampling proposal
+
+Another independent, dormant research module proposes source-aware
+market sampling under explicit, recently verified quotas, coverage and
+license/redistribution permissions. It never schedules or makes a real
+request. Ten synthetic members can share one *proposed* licensed central
+data call or receive separate individually authorized, fair,
+per-member-quota-limited proposals. Stale data, closed/unknown sessions,
+prediction-expiry uncertainty, current backoffs and missing
+entitlements fail closed. All member identifiers remain internal.
+README, CHANGELOG and ADAPTIVE_RESEARCH_PLANNER_RUNBOOK.md updated.
+
+No market data contract, physical multi-device activation, tenant
+worker, crypto/prediction broker integration, AI payment, or live
+trade is permitted by the synthetic planner. The main project success
+gate is still two physical Android devices, independent EdgePilot
+identities and independently verified Public accounts.
