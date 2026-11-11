@@ -88,8 +88,11 @@ def setup(path):
 class TenantRegistration:
     """No role selection, no provider connection, no auto-login."""
 
-    def __init__(self, path):
+    def __init__(self, path, max_users=None):
+        if max_users is not None and (type(max_users) is not int or not 1<=max_users<=100):
+            raise ValueError("Invalid private membership cap")
         self.path = str(path)
+        self.max_users = max_users
 
     def issue_invitation(self, *, ttl_seconds=3600, now=None):
         """Trusted operator-only invocation. The raw token is returned ONCE."""
@@ -158,6 +161,10 @@ class TenantRegistration:
                     WHERE token_hash=? AND expires_at>? AND consumed_at IS NULL""",
                     (hashed_invite,moment)).fetchone()
                 if not still_valid:
+                    raise RegistrationDenied("Registration unavailable")
+                if (self.max_users is not None and
+                        db.execute("SELECT COUNT(*) FROM tenant_users").fetchone()[0]
+                        >= self.max_users):
                     raise RegistrationDenied("Registration unavailable")
                 db.execute("""INSERT INTO tenant_users
                     (user_id,label,role,created_at) VALUES(?,?,'member',?)""",
