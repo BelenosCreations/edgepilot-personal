@@ -1,3 +1,25 @@
+## CURRENT checkpoint — v0.2.64, November 11, 2026
+
+v0.2.63 PR #84 passed CI, merged, and added a dormant console-only
+empty tenant DB initializer for the existing paid /data disk. No
+production initialization has been witnessed. v0.2.64 adds a
+separate, default-off owner Fernet credential-key recovery audit:
+an independently entered EDGE_CREDENTIAL_KEY can be checked against
+the running service and saved owner Public ciphertext without
+printing secrets or altering any database. This feature has not
+actually been executed in production; evidence of an independently
+held recovery key is still required.
+
+The owner verified the November 11 encrypted database backup and
+isolated restore, uploaded it to a private Drive backup folder,
+and separately verified and uploaded a new encrypted owner-token
+GPG file. These are not substitutes for a separately recoverable
+EDGE_CREDENTIAL_KEY. Continue only after exact PR/main GitHub CI,
+Render deployment, and independent operator checks. Do not infer
+first-owner identity, tenant disk activation, second phone/Public
+account, live orders or bank transfers from a source code merge.
+No new paid infrastructure.
+
 ## CURRENT checkpoint — v0.2.63, November 11, 2026
 
 GitHub v0.2.62 (read-only independent paid-disk cutover preflight) was
