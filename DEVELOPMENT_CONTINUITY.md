@@ -1,3 +1,30 @@
+## CURRENT checkpoint — v0.2.65, November 11, 2026
+
+v0.2.64 merged with passing GitHub tests and verified live Render
+deployment. The operator previously verified the original Render
+owner Public credential decrypts successfully; separately encrypted,
+verified, and uploaded the Fernet EDGE_CREDENTIAL_KEY recovery file to
+their private Drive folder. A separate v0.2.63 protected one-time
+initializer is available for the isolated paid-disk tenant DB, which
+the operator last reported as NOT CREATED. No subsequent proof that
+the tenant file was actually initialized has been provided.
+
+v0.2.65 adds an opt-in read-only inspection for this exact gap:
+validate separate paid-disk DB schemas, one valid owner identity or
+an empty first-owner staging state, and member/identity completeness.
+It will not modify storage or authenticate real users, and its output
+does not approve live cutover. The tool is dormant until called
+manually from trusted Render console after actual tenant DB
+preparation.
+
+After exact PR/main CI and paid Render deployment verification,
+request only the missing operator evidence: actual v0.2.63 tenant
+file initialization, v0.2.62 read-only cutover preflight, v0.2.65
+owner readiness report, independent owner bootstrap/login and then
+2 separate Android devices and Public accounts. Preserve legacy
+owner login/DB and all encrypted backups; keep public tenant
+activation, auto trading, orders and bank transfers disabled.
+
 ## CURRENT checkpoint — v0.2.64, November 11, 2026
 
 v0.2.63 PR #84 passed CI, merged, and added a dormant console-only
