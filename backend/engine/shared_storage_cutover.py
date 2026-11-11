@@ -38,7 +38,7 @@ def select_tenant_database(env, legacy_path, *, persistent_root=None):
     configured = str(env.get("EDGE_TENANT_DB_PATH", ""))
     enabled = _flag(env, "EDGE_SHARED_TENANT_DB_PREPARE")
     if not configured:
-        if enabled:
+        if enabled or _flag(env, "EDGE_PERMANENT_READONLY_PILOT_ENABLED"):
             raise SharedStorageDenied("Separate tenant database path required")
         return legacy
     if (not enabled or not _flag(env, "EDGE_TENANT_SCHEMA_PREPARE")
@@ -46,14 +46,46 @@ def select_tenant_database(env, legacy_path, *, persistent_root=None):
             or _flag(env, "EDGE_AUTOMATION_WORKER_ENABLED")
             or _flag(env, "ENABLE_LIVE_ORDERS")):
         raise SharedStorageDenied("Shared storage requires isolated, inactive preparation")
-    # No real tenant brokerage or background operations during this milestone.
-    for flag in ("EDGE_TENANT_PUBLIC_VAULT_ENABLED",
-                 "EDGE_TENANT_PUBLIC_READONLY_ENABLED",
-                 "EDGE_TENANT_ACCOUNT_READS_ENABLED",
-                 "EDGE_TENANT_MONITOR_PREVIEW_ENABLED",
-                 "EDGE_TENANT_WATCHLIST_EDIT_ENABLED"):
-        if _flag(env, flag):
-            raise SharedStorageDenied("Brokerage and tenant workers must stay disabled")
+    # Tenant API features remain denied on the paid backend unless the
+    # independent identity owner was already enrolled and a second, explicit
+    # read-only pilot gate is enabled. The pilot alone enables NOTHING.
+    scoped_flags = ("EDGE_TENANT_PUBLIC_VAULT_ENABLED",
+                    "EDGE_TENANT_PUBLIC_READONLY_ENABLED",
+                    "EDGE_TENANT_ACCOUNT_READS_ENABLED",
+                    "EDGE_TENANT_MONITOR_PREVIEW_ENABLED",
+                    "EDGE_TENANT_WATCHLIST_EDIT_ENABLED")
+    pilot = _flag(env, "EDGE_PERMANENT_READONLY_PILOT_ENABLED")
+    if any(_flag(env, feature) for feature in scoped_flags) and not pilot:
+        raise SharedStorageDenied("Independent tenant account features require opt-in")
+    if pilot:
+        if not _flag(env, "EDGE_IDENTITY_AUTH_ENABLED"):
+            raise SharedStorageDenied("Separate verified tenant identity required")
+        # The first owner must log in before private invitation-based signup;
+        # in shared legacy/pilot mode do not permit independent open signup.
+        if (_flag(env, "EDGE_TENANT_SIGNUP_ENABLED") and
+                not _flag(env, "EDGE_PERMANENT_TENANTS_ONLY")):
+            raise SharedStorageDenied("Signup denied during legacy coexistence")
+        if (_flag(env, "EDGE_PERMANENT_OWNER_INVITES_ENABLED") and
+                not _flag(env, "EDGE_PERMANENT_TENANTS_ONLY")):
+            raise SharedStorageDenied("Invitations require deliberate tenant-only routing")
+        if (_flag(env, "EDGE_TENANT_PUBLIC_READONLY_ENABLED") and not (
+                _flag(env, "EDGE_TENANT_PUBLIC_VAULT_ENABLED") and
+                _flag(env, "EDGE_TENANT_ACCOUNT_READS_ENABLED"))):
+            raise SharedStorageDenied("Public read-only requires scoped vault and account reads")
+        if (_flag(env, "EDGE_TENANT_MONITOR_PREVIEW_ENABLED") and not
+                _flag(env, "EDGE_TENANT_ACCOUNT_READS_ENABLED")):
+            raise SharedStorageDenied("Monitor preview requires scoped account reads")
+        if (_flag(env, "EDGE_TENANT_WATCHLIST_EDIT_ENABLED") and not
+                _flag(env, "EDGE_TENANT_MONITOR_PREVIEW_ENABLED")):
+            raise SharedStorageDenied("Watchlist editing requires dormant monitor preview")
+        if _flag(env, "EDGE_TENANT_PUBLIC_VAULT_ENABLED"):
+            # A missing/broken shared Fernet master key would strand tenant
+            # ciphertext; never allow key creation on a production restart.
+            try:
+                from cryptography.fernet import Fernet
+                Fernet(str(env.get("EDGE_CREDENTIAL_KEY", "")).encode("ascii"))
+            except (ValueError, TypeError, UnicodeError):
+                raise SharedStorageDenied("Stable tenant vault encryption key required") from None
     root = PERSISTENT_ROOT if persistent_root is None else Path(persistent_root)
     target = root / TENANT_FILENAME
     try:
@@ -70,6 +102,9 @@ def select_tenant_database(env, legacy_path, *, persistent_root=None):
         if isinstance(exc, SharedStorageDenied):
             raise
         raise SharedStorageDenied("Persistent database path validation failed") from None
+    if pilot:
+        # Never create an empty replacement owner record on startup.
+        _verify_first_permanent_owner(target)
     return target
 
 

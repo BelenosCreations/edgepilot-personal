@@ -59,6 +59,7 @@ def inspect_cutover(env, legacy_path, tenant_path, *, persistent_root=None):
         if storage._flag(env, "EDGE_CUTOVER_PREFLIGHT_ALLOWED") is not True:
             raise CutoverPreflightDenied("Console inspection was not enabled")
         for key in ("EDGE_PERMANENT_TENANTS_ONLY",
+                    "EDGE_PERMANENT_READONLY_PILOT_ENABLED",
                     "EDGE_PERMANENT_ANDROID_PASSKEY_ORIGIN_ENABLED",
                     "EDGE_AUTOMATION_WORKER_ENABLED", "ENABLE_LIVE_ORDERS",
                     "EDGE_ISOLATED_STAGING", "EDGE_TENANT_SIGNUP_ENABLED"):

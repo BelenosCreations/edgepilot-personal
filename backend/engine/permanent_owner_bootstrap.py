@@ -38,6 +38,7 @@ def create_first_owner(env, legacy_path, tenant_path, *,
         raise OwnerBootstrapDenied("Offline owner bootstrap is disabled")
     if (str(env.get("EDGE_IDENTITY_AUTH_ENABLED", "false")).lower() != "true" or
             str(env.get("EDGE_PERMANENT_TENANTS_ONLY", "false")).lower() != "false" or
+            str(env.get("EDGE_PERMANENT_READONLY_PILOT_ENABLED", "false")).lower() != "false" or
             str(env.get("EDGE_ISOLATED_STAGING", "false")).lower() != "false" or
             str(env.get("EDGE_TENANT_SIGNUP_ENABLED", "false")).lower() != "false"):
         raise OwnerBootstrapDenied("Offline owner initialization requires isolated identity preparation")

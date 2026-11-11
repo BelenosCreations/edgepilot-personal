@@ -1,3 +1,27 @@
+## CURRENT checkpoint — v0.2.67, November 11, 2026
+
+v0.2.66 PR #87 passed PR CI and merged, adding a startup guard that
+blocks retiring the old owner API unless a valid independently enrolled
+tenant owner is present on the paid disk. v0.2.67 follows with a
+default-off production account-scoped **read-only pilot permission**,
+removing the previous mutually exclusive preparation flag that would
+always reject tenant vault and Public read-only features on the paid
+backend. The new pilot flag alone enables no tenant API. Per-feature
+gates remain independent; without prepared private tenant file,
+owner bootstrap, identity sessions, stable Fernet key and disabled
+workers/orders, enabling the pilot is rejected.
+
+Actual /data/edgepilot-tenants.db creation and independent first
+owner bootstrap have NOT been confirmed by the operator. The legacy
+database backup, owner GPG recovery and Fernet-key GPG recovery were
+encrypted, verified and backed up off-phone. The existing Render
+Public credential decrypts with the running key. These are distinct
+from actual two-user acceptance, app/passkey validation and provider
+authorization. Continue to keep production pilot, tenant-only and
+tenant Public features inactive until operator-led recovery checks,
+owner login and a reversible staged acceptance plan. No new cost,
+live orders, automated trading or fund transfer.
+
 ## CURRENT checkpoint — v0.2.66, November 11, 2026
 
 v0.2.65 PR #86 implemented the dormant read-only owner readiness
