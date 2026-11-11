@@ -159,7 +159,7 @@ class NativeAndroidPasskeyOriginTests(unittest.TestCase):
         https_only = tenant_passkeys.TenantPasskeyStore(
             str(self.module.DB), self.module.identity_store,
             rp_id=RP, expected_origin=ORIGIN)
-        self.assertEqual(https_only.allowed_origins, [ORIGIN])
+        self.assertEqual(https_only.allowed_origins, ORIGIN)
         auth = StagingAuthenticator()
         begun = https_only.begin_registration(
             self.client.get_cookie(identity_auth.COOKIE_NAME, domain=RP).value,
