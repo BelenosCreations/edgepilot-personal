@@ -1,3 +1,34 @@
+## CURRENT checkpoint — v0.2.63, November 11, 2026
+
+GitHub v0.2.62 (read-only independent paid-disk cutover preflight) was
+merged and passed exact-main CI and paid Render deployment. The owner
+subsequently verified the Nov 11 encrypted legacy database backup with
+an isolated restore on the paid service, copied it to the phone and
+uploaded it to the private Google Drive backup folder. A newly encrypted
+owner access-token GPG recovery file was independently decrypted,
+byte-compared against the existing owner token, and uploaded to Drive.
+The older failed-passphrase GPG artifact was preserved. These steps do
+NOT prove stable Render EDGE_CREDENTIAL_KEY recovery, any on-disk
+tenant DB activation, or the real two-device acceptance test.
+
+v0.2.63 adds a **dormant, manual** first-time tenant file initializer.
+On the existing paid /data disk it can create an empty private
+edgepilot-tenants.db only after an independently verified backup,
+operator console and a one-use approval; refuses an existing tenant file,
+writes no owner DB rows, and publishes no live identity or Public APIs.
+The code is NOT invoked by Render deployment or the Flask service.
+See PRIVATE_TENANT_STORAGE_INIT_V0263.md. Verify exact PR/main CI and
+paid deployment before calling v0.2.63 merged.
+
+Next operator milestone: independently secure and verify credential
+encryption key recovery; then, with explicit trusted console inputs,
+run the new empty storage initializer (only if target absent) and the
+v0.2.62 read-only database preflight. Independently bootstrap the first
+owner (v0.2.60), verify real identity login and staged account isolation,
+and ONLY THEN consider flags for eventual tenant-only routing.
+Orders, transfers and live automation remain disabled. No new paid
+services. Do not claim production initialization or migrations occurred.
+
 ## CURRENT checkpoint — v0.2.62, November 11, 2026
 
 v0.2.61 (private owner invitations, at most 10 members) was developed as
