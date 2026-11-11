@@ -89,3 +89,12 @@ interceptor throws if any test tries to contact an outside provider.
 
 See AI_ANALYSIS_COST_STRATEGY.md, AI_COST_ACCOUNTING_RUNBOOK.md,
 MULTIUSER_PLATFORM_ACCEPTANCE.md and DEVELOPMENT_CONTINUITY.md.
+
+
+## v0.2.50 safety clarification
+
+Synthetic reconciliation now retains larger measured usage above the
+original reservation as `uncertain` and counts max(held,actual) toward
+the user's local limit. This prevents undercounting in later simulated
+admissions but does not guarantee that any real AI vendor will enforce
+the in-app limit. See TENANT_AI_OVERAGE_RECONCILIATION_RUNBOOK.md.
