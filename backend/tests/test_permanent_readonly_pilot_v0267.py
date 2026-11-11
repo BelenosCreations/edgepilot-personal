@@ -71,6 +71,12 @@ class PermanentReadOnlyPilotTests(unittest.TestCase):
             self.select({**self.env,"EDGE_PERMANENT_READONLY_PILOT_ENABLED":"false"})
         self.assertEqual(self.legacy.read_bytes(),before)
 
+    def test_unconfigured_pilot_cannot_fall_back_into_legacy_owner_database(self):
+        with self.assertRaises(storage.SharedStorageDenied):
+            self.select({**self.env, "EDGE_TENANT_DB_PATH": "",
+                         "EDGE_SHARED_TENANT_DB_PREPARE": "false"})
+        self.assertFalse((self.root/"unexpected-tenant.db").exists())
+
     def test_pilot_flag_alone_without_user_features_never_creates_account(self):
         env={**self.env,
              "EDGE_TENANT_ACCOUNT_READS_ENABLED":"false",

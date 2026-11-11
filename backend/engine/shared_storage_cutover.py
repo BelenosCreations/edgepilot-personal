@@ -38,7 +38,7 @@ def select_tenant_database(env, legacy_path, *, persistent_root=None):
     configured = str(env.get("EDGE_TENANT_DB_PATH", ""))
     enabled = _flag(env, "EDGE_SHARED_TENANT_DB_PREPARE")
     if not configured:
-        if enabled:
+        if enabled or _flag(env, "EDGE_PERMANENT_READONLY_PILOT_ENABLED"):
             raise SharedStorageDenied("Separate tenant database path required")
         return legacy
     if (not enabled or not _flag(env, "EDGE_TENANT_SCHEMA_PREPARE")
