@@ -1,3 +1,31 @@
+## CURRENT checkpoint — v0.2.60, November 11, 2026
+
+v0.2.58 PR #78 merged and verified on paid Render and GitHub. v0.2.59
+PR #79 merged after green PR tests; it adds **inactive** legacy API
+retirement and signed-app WebAuthn-origin options for the permanent
+isolated user model. The paid existing Render deployment rolled
+forward, but no multiuser environment activation has taken place.
+
+v0.2.60 supplies a **console-only, off-by-default, one-time initial
+owner identity creation** for the separate paid tenant SQLite DB, with
+Argon2id hashed password, atomic audit, zero existing-user requirement
+and no legacy data copy. No Flask/HTTP route or alternate token was
+added. All tests are synthetic. The first real account provision
+remains blocked on an independently verified fresh encrypted and
+restorable owner backup, an operator-trusted service terminal, and
+proper split DB setup on existing paid /data. See
+FIRST_PERMANENT_OWNER_BOOTSTRAP_V0260.md.
+
+Maintain strict operational distinction: GitHub CI/Render green
+does NOT prove data migration, backup, actual second physical phone,
+real two-owner Public account read access or permanent identity
+activation. Keep live orders, autonomous brokerage, bank transfers,
+paid service creation and tenant Public features disabled. Never
+reuse owner API secrets for tenant identity or print any secrets.
+Proceed from last verified commit and preserve logs of tests and
+deployment. Next production gate requires operator evidence, not an
+assumption or automatic destructive cutover.
+
 ## CURRENT checkpoint — v0.2.59 (follows verified v0.2.58), November 11, 2026
 
 v0.2.58 merged via PR #78 with passing PR and post-merge GitHub tests;
