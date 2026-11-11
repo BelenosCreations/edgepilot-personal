@@ -58,14 +58,12 @@ def select_tenant_database(env, legacy_path, *, persistent_root=None):
     target = root / TENANT_FILENAME
     try:
         if (not root.is_absolute() or not root.is_dir() or root.is_symlink()
-                or configured != str(target) or
-                legacy != root / LEGACY_FILENAME or legacy.is_symlink()
-                or not legacy.is_file() or legacy.samefile(target) if target.exists() else
-                not root.is_absolute() or not root.is_dir() or root.is_symlink()
-                or configured != str(target) or
-                legacy != root / LEGACY_FILENAME or legacy.is_symlink()
-                or not legacy.is_file()):
+                or configured != str(target)
+                or legacy != root / LEGACY_FILENAME
+                or legacy.is_symlink() or not legacy.is_file()):
             raise SharedStorageDenied("Database paths must remain on the existing persistent disk")
+        if target.exists() and legacy.samefile(target):
+            raise SharedStorageDenied("Legacy and tenant files must not share an inode")
         if target.is_symlink() or (target.exists() and not target.is_file()):
             raise SharedStorageDenied("Tenant storage is not a regular private file")
     except (OSError, ValueError, RuntimeError) as exc:
