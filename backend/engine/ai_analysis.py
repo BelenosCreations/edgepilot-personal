@@ -339,4 +339,4 @@ def analyze(path, s, question, market, asset, context, secret, model):
             pass
         if isinstance(error, AIError):
             raise
-        raise AIError("AI request failed; reservation retained for uncertain provider charges") from None
+        raise AIError("AI request failed (" + type(error).__name__ + "); reservation retained for uncertain provider charges") from None
