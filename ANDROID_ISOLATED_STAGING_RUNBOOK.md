@@ -127,3 +127,19 @@ brokerage accounts or install/uninstall the owner's regular application.
    read-only gate subject to appropriate provider authorization.
 
 No such device or production acceptance is claimed by CI compilation.
+
+
+## v0.2.51 — Cost-gated Render preparation
+
+Owner approved *preparation* of an isolated staging Render service
+but explicitly requires presentation and authorization of additional
+hosting charges before they are incurred. See
+STAGING_RENDER_COST_APPROVAL_RUNBOOK.md and the intentionally inactive
+deploy/staging/render-service.proposal.json. It is NOT an
+auto-applied Blueprint, and no service has been created. A public
+certificate placeholder is deliberately invalid until the actual
+signed staging package's signer is confirmed. The candidate host
+staging-edgepilot.belenoscreations.biz has not been DNS/TLS-verified.
+Do not copy production credentials, enable real brokerage reads,
+create a paid instance, change the original app or claim physical
+biometric acceptance based only on static tests.

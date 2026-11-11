@@ -222,6 +222,20 @@ commercial payments, independent Public brokerage accounts or
 working Android biometrics. Physical two-device verification and
 all brokerage/trading restrictions remain mandatory.
 
+## v0.2.51 — Isolated staging deployment proposal only
+
+The previously approved separate Android passkey staging plan now has
+a manually reviewed proposed Render service configuration and static
+negative tests. It forbids copying production secrets, packages,
+hosts, databases, active broker/worker permissions and any paid
+plan substitution. It DOES NOT provision a new Render service,
+configure DNS, verify an APK signing certificate, grant permissions,
+guarantee zero hosting overages, install another app or validate
+hardware passkeys. Hosting exposure requires additional cost
+approval. Two physical independently logged-in Android devices
+and two verified independent Public accounts remain the acceptance
+goal. See STAGING_RENDER_COST_APPROVAL_RUNBOOK.md.
+
 ## Milestone acceptance criteria — not complete until verified
 
 - Two separately provisioned EdgePilot users can register and sign in from
