@@ -1,3 +1,40 @@
+## CURRENT checkpoint — v0.2.69, November 11, 2026
+
+The user, on an existing authorized interactive SSH terminal attached to
+the *same* paid Render Starter service, successfully created
+/data/edgepilot-tenants.db via the guarded v0.2.63 initializer after
+manually typing the visible 34-character approval phrase. The tool
+returned prepared=true, private_tenant_database=true,
+initial_tenant_members=0, separate_from_legacy=true and
+authorized_to_activate=false. The v0.2.62 read-only database cutover
+preflight then returned inspection=passed, legacy_schema_intact=true,
+separate_database_files=true and tenant_identity_schema_intact=true.
+The v0.2.65 first-owner readiness audit also returned inspection=passed,
+tenant_member_count=0 and next_operator_stage=manual_first_owner_bootstrap.
+
+The initial manual owner bootstrap then requested Belenos-Owner as both
+display label and login identifier, prompted twice for hidden password,
+and immediately printed the generic "Owner identity was not created"
+failure after a HIDDEN approval prompt. Do not infer an owner account
+exists. The engine accepts Belenos-Owner; the failure could be empty
+hidden input or another gate. v0.2.69 improves ONLY the operator
+console interface: visible **nonsecret** approval input, specific
+nonsecret denial reasons, and blank/mismatched/short-password checks
+before attempting any write. Still require a fresh READ-ONLY readiness
+check to verify zero members before operator retry; do not assume the
+earlier attempt committed or not without verifying.
+
+The older owner database, original token-based login, saved Public
+credentials and separate GPG recovery/backups remain untouched. The
+Observe/Paper background worker was disabled on Render with user
+approval; live execution and transfers are disabled. Do not enable
+tenant-only mode, identity routes, Public pilot features or order
+submission merely because bootstrap source code deployed. Next operator
+actions: verify merged-main GitHub CI and paid Render deploy for
+v0.2.69, run read-only owner readiness, then (if zero) manual first
+owner bootstrap, followed by repeat read-only readiness and a later
+separately gated real login/recovery test. No added paid services.
+
 ## CURRENT checkpoint — v0.2.68, November 11, 2026
 
 v0.2.67 deployed with passed PR and merged-main tests on existing

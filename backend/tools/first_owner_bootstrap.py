@@ -28,11 +28,22 @@ def main():
         print("This creates a NEW EdgePilot identity only; it does not migrate brokerage data.")
         label = input("New EdgePilot owner display label: ")
         login = input("New EdgePilot owner login identifier: ")
-        password = getpass.getpass("New unique EdgePilot password (14–128 characters): ")
-        verify = getpass.getpass("Confirm new password: ")
-        approval = getpass.getpass("Type INITIALIZE FIRST EDGEPILOT OWNER to authorize: ")
+        password = getpass.getpass("New unique EdgePilot password (14–128 characters; hidden): ")
+        verify = getpass.getpass("Confirm new password (hidden): ")
+        if not password or not verify:
+            print("A password prompt received empty input; nothing changed.", file=sys.stderr)
+            return 2
         if password != verify:
             print("Passwords did not match; nothing changed.", file=sys.stderr)
+            return 2
+        if not 14 <= len(password) <= 128 or any(c in password for c in "\x00\r\n"):
+            print("Password must contain 14–128 characters without line breaks; nothing changed.",
+                  file=sys.stderr)
+            return 2
+        print("Password entries received and matched. Only the nonsecret approval phrase will be visible.")
+        approval = input("Type INITIALIZE FIRST EDGEPILOT OWNER to authorize (visible): ")
+        if approval != permanent_owner_bootstrap.APPROVAL:
+            print("Approval phrase not received exactly; nothing changed.", file=sys.stderr)
             return 2
         result = permanent_owner_bootstrap.create_first_owner(
             os.environ, legacy, tenant, label=label, login_name=login,
@@ -40,8 +51,13 @@ def main():
         if result["created"]:
             print("First EdgePilot owner identity created; old brokerage data was NOT migrated.")
             return 0
-    except (KeyError, EOFError, KeyboardInterrupt,
-            permanent_owner_bootstrap.OwnerBootstrapDenied):
+    except permanent_owner_bootstrap.OwnerBootstrapDenied as exc:
+        # create_first_owner emits only fixed, code-authored, nonsecret causes.
+        print(str(exc), file=sys.stderr)
+        print("Owner identity creation was denied; check the read-only readiness report.",
+              file=sys.stderr)
+        return 2
+    except (KeyError, EOFError, KeyboardInterrupt):
         print("Owner identity was not created or cannot be verified.", file=sys.stderr)
         return 2
     finally:
