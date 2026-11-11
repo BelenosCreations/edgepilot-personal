@@ -12,6 +12,7 @@ import tempfile
 from contextlib import closing
 from pathlib import Path
 
+from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from . import permanent_cutover_preflight as preflight
 from . import shared_storage_cutover as storage
@@ -72,7 +73,10 @@ def _verify_blob(blob, cipher_key, *, ram, expected_digest=None):
         raise OwnerArchiveDenied("Encrypted first-owner archive invalid")
     nonce = blob[len(MAGIC):len(MAGIC)+12]
     ciphertext = blob[len(MAGIC)+12:]
-    raw = AESGCM(cipher_key).decrypt(nonce, ciphertext, MAGIC)
+    try:
+        raw = AESGCM(cipher_key).decrypt(nonce, ciphertext, MAGIC)
+    except (InvalidTag, ValueError):
+        raise OwnerArchiveDenied("Encrypted first-owner archive authentication failed") from None
     digest = hashlib.sha256(raw).hexdigest()
     if expected_digest is not None and digest != expected_digest:
         raise OwnerArchiveDenied("First-owner snapshot digest mismatch")
