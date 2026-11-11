@@ -3,6 +3,7 @@
   let identityCsrf = "";
   let busy = false;
   let identityViewGeneration = 0;
+  let knownPasskeyCount = null;
   const el = id => document.getElementById(id);
   const status = (message, error = false) => {
     const box = el("status");
@@ -101,6 +102,7 @@
     el("connectionInfo").textContent = "";
     el("deviceSessions").replaceChildren();
     el("deviceSessionStatus").textContent = "";
+    knownPasskeyCount = null;
     el("passkeyList").replaceChildren();
     el("passkeyState").textContent = "Checking passkey status…";
     el("passkeyListStatus").textContent = "Checking registered passkeys…";
@@ -159,6 +161,7 @@
         seen.add(item.credentialId);
       }
       const count = response.activePasskeys;
+      knownPasskeyCount = count;
       el("passkeyState").textContent = count ?
         "✓ Passkey login enabled — " + count +
         (count === 1 ? " passkey registered" : " passkeys registered") +
@@ -187,7 +190,8 @@
           if (!window.confirm(
             "Remove this passkey? You will be signed out of all sessions " +
             "for this EdgePilot account. Other users are not affected. " +
-            "You can still sign in with your password.")) return;
+            "You can still sign in with your password. " +
+            "This does not erase the saved passkey from your device.")) return;
           const requestGeneration = identityViewGeneration;
           const revoked = await api("/passkeys/" +
             encodeURIComponent(item.credentialId), "DELETE", undefined, true);
@@ -209,6 +213,7 @@
       return true;
     } catch (error) {
       if (generation !== identityViewGeneration) return false;
+      knownPasskeyCount = null;
       list.replaceChildren();
       el("addPasskey").hidden = true;
       el("addAnotherPasskey").hidden = true;
@@ -490,6 +495,10 @@
       if (!supported()) {
         el("passkeySignIn").disabled = true;
         el("addPasskey").disabled = true;
+        el("addAnotherPasskey").disabled = true;
+      } else {
+        el("addAnotherPasskey").disabled = knownPasskeyCount === null ||
+          knownPasskeyCount >= 12;
       }
     }
   }
