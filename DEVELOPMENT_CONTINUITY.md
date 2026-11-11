@@ -1,3 +1,30 @@
+## CURRENT checkpoint — v0.2.58, November 11, 2026
+
+**New explicit architecture approval:** Use the existing paid Starter Render
+service `edgepilot-private-h9tl` (service ID `srv-dbocnb3m8hqs7386trvg`)
+and existing /data persistent disk as the future permanent single-instance,
+multi-user backend. Do **not** upgrade the Free staging service or purchase
+additional paid database/storage/hosting. The v0.2.57 additional-cost staging
+plan was superseded. Keep staging disposable.
+
+The initial `feature/v0.2.58-shared-paid-tenant-db-isolation` branch contained
+only a 61-line unwired database-path selector; review identified it was not
+safe to merge as finished. v0.2.58 has now added guarded shared-disk tenant
+file selection, private-file creation and permissions checks, explicit
+integration into every tenant Flask store, and local cross-database tests.
+`/data/edgepilot.db` remains the owner file, `/data/edgepilot-tenants.db`
+is the independent tenant DB. Tenant login, real Public access, migration,
+live orders and transfers must remain disabled in production until separate
+authorization, recovery and isolation testing.
+
+**Release discipline:** Verify the exact branch PR CI, merge only on green,
+inspect merged-main CI and paid-service Render status, and only then
+proceed with recovery/activation. `main` auto-deploys to the paid service:
+a source merge must not silently switch environment settings. Never print
+stored tokens, passphrases, key bytes, provider secrets or encrypted rows.
+Do not claim permanent two-user acceptance from the one-phone staging
+passkey test. See SHARED_PAID_BACKEND_CUTOVER_V0258.md.
+
 # EdgePilot — Development continuity checkpoint
 
 This file is the canonical handoff for a new ChatGPT conversation when a
