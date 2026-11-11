@@ -459,3 +459,30 @@ TENANT_AI_OVERAGE_RECONCILIATION_RUNBOOK.md. No actual paid model
 requests, provider keys, bank action, real orders, subscription
 or production activation. Independent two-device Public-account
 acceptance and actual physical passkeys remain open.
+
+
+## v0.2.51 — Approved staging preparation, not a deployment
+
+The user approved preparing a separate EdgePilot staging service in
+Belenos's Render workspace, with explicit approval before incurring
+additional charges. Current production Render service
+edgepilot-private-h9tl is untouched, including its /data disk and
+owner Android package. The proposal in
+deploy/staging/render-service.proposal.json is intentionally
+non-deployable: its signing certificate is an unverified placeholder,
+host staging-edgepilot.belenoscreations.biz is only a candidate,
+auto-deploy is off, plan is Free and only ephemeral /tmp SQLite is
+allowed. backend/engine/staging_release_readiness.py performs a
+strict static audit of the proposed settings and the existing server
+staging-isolation guard; negative tests prevent copied production
+secrets, trading/broker flags, unsafe host/DB/package and unapproved
+paid plan changes. README, changelog and
+STAGING_RENDER_COST_APPROVAL_RUNBOOK.md updated.
+
+Do NOT create Render services yet without reviewing shared
+workspace bandwidth/build-minute usage and potential overages,
+confirming approval of extra cost, actual DNS/TLS and genuine public
+signed-APK certificate. No new service, DNS or signed staging app
+was created. Physical biometric/two-device independent Public
+account acceptance remains incomplete. Resume from latest verified
+merge/CI, not conversation claims.
