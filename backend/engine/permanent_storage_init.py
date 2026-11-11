@@ -144,8 +144,11 @@ def prepare_private_tenant_storage(
         finally:
             os.umask(old_umask)
             if staged is not None:
-                phase = "STAGE_CLEANUP"
-                staged.unlink(missing_ok=True)
+                try:
+                    staged.unlink(missing_ok=True)
+                except OSError:
+                    phase = "STAGE_CLEANUP"
+                    raise
         return {
             "prepared": True,
             "private_tenant_database": True,
