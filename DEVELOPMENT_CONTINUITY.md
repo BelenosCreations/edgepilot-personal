@@ -1,3 +1,23 @@
+## CURRENT checkpoint — v0.2.61, November 11, 2026
+
+After the verified v0.2.58–v0.2.60 architecture/security series, v0.2.61
+adds a separate **read-only, manual-console-only cutover inspection** for
+the same already paid Render Starter instance and existing /data disk.
+It checks file separation, private permissions, expected legacy and tenant
+schemas and SQLite integrity without copying owner holdings, decrypting
+Public credentials, activating any tenant account or opening an HTTP route.
+Synthetic tests must pass before PR merge, then merged-main CI and
+paid Render deploy must be verified. See PERMANENT_CUTOVER_PREFLIGHT_V0261.md.
+
+Critical operational gate remains: externally verified fresh encrypted
+backups and actual restore, continuity of owner credential encryption key,
+controlled worker shutdown and trusted Render operator console. Neither
+this inspection nor GitHub tests can perform or prove those steps. The
+tenant-only and native passkey flags are still default-off; never activate
+trade orders/bank transfers, expose shared owner credentials to new users
+or add paid hosting. Real two-user/independent-Public-account acceptance
+and owner-data attribution are still outstanding.
+
 ## CURRENT checkpoint — v0.2.60, November 11, 2026
 
 v0.2.58 PR #78 merged and verified on paid Render and GitHub. v0.2.59
