@@ -12,6 +12,11 @@ from unittest import mock
 from tools import first_owner_bootstrap as cli
 
 
+class InteractiveCapture(io.StringIO):
+    def isatty(self):
+        return True
+
+
 class OwnerBootstrapPromptTests(unittest.TestCase):
     def setUp(self):
         self.env_patch=mock.patch.dict(os.environ, {
@@ -20,12 +25,6 @@ class OwnerBootstrapPromptTests(unittest.TestCase):
         })
         self.env_patch.start()
         self.addCleanup(self.env_patch.stop)
-        self.tty1=mock.patch.object(cli.sys.stdin, "isatty", return_value=True)
-        self.tty2=mock.patch.object(cli.sys.stdout, "isatty", return_value=True)
-        self.tty1.start()
-        self.tty2.start()
-        self.addCleanup(self.tty1.stop)
-        self.addCleanup(self.tty2.stop)
         self.created=mock.patch.object(
             cli.permanent_owner_bootstrap, "create_first_owner",
             return_value={"created": True})
@@ -33,9 +32,10 @@ class OwnerBootstrapPromptTests(unittest.TestCase):
         self.addCleanup(self.created.stop)
 
     def go(self, typed, hidden):
-        stdout=io.StringIO()
+        stdout=InteractiveCapture()
         stderr=io.StringIO()
-        with (mock.patch("builtins.input", side_effect=typed) as inp,
+        with (mock.patch.object(cli.sys, "stdin", mock.Mock(isatty=lambda: True)),
+              mock.patch("builtins.input", side_effect=typed) as inp,
               mock.patch.object(cli.getpass, "getpass", side_effect=hidden) as sec,
               contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr)):
             status=cli.main()
