@@ -414,3 +414,20 @@ worker, crypto/prediction broker integration, AI payment, or live
 trade is permitted by the synthetic planner. The main project success
 gate is still two physical Android devices, independent EdgePilot
 identities and independently verified Public accounts.
+
+
+## v0.2.48 — Matched forward-quality audit without AI execution
+
+The approved AI value/cost strategy now includes an independent offline
+paired Brier-score audit for pre-settlement binary forecasts, externally
+verified realized outcomes, chronological held-out calibration evidence,
+unique matched event provenance, and attributable measured microUSD AI
+costs. Claims of causal AI uplift, profits, after-cost alpha or trading
+eligibility always remain false; all real outcomes are still unverified.
+Negative tests reject private fields, timestamp leakage, unconfirmed
+costs, mixed event meanings and repeated IDs. See
+PAIRED_RESEARCH_AUDIT_RUNBOOK.md. README, changelog and VERSION
+updated. No new provider HTTP, order, money flow, subscription,
+production tenant flag or worker was activated. Physical Android
+passkeys and independent two-device/two-Public-account acceptance
+remain incomplete.
