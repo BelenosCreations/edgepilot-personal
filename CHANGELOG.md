@@ -1,3 +1,21 @@
+### Verification update for v0.2.54 — November 11, 2026
+The **new** manual staging workflow run #43013142566 on corrected main commit
+`1a3c6a2ba0bfe3390ed8c23d4a9a416d8457fe58` completed successfully.
+Host validation, Android staging assembly, independent `apksigner`
+certificate pinning, APK package/version check and private artifact upload
+all passed. Artifact `EdgePilot-v0.19.17-isolated-staging-signed-test`
+(ID 13850459385) contains an actual installable APK, not only an
+unsigned debug build. A separate post-download check confirmed the
+Android v2 signing certificate, the distinct app package
+`com.edgepilot.mobile.staging`, version `0.19.17-staging`,
+and embedded HTTPS staging host; local APK SHA-256 was
+`5f1b64ad8c584afb93c72f6c9450567c5dc4a3f853b4aa5651cf47cb05de471a`.
+**Pending:** first physical-device installation, Android system passkeys,
+two user invitations, account isolation and real Public-account readiness.
+No Render configuration, live trading, payments or production app changed
+by verifying this APK. Earlier failed run #43011557930 remains a
+historical failed attempt and must not be confused with success.
+
 ## v0.2.54 — 2026-11-11 — Staging signed APK input normalization
 **Fixed:** The first staging signed Android workflow run #43011557930 failed safely before compiling because the supplied valid host had a trailing space. The manual-only workflow now strips **only leading and trailing whitespace**, strictly validates the canonical owned staging hostname against the existing allowlist, and passes that same checked hostname to Gradle. Invalid URLs, external domains, interior spaces, production hostname and input injection are still rejected. Added executable tests of the actual Bash validation block, including malicious inputs.
 **Test status:** PR and merged-main CI required; the failed workflow produced no signed APK. No new APK, Android installation, Render deployment, trading privilege or paid resource was created by this fix. A **new** manual staging workflow dispatch on updated `main` is required; rerunning the failed old commit cannot pick up this fix.
