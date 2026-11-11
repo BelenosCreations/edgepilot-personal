@@ -9,12 +9,23 @@ from urllib.parse import quote
 import requests
 from flask import Flask, jsonify, request, send_from_directory, redirect, g
 from dotenv import load_dotenv
-from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, tenant_password_change, tenant_session_controls, tenant_registration, tenant_passkeys, account_scope, tenant_monitor_blueprint, tenant_watchlist, tenant_public_vault, tenant_public_live_readonly, staging_isolation, staging_operator
+from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, tenant_password_change, tenant_session_controls, tenant_registration, tenant_passkeys, account_scope, tenant_monitor_blueprint, tenant_watchlist, tenant_public_vault, tenant_public_live_readonly, staging_isolation, staging_operator, shared_storage_cutover
 ROOT=Path(__file__).parent; load_dotenv(ROOT/'.env')
 # Refuse unsafe isolated-test configuration before opening any database,
 # owner credential store or background-worker state. Production is unchanged.
 staging_isolation.validate(os.environ)
-DB=Path(os.getenv('EDGE_DB_PATH',str(ROOT/'edgepilot.db'))); DB.parent.mkdir(parents=True,exist_ok=True)
+DB=Path(os.getenv('EDGE_DB_PATH',str(ROOT/'edgepilot.db')))
+TENANT_DB=shared_storage_cutover.select_tenant_database(os.environ,DB)
+# A live paid /data deployment must never initialize tenant identities in the
+# legacy owner file. Existing local/offline tests retain the historic default.
+if (TENANT_DB == DB and DB.parent == shared_storage_cutover.PERSISTENT_ROOT
+        and os.getenv('EDGE_TENANT_SCHEMA_PREPARE','false').lower()=='true'
+        and os.getenv('EDGE_ISOLATED_STAGING','false').lower()!='true'):
+    raise shared_storage_cutover.SharedStorageDenied('Live tenant schema requires isolated storage')
+if TENANT_DB != DB:
+    os.umask(0o077)  # SQLite DB, journal, WAL and temporary files must be private
+    shared_storage_cutover.ensure_private_tenant_file(TENANT_DB)
+DB.parent.mkdir(parents=True,exist_ok=True)
 app=Flask(__name__,static_folder='static',static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # CSV/history research limit
 BASE='https://api.public.com'; lock=threading.RLock(); cached_token=None; expires=0
@@ -91,23 +102,23 @@ tenant_watchlist_editor=None
 tenant_connection_vault=None
 tenant_public_reader=None
 if tenant_schema_enabled:
-    tenant_foundation.setup(str(DB))
+    tenant_foundation.setup(str(TENANT_DB))
     if identity_auth_enabled:
-        identity_auth.setup(str(DB))
-        identity_store=identity_auth.IdentityStore(str(DB))
+        identity_auth.setup(str(TENANT_DB))
+        identity_store=identity_auth.IdentityStore(str(TENANT_DB))
         if tenant_password_change_enabled:
-            tenant_password_change.setup(str(DB))
-            tenant_password_manager=tenant_password_change.TenantPasswordChange(str(DB),identity_store)
+            tenant_password_change.setup(str(TENANT_DB))
+            tenant_password_manager=tenant_password_change.TenantPasswordChange(str(TENANT_DB),identity_store)
         if tenant_session_controls_enabled:
-            tenant_session_controls.setup(str(DB))
-            tenant_session_manager=tenant_session_controls.TenantSessionControls(str(DB),identity_store)
+            tenant_session_controls.setup(str(TENANT_DB))
+            tenant_session_manager=tenant_session_controls.TenantSessionControls(str(TENANT_DB),identity_store)
         if tenant_signup_enabled:
-            tenant_registration.setup(str(DB))
-            tenant_registration_store=tenant_registration.TenantRegistration(str(DB))
+            tenant_registration.setup(str(TENANT_DB))
+            tenant_registration_store=tenant_registration.TenantRegistration(str(TENANT_DB))
         if tenant_passkeys_enabled:
-            tenant_passkeys.setup(str(DB))
+            tenant_passkeys.setup(str(TENANT_DB))
             tenant_passkey_store=tenant_passkeys.TenantPasskeyStore(
-                str(DB),identity_store,
+                str(TENANT_DB),identity_store,
                 rp_id=os.getenv('EDGE_WEBAUTHN_RP_ID',''),
                 expected_origin=os.getenv('EDGE_WEBAUTHN_ORIGIN',''),
                 # Only the independently verified, fail-closed staging process
@@ -118,19 +129,19 @@ if tenant_schema_enabled:
                     if os.getenv('EDGE_ISOLATED_STAGING','false').lower()=='true'
                     else None))
         if tenant_read_enabled:
-            account_scope.setup(str(DB))
-            tenant_account_store=account_scope.AccountScopeStore(str(DB),identity_store)
+            account_scope.setup(str(TENANT_DB))
+            tenant_account_store=account_scope.AccountScopeStore(str(TENANT_DB),identity_store)
             if tenant_monitor_preview_enabled:
-                tenant_monitor_planner=tenant_monitor_blueprint.DormantAccountMonitorPlanner(str(DB))
+                tenant_monitor_planner=tenant_monitor_blueprint.DormantAccountMonitorPlanner(str(TENANT_DB))
                 if tenant_watchlist_edit_enabled:
-                    tenant_watchlist_editor=tenant_watchlist.TenantWatchlistEditor(str(DB),identity_store)
+                    tenant_watchlist_editor=tenant_watchlist.TenantWatchlistEditor(str(TENANT_DB),identity_store)
         if tenant_public_vault_enabled:
-            tenant_public_vault.setup(str(DB))
-            tenant_connection_vault=tenant_public_vault.TenantPublicVault(str(DB),identity_store)
+            tenant_public_vault.setup(str(TENANT_DB))
+            tenant_connection_vault=tenant_public_vault.TenantPublicVault(str(TENANT_DB),identity_store)
             if tenant_public_read_enabled:
-                tenant_public_live_readonly.setup(str(DB))
+                tenant_public_live_readonly.setup(str(TENANT_DB))
                 tenant_public_reader=tenant_public_live_readonly.TenantPublicReadOnly(
-                    str(DB),identity_store,tenant_connection_vault)
+                    str(TENANT_DB),identity_store,tenant_connection_vault)
 def settings():
     with database() as c: return {r['k']:r['v'] for r in c.execute('SELECT * FROM settings')}
 def put(k,v):
