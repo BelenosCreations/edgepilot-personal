@@ -212,6 +212,16 @@ do not activate or validate a retail billing program. Official policy,
 market-data rights and independent two-physical-device/Public-account
 acceptance remain separate required gates.
 
+## v0.2.50 — AI overage reconciliation safety is synthetic
+
+Member-specific AI reservations now preserve measured usage above the
+preflight hold as an uncertain, higher-counted local budget charge.
+This prevents optimistic local accounting but does not establish a
+real provider-enforced hard spending limit, activated BYOK execution,
+commercial payments, independent Public brokerage accounts or
+working Android biometrics. Physical two-device verification and
+all brokerage/trading restrictions remain mandatory.
+
 ## Milestone acceptance criteria — not complete until verified
 
 - Two separately provisioned EdgePilot users can register and sign in from

@@ -122,9 +122,12 @@ def _used(con, user, month):
     result = 0
     for r in con.execute("""SELECT status,held_micro_usd,actual_micro_usd
         FROM tenant_ai_reservations WHERE user_id=? AND month=?""", (user, month)):
-        result += (r["actual_micro_usd"] if r["status"] == "complete"
-                   and r["actual_micro_usd"] is not None
-                   else r["held_micro_usd"])
+        # Unknown cost holds retain the full reservation. If the trusted
+        # usage fixture exceeds preflight, preserve the larger measured cost
+        # while refusing to call the reservation a clean completion.
+        actual = r["actual_micro_usd"]
+        result += (int(actual) if r["status"] == "complete" and actual is not None
+                   else max(int(r["held_micro_usd"]), int(actual or 0)))
     return result
 
 
@@ -285,7 +288,7 @@ class TenantAIBudgetVault:
         with _db(self.path) as con:
             con.execute("BEGIN IMMEDIATE")
             uid = _principal_in_lock(con, token, csrf)
-            row = con.execute("""SELECT model,status FROM tenant_ai_reservations
+            row = con.execute("""SELECT model,status,held_micro_usd FROM tenant_ai_reservations
                 WHERE request_id=? AND user_id=?""", (rid, uid)).fetchone()
             if row is None or row["status"] != "reserved":
                 raise TenantAIDenied("AI reservation unavailable")
@@ -298,7 +301,10 @@ class TenantAIBudgetVault:
                         input_tokens, output_tokens, row["model"], current)
                 except ai_analysis.AIError:
                     raise TenantAIDenied("AI usage reconciliation unavailable") from None
-                state = "complete"
+                # Over-preflight usage cannot silently finalize below the
+                # measured synthetic cost; hold the larger amount as uncertain.
+                state = ("uncertain" if cost > row["held_micro_usd"]
+                         else "complete")
             changed = con.execute("""UPDATE tenant_ai_reservations
                 SET status=?,actual_micro_usd=?,settled_at=?
                 WHERE request_id=? AND user_id=? AND status='reserved'""",
@@ -306,5 +312,7 @@ class TenantAIBudgetVault:
             if changed != 1:
                 raise TenantAIDenied("AI reservation unavailable")
         return {"state": state, "actualMicroUsd": cost,
+                "overageDetected": cost is not None and
+                                   cost > row["held_micro_usd"],
                 "paidRequestExecuted": False,
                 "providerBillingCapGuaranteed": False}

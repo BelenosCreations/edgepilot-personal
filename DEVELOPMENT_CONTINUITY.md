@@ -444,3 +444,18 @@ grant refusal have negative tests. Real subscriptions/payment providers
 and any Play distribution have NOT been approved or activated; see
 TENANT_TIER_INTENT_RUNBOOK.md. README/CHANGELOG/VERSION updated.
 Physical two-device independent Public accounts remain outstanding.
+
+
+## v0.2.50 — Fail-closed tenant AI measured overage ledger
+
+If simulated measured token cost exceeds a BYOK member's preflight
+hold, settlement now records the higher cost with uncertain status,
+and future budget admission counts max(held, actual). Unknown cost
+still keeps a full hold. The ledger refuses double settlement and
+cross-tenant manipulation, retains prior usage after key disconnect,
+and never guarantees provider-side billing limits. Tests in
+test_tenant_ai_budget_overage_v0250.py, runbook
+TENANT_AI_OVERAGE_RECONCILIATION_RUNBOOK.md. No actual paid model
+requests, provider keys, bank action, real orders, subscription
+or production activation. Independent two-device Public-account
+acceptance and actual physical passkeys remain open.
