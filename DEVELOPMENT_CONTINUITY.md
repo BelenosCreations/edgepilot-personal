@@ -316,3 +316,22 @@ owner's existing APK. Review ANDROID_ISOLATED_STAGING_RUNBOOK.md and
 request operator input for new hosting/domain provisioning and costs
 before actual staging rollout. Never enable real brokerage trading or
 transfers as part of this test.
+
+## v0.2.43 — Approved research strategy and no-cost data boundary
+
+Read AI_ANALYSIS_COST_STRATEGY.md (approved 2026-11-10). It extends
+rather than supersedes the two-device, two-independent-Public-account
+acceptance objective. The standalone research_intelligence.py module
+requires verified coverage, source rights, UTC timestamps, fresh books
+and explicit fees/depth/settlement for prediction event research.
+No market provider, background polling, brokerage account, user identity
+or LLM call is made by the new pure-Python functions. A user who elects
+$0 in AI fees must retain a useful non-AI intelligence product when
+permitted data exists. No free market-data license is assumed.
+
+Next: precise model-aware AI budget accounting and reservation
+reconciliation, default-off tenant BYOK and per-user caps, followed by
+consent/licensing-conscious shared signals and deferred commercial
+entitlements. Do NOT enable trades, transfers, public distribution or
+actual billing. Physical Android passkeys and independent Public accounts
+still need real-device acceptance. See FREE_FIRST_RESEARCH_RUNBOOK.md.
