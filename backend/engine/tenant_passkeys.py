@@ -367,12 +367,29 @@ class TenantPasskeyStore:
                 "identitySessionsRevoked":True}
 
     def redacted_own_status(self, identity_token, identity_csrf, *, now=None):
+        """List only this signed-in member's active passkeys for UI management.
+
+        Credential IDs are public identifiers used by the existing revoke
+        endpoint, NOT private keys. Never expose stored public-key material,
+        another tenant's rows, device identifiers or biometric templates.
+        """
         now = _now(now)
         principal = self.identity_store.principal(identity_token,identity_csrf,now=now)
         if principal is None:
             raise PasskeyDenied("Passkey status unavailable")
         with _database(self.path) as db:
-            count=db.execute("""SELECT COUNT(*) FROM tenant_passkey_credentials
-                WHERE user_id=? AND revoked_at IS NULL""",
-                (principal["user_id"],)).fetchone()[0]
-        return {"activePasskeys":count,"brokerAccessAuthorized":False}
+            rows=db.execute("""SELECT credential_id,created_at,device_type,backed_up
+                FROM tenant_passkey_credentials
+                WHERE user_id=? AND revoked_at IS NULL
+                ORDER BY created_at,credential_id""",
+                (principal["user_id"],)).fetchall()
+        registered=[{
+            "credentialId":base64.urlsafe_b64encode(bytes(row["credential_id"]))
+                .decode("ascii").rstrip("="),
+            "createdAt":int(row["created_at"]),
+            "deviceType":str(row["device_type"]),
+            "backedUp":bool(row["backed_up"]),
+        } for row in rows]
+        return {"activePasskeys":len(registered),"passkeys":registered,
+                "brokerAccessAuthorized":False,"tradingEnabled":False,
+                "deviceIdentifiersStored":False,"biometricsStoredOnServer":False}
