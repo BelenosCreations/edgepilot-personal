@@ -667,3 +667,34 @@ necessary. The user's two screenshots demonstrate account
 registration and passkey enrollment, but do not by themselves
 prove independent physical phones or both passkey sign-ins.
 Maintain this distinction in later acceptance claims.
+
+
+## v0.2.57 — User confirmed Test1 passwordless passkey sign-in; durable staging decision required
+
+In response to a requested sign-out / Use passkey / return to
+"Welcome, Test1" test, the owner reported **"Works"**. This supports
+one physical Android staging-device synthetic Test1 passkey
+authentication roundtrip with previously observed UI transitions
+from not configured to "✓ Passkey login enabled — 1 passkey registered".
+Do not infer that the separate Test2 image was on another physical
+Android device, that it signed in with a passkey after its registration,
+or that either member's data survives backend redeploy/restart.
+
+The isolated staging service remains Render Free with a disposable
+`/tmp/edgepilot-staging.db`; a deploy demonstrably erased the earlier
+test users. Preparing persistent storage is the next blocker.
+Current published Render pricing: paid starter web service
+approximately $7/month and 1GB disk $0.25/month, for **~$7.25/month
+additional base charges**, beyond existing owner production
+service and before overages. Free Render Postgres expires after
+30 days and cannot be presented as permanent recovery.
+
+The owner must **explicitly authorize incremental recurring costs**
+before any paid plan change, disk or database creation. The
+`STAGING_PERSISTENCE_DECISION_V0257.md` runbook specifies exact
+isolated staging-only `/data` mount and
+`EDGE_DB_PATH=/data/edgepilot-staging.db`, no owner credential
+reuse, controlled testing across actual Render redeploy and
+restart, backup safety and rollback. No deployment, new bill or
+change to real brokerage/trading privileges is authorized by this
+documentation milestone.

@@ -309,3 +309,21 @@ does not expose credential public key bytes or biometric material.
 Physical two-device sign-in and fully isolated *real* Public
 connections remain open acceptance gates, and disposable Render
 staging is not suitable for durable real brokerage identities.
+
+
+## v0.2.57 — Physical device Test1 verified; two-device persistence still open
+
+The user reported success after signing out and authenticating
+synthetic Test1 using the Android staging passkey. Separate
+screenshots verified passkey registration and status changing to
+enabled. This clears the **single-device** signed Android
+credential-enrollment/login UI milestone, but NOT the requirements
+for two distinct Android phones, concurrent isolated sessions,
+survival across a server restart, multi-tenant durable account
+backups or independent real Public accounts.
+
+Staging Free SQLite was erased on a deployment. The next candidate
+is a paid, isolated staging service with its own persistent disk,
+subject to explicit new monthly-charge approval; use
+`STAGING_PERSISTENCE_DECISION_V0257.md`. Do not combine with
+the existing owner's separate production backend/disk.

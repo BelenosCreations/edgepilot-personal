@@ -6,7 +6,7 @@ EdgePilot is a personal trading-intelligence platform designed to bring brokerag
 
 The goal is not simply to display prices or place trades. EdgePilot is intended to provide a traceable decision system: understand what the broker actually reported, distinguish observation from simulated results, evaluate a strategy against costs and risk, and refuse activity when data or authorization is uncertain.
 
-> **Development status:** The repository is currently developing **v0.2.56**. The existing owner-facing application supports brokerage research and experimental Observe/Paper modes; **real brokerage order submission, autonomous live trading, and bank transfers remain disabled**. A separate, gated multi-user identity platform now includes invitation registration, individually encrypted Public connections, read-only account integration, and WebAuthn passkey endpoints. An Android-capable passkey account screen provides owner-scoped Public account discovery, verified read-only linking, sanitized portfolio views, an independently gated **inactive** monitoring-plan preview, and per-account watchlist editing that cannot activate any scanner, trade, or fund transfer. The account screen links to Public's verified signup and API-key instructions, and now supports user-confirmed replacement or disconnection of only the current user's encrypted Public credentials. Previously verified account bindings are disabled after either action. Android opens only the two Public-owned help pages outside its authenticated WebView. The account security screen also supports a user-confirmed password change that revokes every session belonging to that member without changing other users' sessions or Public keys. A separately gated device-session screen now lets members review their own active identity sessions and selectively sign out other sessions without affecting another user's identity. It deliberately does not fingerprint or identify physical devices. This is not forgotten-password recovery. The manual-only Android signing workflow has now produced a certificate-pinned, privately signed v0.19.17 test APK on November 10, 2026 (GitHub run #42888113943, attempt 2). The verification and upload passed after correcting a mismatched configured fingerprint; the owner reports installing the APK and logging into the legacy dashboard on one physical phone. Physical-device passkeys and Digital Asset Links remain unverified. Account-specific running workers and real multi-user acceptance are also incomplete. Offline cross-process tests recognize fail-closed SQLite lock contention while continuing to enforce the synthetic admission limits. See [CHANGELOG.md](CHANGELOG.md) for release history, and [DEVELOPMENT_CONTINUITY.md](DEVELOPMENT_CONTINUITY.md) for a durable new-conversation development checkpoint.
+> **Development status:** The repository is currently developing **v0.2.57**. The existing owner-facing application supports brokerage research and experimental Observe/Paper modes; **real brokerage order submission, autonomous live trading, and bank transfers remain disabled**. A separate, gated multi-user identity platform now includes invitation registration, individually encrypted Public connections, read-only account integration, and WebAuthn passkey endpoints. An Android-capable passkey account screen provides owner-scoped Public account discovery, verified read-only linking, sanitized portfolio views, an independently gated **inactive** monitoring-plan preview, and per-account watchlist editing that cannot activate any scanner, trade, or fund transfer. The account screen links to Public's verified signup and API-key instructions, and now supports user-confirmed replacement or disconnection of only the current user's encrypted Public credentials. Previously verified account bindings are disabled after either action. Android opens only the two Public-owned help pages outside its authenticated WebView. The account security screen also supports a user-confirmed password change that revokes every session belonging to that member without changing other users' sessions or Public keys. A separately gated device-session screen now lets members review their own active identity sessions and selectively sign out other sessions without affecting another user's identity. It deliberately does not fingerprint or identify physical devices. This is not forgotten-password recovery. The manual-only Android signing workflow has now produced a certificate-pinned, privately signed v0.19.17 test APK on November 10, 2026 (GitHub run #42888113943, attempt 2). The verification and upload passed after correcting a mismatched configured fingerprint; the owner reports installing the APK and logging into the legacy dashboard on one physical phone. Physical-device passkeys and Digital Asset Links remain unverified. Account-specific running workers and real multi-user acceptance are also incomplete. Offline cross-process tests recognize fail-closed SQLite lock contention while continuing to enforce the synthetic admission limits. See [CHANGELOG.md](CHANGELOG.md) for release history, and [DEVELOPMENT_CONTINUITY.md](DEVELOPMENT_CONTINUITY.md) for a durable new-conversation development checkpoint.
 
 The shared-user development path now includes strict owner-scoped account watchlists:
 each member can save a validated stock-symbol list for a linked account without
@@ -347,6 +347,24 @@ invented in the list. Brokerage and autonomous execution remain
 disabled on isolated staging. The two-physical-phone, independent
 Public account acceptance is still subject to real-device tests
 and durable infrastructure.
+
+**Verified signed Android staging passkey test.** A test user on the
+installed Android staging application successfully completed
+passwordless passkey enrollment and then reported successfully
+signing out and back in via their credential provider. The new
+account screen also correctly switched from “Set up biometric
+login” to “Passkey login enabled — 1 passkey registered.”
+This is a user-confirmed **one-device synthetic identity test**,
+not yet the two-separate-phone acceptance target.
+
+**Persistence is the next gated milestone.** Render Free staging uses
+an ephemeral SQLite database, which already reset both synthetic
+accounts during a deployment. A [staging persistence decision and
+cost runbook](STAGING_PERSISTENCE_DECISION_V0257.md) describes a
+separate paid web instance and disk option (approximately $7.25
+additional per month before overages), alternatives and migration
+checks. No paid upgrade or real broker data has been authorized.
+The existing production owner app and backend remain separate.
 
 ## Multi-user accounts and biometric sign-in
 
