@@ -110,7 +110,11 @@ def inspect_first_invitation_readiness(env, legacy_path, tenant_path, *,
                     "Active pending invitations must be resolved before rollout")
         return {
             "inspection": "passed",
-            "original_legacy_login_preserved": True,
+            "legacy_database_present_and_separate": True,
+            # Inspecting SQLite cannot prove the legacy login works from
+            # a real Android session; that remains a manual acceptance gate.
+            "legacy_login_end_to_end_verified": False,
+            "public_network_verification_performed": False,
             "independent_owner_initialized": True,
             "existing_tenant_members": 0,
             "active_owner_public_connections": existing["connections"],
