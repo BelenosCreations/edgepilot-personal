@@ -1,3 +1,42 @@
+## CURRENT checkpoint — v0.2.74 verified owner Public connection; backup code in development, November 12, 2026 UTC
+
+The user independently tested the active v0.2.73 Public discovery-only
+pilot at https://edgepilot-private-h9tl.onrender.com/account on Android.
+Screenshot showed one "Encrypted Public connection", a discovered
+"BROKERAGE" account, and a "Linked accounts" entry stating
+"Public BROKERAGE · ownership verified; portfolio, monitor, orders
+and transfers disabled". The old legacy Public key was NOT copied.
+This is a real external acceptance beyond the prior synthetic tests,
+but there is no live two-account / second device acceptance and
+no portfolio or trades authorization.
+
+The prior encrypted tenant-owner archive edgepilot-tenant-owner-
+20261112.epbk was created/isolated restored and uploaded off Render
+before a Public API credential and account link were added, so that
+archive DOES NOT contain the now-saved encrypted Public connection.
+v0.2.70 backup is explicitly limited to dormant first-owner state
+(no sessions, broker features disabled). Do not weaken that tool.
+Instead v0.2.74 adds a separate first-linked-owner recovery snapshot:
+consistent /data tenant DB copy to tmpfs, decrypted credential
+verification under existing EDGE_CREDENTIAL_KEY without revealing
+secret, removes tenant_identity_sessions and tenant_auth_failures only
+in a temporary snapshot to prevent session resurrection after restore,
+AES-256-GCM with the private offline 32-byte phone recovery key,
+private no-overwrite archive in /dev/shm, and isolated read-only
+restore proof. Both live DB files remain untouched; original legacy
+login and Public key remain separate.
+
+This code MUST pass PR and merged-main GitHub CI, be merged, and
+be confirmed live on the EXISTING paid Render Starter service before
+the owner runs it through LOCAL Termux with the separately held backup
+key. After backup succeeds, user must copy encrypted archive off
+Render, verify downloaded SHA-256, and upload to their existing private
+Google Drive Edgepilot backup folder. Prior backups and GPG recovery
+must remain preserved. Do not treat source code deployment as a
+confirmed production backup. No new paid resources, portfolio
+balances/holdings, monitoring, orders, bank transfers, public
+signup, invitation enrollment or second-device account are enabled.
+
 ## CURRENT operator checkpoint — v0.2.73 live private Public discovery, November 12, 2026 UTC
 
 GitHub PR #95 for v0.2.73 was green, merged to main commit
