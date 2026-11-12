@@ -1,12 +1,22 @@
 **/.env
+**/.env.*
+!**/.env.example
 **/*.db
+**/*.sqlite
+**/*.sqlite3
 **/__pycache__/
 **/*.pyc
 *.apk
-
-# Never commit Android release signing material or generated signed APKs.
+*.aab
+# Private signing and recovery material must never be committed.
 *.jks
 *.keystore
 *.p12
 *.pfx
-*.aab
+*.pem
+*.key
+*.p8
+*.gpg
+*.asc
+**/recovery-key.b64
+**/recovery_key.b64

@@ -483,3 +483,7 @@ This README explains **what EdgePilot is**, the capabilities of the system, its 
 EdgePilot is experimental software for portfolio visibility and research. Its analysis, simulations, strategy settings, and AI outputs are not investment advice or promises of returns. Historical backtests and simulated trades are not live results. Brokerage access and eventual use by multiple independent users remain subject to applicable provider agreements, security requirements, and law.
 
 **The README describes the project. Version-by-version development history belongs in the [changelog](CHANGELOG.md).**
+
+## Public GitHub readiness (preparation only)
+
+Hosting this source publicly is under consideration to reduce GitHub Actions compute costs. The repository remains private until a historical credential and Actions-artifact review is complete. See [Public repository readiness](PUBLIC_REPOSITORY_READINESS.md). Repository visibility does not grant permission for live integrations, production deployment, additional spending, trades, transfers or publishing.
