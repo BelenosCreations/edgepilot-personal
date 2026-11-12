@@ -255,7 +255,8 @@ def verify_family_archive(path, *, key_b64, credential_key, temp_root=None):
     """Authenticate an existing encrypted RAM archive into isolated RAM only."""
     ram = Path("/dev/shm") if temp_root is None else Path(temp_root)
     target = Path(path)
-    if target.parent != ram or not old_backup._private(target):
+    if (not ram.is_absolute() or not ram.is_dir() or ram.is_symlink()
+            or target.parent != ram or not old_backup._private(target)):
         raise FamilyArchiveDenied("Private family archive required")
     try:
         vault = Fernet(credential_key.encode("ascii") if isinstance(
