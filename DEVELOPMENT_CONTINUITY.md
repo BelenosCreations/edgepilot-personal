@@ -1,3 +1,11 @@
+## CURRENT development — v0.2.80 first private family invitation readiness, November 12, 2026
+
+The owner-approved invitation-only coexistence backend v0.2.78 is merged and main CI verified (`f9ccb329`, run `43244459815`). v0.2.79 owner-only masked invitation interface passed PR #105 CI and merged at `84c9fa8f187bb5c318019fa5eeb96ab903c92d00`. The invite UI is still hidden on production because private issuance and registration remain disabled. No actual owner code, second member, provider key or public login was created.
+
+v0.2.80 is a **dormant read-only** operator inspection for before the first actual family invitation. It requires explicit `EDGE_FAMILY_ROLLOUT_PREFLIGHT_ALLOWED=true` only for manual inspection; authenticates the paired private SQLite files, one Argon2id owner with existing independently verified encrypted Public link and working original Fernet key; refuses unsafe runtime flags, active pending invitations, additional members or already enabled invite pathways. It returns only aggregate nonsecret data with explicit `member_registration_authorized=false` and no assumptions about actual backup custody or physical phones. The tool is not installed in any live route or startup hook and must not be run on Render or used to enable flags without independent user approval.
+
+Next: PR and merged-main GitHub CI, operator backup/key-custody review, then request *separate explicit production authorization* for a controlled single invited member on a second phone. Maintain all protected backups, original owner login and paid Render data; no new services, public GitHub secrets, order execution, autonomous trading or bank transfers.
+
 ## CURRENT development — v0.2.79 private owner invitation UI, November 12, 2026
 
 The owner approved invitation-only coexistence; backend v0.2.78 merged to main as `f9ccb329c74fdde7bc2c05a3bba89cbc13d8ca0a`. Both PR #104 test run `43244085948` and merged-main run `43244459815` completed SUCCESS. The independently default-off `EDGE_FAMILY_INVITE_COEXISTENCE_ENABLED` cannot enable enrollment by itself: it requires separate private owner invitation and signup gates, one active owner, prepared shared paid disk, encrypted Public discovery-only pilot, no live execution, passkeys or tenant-only retirement.
