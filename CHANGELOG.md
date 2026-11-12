@@ -1,3 +1,8 @@
+## v0.2.70 — 2026-11-11 — First-owner encrypted tenant backup and isolated restore
+**Added:** Strictly operator-only AES-256-GCM encrypted first-owner tenant snapshot using an independent phone-held backup key through SSH stdin, private /dev/shm snapshot and published archive, read-only source inspection, exact one active Argon2id owner, verified isolated restored database and returned SHA-256. No legacy data is copied or changed.
+**Tests:** Synthetic independent tenant and original encrypted broker store; successful new archive and authenticated restoration, no overwrite, wrong key/tampering, unsafe permissions/symlinks, disabled owner and prohibited live flags. The synthetic backup rehearsal remains barred from production.
+**Operator state:** Real tenant owner enrollment has succeeded and the read-only readiness report returned one owner. A real off-service encrypted tenant archive has NOT yet been created; the operator must run the private tool, copy/checksum the temporary archive and upload it. No new paid service, Public network, trading or bank transfer. See PERMANENT_FIRST_OWNER_BACKUP_V0270.md.
+
 ## v0.2.69 — 2026-11-11 — Android-safe one-time first-owner bootstrap input
 **Changed:** Console bootstrap retains hidden password input but refuses blank, mismatched or invalid-length entries *before* final approval and any database write. The fixed nonsecret authorization phrase uses a visible terminal prompt with exact-match enforcement, and CLI displays only code-authored sanitized refusal reasons.
 **Tests:** Synthetic Android empty-input, mismatched/short password, blank approval, valid exact visible approval, no password disclosure and existing-tenant denial. Atomic first-owner provisioning and legacy data isolation remain unchanged.

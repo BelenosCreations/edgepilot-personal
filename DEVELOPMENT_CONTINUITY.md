@@ -1,3 +1,35 @@
+## CURRENT checkpoint — v0.2.70, November 11, 2026
+
+The owner successfully completed first-owner bootstrap using the
+v0.2.69 visible final approval prompt. Render printed the expected
+success response, and a follow-up v0.2.65 read-only readiness
+inspection confirmed inspection=passed, tenant_member_count=1,
+tenant_owner_initialized=true, tenant_owner_has_password_identity=true
+and next_operator_stage=manual_owner_identity_login_test.
+The new private tenant identity login is Belenos-Owner and its
+password was never displayed or collected in chat. Original Public
+credentials and token-based login are unmigrated and intact.
+
+v0.2.70 adds a dedicated, default-off, single-first-owner tenant
+database backup because the legacy .epbk helper requires the old
+settings schema and the synthetic-only tenant helper cannot touch
+Render /data. This code uses a phone-held 32-byte backup key piped
+over SSH, encrypts a RAM-only consistent SQLite snapshot with
+AES-256-GCM, verifies an isolated private restore and publishes
+a distinct non-overwriting temporary /dev/shm archive. It has NOT
+yet been run on real production storage. The next operator action
+after verified CI/Render deployment is to exit remote shell,
+run the private backup from LOCAL Termux, compare the remote
+archive SHA-256 with the downloaded local encrypted file, then
+upload the archive to private Drive. The backup passphrase/key
+must remain separately recoverable.
+
+The Observe/Paper worker remains disabled as approved. No tenant
+login routes, tenant-only policy, Public pilot, live orders,
+bank transfers, credentials migration, second physical device
+or extra paid service are activated. Preserve existing legacy
+database and its validated encrypted offsite backups.
+
 ## CURRENT checkpoint — v0.2.69, November 11, 2026
 
 The user, on an existing authorized interactive SSH terminal attached to
