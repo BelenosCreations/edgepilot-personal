@@ -1,3 +1,15 @@
+## CURRENT verified operator checkpoint — v0.2.74 off-service linked-owner archive, November 12, 2026
+
+**GitHub main** is v0.2.74 at `b2e4483da54dcbda3d02428a3bde8d5e7d50a205`; merged-main EdgePilot tests run `43211039850` concluded SUCCESS. The owner ran the v0.2.74 console-only linked-owner backup on the existing paid Render instance and showed `backup_verified=true`, `isolated_restore_verified=true`, `credential_decryptable=true`, `restored_login_sessions=0`, one verified linked account and one encrypted Public connection; live trading and bank transfers were reported disabled. The archive was on `/dev/shm` and initially had `off_service_copy_verified=false`, which means only the **tool's own** on-server attestation was incomplete.
+
+The owner then transferred the encrypted archive by authenticated SSH into private Termux storage on Android, matched its SHA-256 against the reported server archive digest, uploaded a copy to the private Google Drive `Edgepilot backup` folder, renamed the local upload-source file, **downloaded the cloud archive separately**, and compared both SHA-256 hashes. Both matched:
+`0248ba7bc5af58a8e6883384b6c34e2cb5990d8a939fac292a8cda305ef034ad`.
+This is operator-screenshot-confirmed **off-service archive byte identity**; it must not be confused with independently verified full production recovery, tenant-only migration, or restored Public network authentication.
+
+Retain all pre-existing backups. The encrypted archive is only one recovery component: a complete restore requires the Android-held AES recovery key **and** the original independently recovered `EDGE_CREDENTIAL_KEY` (Fernet) for stored Public credentials. The screenshots also showed files described as `Public API key` and `Edgepilot backup passkey` alongside backups in Google Drive; do not assume separated key custody, and never read, print or copy these secrets. Recommend password-manager separation before broadening production access; changing credentials needs separate operator approval. Cloud folder visibility and exact recovery-key custody have not been audited.
+
+**Next development:** Preserve default-off safety gates. Build and test synthetic multi-member backup/readiness and tenant-isolation paths without inviting real users, turning on portfolio reads, moving credentials between tenants, enabling global workers, orders, transfers, or new paid resources. Keep README, CHANGELOG and this continuity note current. No physical second device or independent second Public account has yet passed acceptance.
+
 ## CURRENT checkpoint — v0.2.74 verified owner Public connection; backup code in development, November 12, 2026 UTC
 
 The user independently tested the active v0.2.73 Public discovery-only
