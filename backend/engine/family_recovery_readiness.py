@@ -159,6 +159,8 @@ def inspect_family_recovery(env, legacy_path, tenant_path, *,
                             disabled is None and revoked is None}
             if (len(links) != db.execute(
                     "SELECT COUNT(*) FROM tenant_accounts").fetchone()[0] or
+                    any(disabled is None and revoked is not None
+                        for _, disabled, revoked in links) or
                     any(user not in active_connection_users for user in linked_users)):
                 raise FamilyRecoveryReadinessDenied(
                     "Verified account binding is not correctly isolated")
