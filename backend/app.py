@@ -667,6 +667,10 @@ def identity_session():
     return {'ok':True,'csrf':csrf,
             'user':{'userId':principal['user_id'],
                     'label':principal['label'],'role':principal['role']},
+            # Capability metadata only; the POST route still independently
+            # authenticates the owner, CSRF and current role under DB lock.
+            'privateInvitationsAvailable':bool(
+                permanent_admin_invites_enabled and principal['role']=='owner'),
             'scope':'identity_only_no_broker_access'}
 
 
