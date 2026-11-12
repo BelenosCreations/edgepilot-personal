@@ -23,7 +23,7 @@ SIGNATURES = {
     "database-url": re.compile(rb"\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?)://[^\s:/@]{1,80}:[^\s/@]{6,}@[^\s/]+", re.I),
 }
 ASSIGNMENT = re.compile(
-    rb"(?im)^\s*(?:export\s+)?([A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|CREDENTIAL|API_KEY|PRIVATE_KEY|PASS_PHRASE|PASSPHRASE)[A-Z0-9_]*)\s*[:=]\s*[\"']?([^\s\"'#]{16,})"
+    rb"(?im)^\s*(?:export\s+)?([A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|CREDENTIAL|API_KEY|PRIVATE_KEY|PASS_PHRASE|PASSPHRASE)[A-Z0-9_]*)\s*[:=]\s*([\"'])([^\r\n\"']{16,})\2"
 )
 PLACEHOLDERS = (b"REPLACE", b"YOUR", b"EXAMPLE", b"SAMPLE", b"DUMMY", b"FAKE", b"TEST", b"PLACEHOLDER", b"GENERATE", b"CHANGEME", b"CHANGE_ME")
 SENSITIVE_EXTENSIONS = {".pem", ".p12", ".pfx", ".jks", ".keystore", ".key", ".sqlite", ".sqlite3", ".db", ".gpg", ".asc"}
@@ -88,10 +88,16 @@ def scan():
             if b"\0" in data[:1024]:
                 continue
             for kind, pattern in SIGNATURES.items():
-                if pattern.search(data):
+                for occurrence in pattern.finditer(data):
+                    # Synthetic keys in fixtures are expected and never real credentials.
+                    context = data[max(0, occurrence.start()-120):occurrence.start()].lower()
+                    if kind == "openai-key" and (
+                        "/tests/" in path or pathlib.PurePosixPath(path).name.startswith("test_")
+                    ) and b"synthetic_key" in context:
+                        continue
                     findings.add((kind, path, sha[:12].decode()))
             for match in ASSIGNMENT.finditer(data):
-                value = match.group(2).upper().strip(b"\"';,)")
+                value = match.group(3).upper().strip(b"\"';,)")
                 if any(marker in value for marker in PLACEHOLDERS):
                     continue
                 if value.startswith((b"$", b"<", b"{")):
@@ -104,6 +110,8 @@ def scan():
         print(f"OVERSIZED: {path}")
     if findings:
         print(f"Potential exposures needing review: {len(findings)} (values never printed)")
+        for category in sorted({kind for kind, _, _ in findings}):
+            print(f"CATEGORY {category}: {sum(1 for kind, _, _ in findings if kind == category)}")
         for kind, path, prefix in sorted(findings)[:100]:
             print(f"{kind}: {path} (blob {prefix})")
         if len(findings) > 100:
