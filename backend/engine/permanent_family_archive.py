@@ -86,8 +86,10 @@ def _snapshot_inventory(path, fernet, *, sessions_must_be_gone):
             FROM tenant_accounts a JOIN tenant_connections c
               ON c.connection_id=a.connection_id AND c.user_id=a.user_id
             WHERE a.provider='public' AND c.provider='public'""").fetchall()
-        if len(links) != db.execute(
-                "SELECT COUNT(*) FROM tenant_accounts").fetchone()[0]:
+        if (len(links) != db.execute(
+                "SELECT COUNT(*) FROM tenant_accounts").fetchone()[0] or
+                any(disabled is None and revoked is not None
+                    for _, disabled, revoked in links)):
             raise FamilyArchiveDenied("Family brokerage link isolation is invalid")
         linked = sum(u in active and disabled is None and revoked is None
                      for u, disabled, revoked in links)
