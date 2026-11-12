@@ -105,10 +105,7 @@ class FamilyRecoveryReadinessTests(unittest.TestCase):
         self.enroll_member(link=False, identity=False)
         with self.assertRaises(readiness.FamilyRecoveryReadinessDenied):
             self.inspect()
-        with sqlite3.connect(self.tenant) as db:
-            db.execute("DELETE FROM tenant_users WHERE user_id=?", (self.member,))
-        # The audit event FK is deliberately present and should prevent
-        # silent cleanup; simply use a fresh test instance for key sharing.
+        # The unpaired synthetic member remains isolated in this test database.
 
     def test_shared_public_api_key_is_refused_without_echoing_secret(self):
         self.enroll_member(secret=self.key_owner)
