@@ -9,7 +9,7 @@ from urllib.parse import quote
 import requests
 from flask import Flask, jsonify, request, send_from_directory, redirect, g
 from dotenv import load_dotenv
-from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, tenant_password_change, tenant_session_controls, tenant_registration, tenant_passkeys, account_scope, tenant_monitor_blueprint, tenant_watchlist, tenant_public_vault, tenant_public_live_readonly, staging_isolation, staging_operator, shared_storage_cutover, permanent_admin_invitations
+from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, tenant_password_change, tenant_session_controls, tenant_registration, tenant_passkeys, account_scope, tenant_monitor_blueprint, tenant_watchlist, tenant_public_vault, tenant_public_live_readonly, staging_isolation, staging_operator, shared_storage_cutover, permanent_admin_invitations, solo_owner_portfolio
 ROOT=Path(__file__).parent; load_dotenv(ROOT/'.env')
 # Refuse unsafe isolated-test configuration before opening any database,
 # owner credential store or background-worker state. Production is unchanged.
@@ -78,6 +78,9 @@ permanent_admin_invites_enabled=os.getenv('EDGE_PERMANENT_OWNER_INVITES_ENABLED'
 # This has no effect unless separately opted in with all private, no-trade,
 # discovery-only coexistence prerequisites checked by shared_storage_cutover.
 family_invite_coexistence_enabled=shared_storage_cutover.family_invite_coexistence_policy(os.environ)
+# A distinct, default-off solo research pilot. Never substitutes for the
+# multi-member capability gates and never activates any execution path.
+solo_owner_portfolio_enabled=solo_owner_portfolio.validate_pilot(os.environ,DB,TENANT_DB)
 if permanent_admin_invites_enabled and not (
         (TENANT_POLICY['tenant_only'] or family_invite_coexistence_enabled)
         and identity_auth_enabled and tenant_signup_enabled):
@@ -505,10 +508,16 @@ def identity_accounts():
         return fail('Not found',404)
     token=request.cookies.get(identity_auth.COOKIE_NAME,'')
     try:
-        return {'accounts':tenant_account_store.list_accounts(token),
+        accounts=tenant_account_store.list_accounts(token)
+        solo=bool(solo_owner_portfolio_enabled and
+            solo_owner_portfolio.active_for_owner(TENANT_DB,g.edge_identity))
+        return {'accounts':accounts,
                 'readOnly':True,'brokerConnected':False,
                 'discoveryOnlyPilot':tenant_public_discovery_only,
-                'note':('Verified Public account links; portfolio and execution disabled'
+                'soloOwnerPortfolioAvailable':solo,
+                'note':('Owner-only read-only Public portfolio available; other users remain discovery-only'
+                        if solo else
+                        'Verified Public account links; portfolio and execution disabled'
                         if tenant_public_discovery_only else
                         'Account-scoped storage only; no live broker requests or workers')}
     except account_scope.TenantAccessError:
@@ -646,12 +655,24 @@ def identity_public_link_account(connection_id):
 
 @app.get('/api/identity/public/read/accounts/<account_id>/portfolio')
 def identity_public_account_portfolio(account_id):
-    # Production first stage permits provider-verified account discovery, not holdings.
-    if tenant_public_discovery_only:
+    # Existing discovery-only rollout remains the default for EVERY identity.
+    # A separately approved future single-owner pilot may read only that
+    # owner-owned account, and immediately fails closed if another member is
+    # enrolled, without deleting or changing any multi-user implementation.
+    if tenant_public_discovery_only and not (
+            solo_owner_portfolio_enabled and
+            solo_owner_portfolio.active_for_owner(TENANT_DB,g.edge_identity)):
         return fail('Not found',404)
     try:
         token=request.cookies.get(identity_auth.COOKIE_NAME,'')
-        return tenant_public_reader.portfolio(token,account_id)
+        portfolio=tenant_public_reader.portfolio(token,account_id)
+        # A member might register during the external HTTPS request. Recheck
+        # before returning ANY portfolio data so solo mode fails closed.
+        if tenant_public_discovery_only and not (
+                solo_owner_portfolio_enabled and
+                solo_owner_portfolio.active_for_owner(TENANT_DB,g.edge_identity)):
+            return fail('Not found',404)
+        return portfolio
     except (tenant_public_live_readonly.PublicReadUnavailable,
             tenant_public_vault.TenantVaultDenied):
         return fail('Public portfolio unavailable',404)

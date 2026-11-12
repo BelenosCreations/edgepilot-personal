@@ -341,13 +341,20 @@
     try {
       const data = await api("/accounts");
       if (generation !== identityViewGeneration) return;
-      if (data.readOnly !== true || !Array.isArray(data.accounts)) {
+      if (data.readOnly !== true || !Array.isArray(data.accounts) ||
+          typeof data.discoveryOnlyPilot !== "boolean" ||
+          typeof data.soloOwnerPortfolioAvailable !== "boolean") {
         throw new Error("Invalid read-only account list");
       }
-      if (data.discoveryOnlyPilot === true) {
-        el("portfolioSummary").textContent = "Account discovery only — portfolio balances and holdings are not enabled during this pilot.";
-      } else if (data.accounts.length === 0) {
+      // The server decides capability for the current authenticated owner.
+      // A second registered user immediately disables the solo pilot.
+      const soloPortfolio = data.soloOwnerPortfolioAvailable === true;
+      if (data.accounts.length === 0) {
         el("portfolioSummary").textContent = "No verified Public accounts are linked yet.";
+      } else if (data.discoveryOnlyPilot === true && !soloPortfolio) {
+        el("portfolioSummary").textContent = "Account discovery only — portfolio balances and holdings are not enabled during this pilot.";
+      } else if (data.discoveryOnlyPilot === true) {
+        el("portfolioSummary").textContent = "Owner-only read-only Public portfolio is available on request. Orders and transfers remain disabled.";
       }
       for (const account of data.accounts) {
         // The existing tenant storage endpoint returns account_id. The
@@ -360,7 +367,7 @@
         }
         const li = document.createElement("li");
         li.appendChild(document.createTextNode(String(account.label || "Public account") + " "));
-        if (data.discoveryOnlyPilot === true) {
+        if (data.discoveryOnlyPilot === true && !soloPortfolio) {
           li.appendChild(document.createTextNode(" · ownership verified; portfolio, monitor, orders and transfers disabled"));
           items.appendChild(li);
           continue;
@@ -397,6 +404,13 @@
           }
         }));
         li.appendChild(button);
+        if (data.discoveryOnlyPilot === true) {
+          // The solo owner may view this one read-only portfolio but must not
+          // see dormant watchlist/monitor controls or any trading actions.
+          li.appendChild(document.createTextNode(" · owner-only portfolio; no monitor, orders or transfers"));
+          items.appendChild(li);
+          continue;
+        }
         const previewButton = document.createElement("button");
         previewButton.type = "button";
         previewButton.textContent = "Preview inactive monitor";
