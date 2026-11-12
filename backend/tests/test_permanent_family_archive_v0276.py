@@ -193,6 +193,15 @@ class EncryptedFamilyArchiveTests(unittest.TestCase):
                 self.archive,key_b64=self.key,credential_key=self.vault,
                 temp_root=self.ram)
 
+    def test_active_account_on_revoked_connection_is_not_recoverable(self):
+        self.add_second_user()
+        with sqlite3.connect(self.tenant) as db:
+            db.execute("""UPDATE tenant_connections SET revoked_at='2026-11-12'
+                WHERE user_id=?""", (self.member,))
+        with self.assertRaises(family.FamilyArchiveDenied):
+            self.make()
+        self.assertFalse(self.archive.exists())
+
     def test_unsafe_private_storage_denied_without_archive(self):
         self.add_second_user()
         os.chmod(self.tenant, 0o644)
