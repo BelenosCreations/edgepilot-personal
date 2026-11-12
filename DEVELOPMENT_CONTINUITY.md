@@ -1,3 +1,50 @@
+## CURRENT operator checkpoint — v0.2.73 live private Public discovery, November 12, 2026 UTC
+
+GitHub PR #95 for v0.2.73 was green, merged to main commit
+b40874ef6ce1ee9d7282bb3b4faa54a669ae4e4e, and the
+merged-main GitHub action run 43150624623 concluded SUCCESS.
+The existing paid Render Starter service edgepilot-private-h9tl
+then deployed this commit live. With the user's explicit approval,
+we merged (DID NOT REPLACE) environment flags to activate ONLY:
+EDGE_PERMANENT_READONLY_PILOT_ENABLED=true,
+EDGE_TENANT_ACCOUNT_READS_ENABLED=true,
+EDGE_TENANT_PUBLIC_VAULT_ENABLED=true,
+EDGE_TENANT_PUBLIC_READONLY_ENABLED=true,
+EDGE_TENANT_PUBLIC_DISCOVERY_ONLY=true,
+plus the previously established identity/isolated tenant DB gates.
+Render deploy dep-dbqjf4ec6qcc73fhamrg was confirmed LIVE.
+
+Still disabled: EDGE_PERMANENT_TENANTS_ONLY=false, enabling
+the original legacy owner token login; EDGE_AUTOMATION_WORKER_ENABLED
+and ENABLE_LIVE_ORDERS remain false; signup, invites, passkeys,
+monitor preview, watchlist editing, active tenant portfolio,
+bank transfers and autonomous orders remain disabled.
+The stable existing EDGE_CREDENTIAL_KEY was preserved, not printed,
+changed or copied to chat. The original legacy Public credential
+remains in /data/edgepilot.db and has NOT been migrated. The tenant
+owner uses /data/edgepilot-tenants.db. Both share the same existing
+1 GB paid Render persistent disk; NO new service was purchased.
+
+CRITICAL DISTINCTION: Render reporting LIVE does NOT mean the
+user has supplied a Public secret or that provider account discovery
+has succeeded. User must open the secure /account page, sign in as
+Belenos-Owner, generate/copy their own Public PERSONAL API secret
+privately from official Public account settings, Save encrypted key,
+select the new independent connection, and tap Find my Public accounts.
+Only the provider token POST + account list GET are allowed by the
+discovery-only pilot; even direct portfolio URLs return 404.
+User should not paste keys or account identifiers into chat.
+Once account linking is confirmed, prepare an updated encrypted
+off-service tenant snapshot because previous backup predates the
+newly stored credential. The existing Google Drive encrypted owner
+identity backup and original owner credential recovery remain intact.
+
+Next: physical Android end-to-end validation of the new scoped
+Public secret storage and account-list/discovery flow. Do not enable
+portfolio holdings, real order placement, transfers, workers,
+new members, auto-trade or tenant-only cutover without a separately
+verified development stage/authorization.
+
 ## CURRENT checkpoint — v0.2.73, approved first Public account discovery, November 12, 2026 UTC
 
 The owner approved LIMITED identity-scoped Public API secret encryption,
