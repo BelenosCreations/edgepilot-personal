@@ -122,7 +122,9 @@ assert portfolio.json=={
     "readOnly":True,"ordersEnabled":False,"transfersEnabled":False}
 assert all(route not in str(fake.calls) for route in ("ORDER","TRANSFER","EXECUTE"))
 assert get(a,"/api/identity/accounts/"+aid+"/monitor/preview").status_code==404
-assert get(a,"/api/identity/accounts/"+aid+"/monitor/watchlist").status_code==404
+assert a.put("/api/identity/accounts/"+aid+"/monitor/watchlist",
+    base_url=ORIGIN,headers={"Origin":ORIGIN,
+        "X-Edge-Identity-CSRF":csrf},json={"symbols":["SPY"]}).status_code==404
 assert get(a,"/api/automation/status").status_code==401
 
 # Newly registered members revoke the TEMPORARY solo pilot immediately.
