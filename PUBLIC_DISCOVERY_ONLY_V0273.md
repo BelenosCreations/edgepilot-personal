@@ -19,6 +19,15 @@ corresponding frontend button. The account-list API declares
 `discoveryOnlyPilot=true`. The user may later approve portfolio
 reads separately; do not quietly remove this flag.
 
+**Verified active deployment — November 12, 2026 UTC.**
+GitHub PR #95 and merged-main run 43150624623 both passed.
+On the EXISTING paid Render Starter service, the owner-approved
+merge-only flags below were deployed as
+`dep-dbqjf4ec6qcc73fhamrg`, confirmed LIVE.
+No new account key has been entered or tested in this turn.
+Actual Public provider account discovery remains a user-driven
+acceptance step.
+
 **Required deployment flags (merge existing Render variables,
 never replace):**
 
@@ -82,7 +91,7 @@ access another owner's connection, and encrypted ciphertext never
 appears in the legacy DB. The old login cannot use tenant account
 routes. Any portfolio URL is 404 while discovery-only is true.
 
-**Rollback:** Merge (do not replace) these three vars on the same
+**Rollback:** Merge (do not replace) these five vars on the same
 Render service:
 ```text
 EDGE_TENANT_PUBLIC_DISCOVERY_ONLY=false
