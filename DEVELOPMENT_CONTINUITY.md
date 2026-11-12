@@ -1,3 +1,41 @@
+## CURRENT checkpoint — v0.2.72, November 12, 2026 UTC
+
+The independent Belenos-Owner Argon2id identity was already created
+and its password verified via read-only trusted SSH. An encrypted,
+authenticated-restored owner tenant snapshot was copied with matching
+SHA-256 to private Android storage and uploaded to the existing
+Google Drive Edgepilot backup folder. Drive redownload comparison
+remains unverified.
+
+On the same paid Render service, an auth-only environment rollout
+activated EDGE_IDENTITY_AUTH_ENABLED=true with isolated
+/data/edgepilot-tenants.db and left the existing
+/data/edgepilot.db token login available. The user supplied a
+REAL PHYSICAL ANDROID SCREENSHOT showing "Secure EdgePilot account
+session active" and "Welcome, Belenos-Owner" at the independent
+HTTPS /account UI. In the next message, the user confirmed the
+requested sign-out and original legacy login tests "Works properly".
+Treat this as operator-confirmed acceptance, not as assistant-side
+browser execution. The Observe/Paper worker, tenant signup, Public
+vault, tenant read-only account API, passkeys, live orders and all
+bank transfers remain disabled. No extra paid services were added.
+
+v0.2.72 adds an exact-profile Flask regression under temporary
+separate owner + tenant DBs to prove that independent identity
+sessions cannot inherit the legacy session and vice versa,
+different synthetic users cannot see each other's tenant identity,
+and CSRF sign-out preserves unrelated logins. Tests also assert
+new-user enrollment and broker features remain disabled.
+No new runtime feature is activated by this development step.
+
+Next: verify PR and merged-main GitHub tests plus successful Render
+deployment of v0.2.72; inspect default-off user/account Public
+binding flows and prepare an owner-approved *read-only* independent
+broker-connection rollout without copying the original global
+Public key. Real second-device/member/second Public account still
+requires operator-driven acceptance; do NOT create real members,
+enable broker features or retire the original login automatically.
+
 ## CURRENT operator checkpoint — Controlled HTTPS identity login enabled, November 12, 2026 UTC
 
 The user explicitly approved enabling a limited, reversible identity-only
