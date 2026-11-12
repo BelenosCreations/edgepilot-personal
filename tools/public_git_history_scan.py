@@ -25,7 +25,7 @@ SIGNATURES = {
 ASSIGNMENT = re.compile(
     rb"(?im)^\s*(?:export\s+)?([A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|CREDENTIAL|API_KEY|PRIVATE_KEY|PASS_PHRASE|PASSPHRASE)[A-Z0-9_]*)\s*[:=]\s*([\"'])([^\r\n\"']{16,})\2"
 )
-PLACEHOLDERS = (b"REPLACE", b"YOUR", b"EXAMPLE", b"SAMPLE", b"DUMMY", b"FAKE", b"TEST", b"PLACEHOLDER", b"GENERATE", b"CHANGEME", b"CHANGE_ME")
+PLACEHOLDERS = (b"REPLACE", b"YOUR", b"EXAMPLE", b"SAMPLE", b"DUMMY", b"FAKE", b"TEST", b"PLACEHOLDER", b"GENERATE", b"CHANGEME", b"CHANGE_ME", b"SYNTHETIC", b"CORRECT HORSE BATTERY STAPLE", b"REPLACEMENT PASSPHRASE 12345")
 SENSITIVE_EXTENSIONS = {".pem", ".p12", ".pfx", ".jks", ".keystore", ".key", ".sqlite", ".sqlite3", ".db", ".gpg", ".asc"}
 
 def git(args, input_bytes=None):
