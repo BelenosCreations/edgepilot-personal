@@ -151,6 +151,53 @@ class EncryptedFamilyArchiveTests(unittest.TestCase):
             self.assertEqual(db.execute(
                 "SELECT COUNT(*) FROM tenant_signup_invites").fetchone()[0],1)
 
+    def test_restored_family_requires_new_logins_and_keeps_accounts_isolated(self):
+        self.add_second_user()
+        self.add_transient_rows()
+        self.make()
+        encrypted = self.archive.read_bytes()
+        key = owner_key._key(self.key)
+        raw = AESGCM(key).decrypt(
+            encrypted[len(family.MAGIC):len(family.MAGIC)+12],
+            encrypted[len(family.MAGIC)+12:], family.MAGIC)
+        restored = self.ram / "private-restoration-for-synthetic-test.sqlite3"
+        restored.write_bytes(raw)
+        os.chmod(restored, 0o600)
+        with sqlite3.connect(restored) as db:
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM tenant_identity_sessions").fetchone()[0],0)
+        signed_in = identity_auth.IdentityStore(str(restored))
+        session_owner = signed_in.authenticate(
+            "family_owner", "synthetic-owner-long-password-2026",
+            source="SYNTHETIC-OWNER-SOURCE")
+        session_member = signed_in.authenticate(
+            "family_member", "synthetic-member-long-password-2026",
+            source="SYNTHETIC-MEMBER-SOURCE")
+        self.assertIsNotNone(session_owner)
+        self.assertIsNotNone(session_member)
+        self.assertNotEqual(session_owner["token"], session_member["token"])
+        self.assertEqual(signed_in.principal(
+            session_owner["token"])["user_id"],self.owner)
+        self.assertEqual(signed_in.principal(
+            session_member["token"])["user_id"],self.member)
+        accounts=tenant_foundation.TenantStore(
+            str(restored), credential_key=self.vault)
+        owner_items=accounts.list_accounts(self.owner)
+        member_items=accounts.list_accounts(self.member)
+        self.assertEqual(len(owner_items),1)
+        self.assertEqual(len(member_items),1)
+        self.assertNotEqual(owner_items[0]["account_id"],
+                            member_items[0]["account_id"])
+        with self.assertRaises(tenant_foundation.TenantAccessError):
+            accounts.account_setting(
+                self.owner,member_items[0]["account_id"],"profile_label")
+        with self.assertRaises(tenant_foundation.TenantAccessError):
+            accounts.account_setting(
+                self.member,owner_items[0]["account_id"],"profile_label")
+        with sqlite3.connect(self.tenant) as db:
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM tenant_identity_sessions").fetchone()[0],2)
+
     def test_one_owner_or_shared_key_rejected(self):
         with self.assertRaises(family.FamilyArchiveDenied):
             self.make()
