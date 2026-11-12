@@ -1,3 +1,33 @@
+## CURRENT checkpoint — v0.2.71, November 11, 2026
+
+The owner completed v0.2.70 production tenant backup from the existing
+paid Render service with reports backup_verified=true,
+isolated_restore_verified=true, first_owner_count=1,
+archive_private_0600=true. The encrypted
+edgepilot-tenant-owner-20261112.epbk (UTC server date) was transferred
+to local Termux by protected SSH, with exact SHA-256 comparison, saved
+as a private 0600 local archive, and then uploaded to the existing
+private Google Drive Edgepilot backup folder. User screenshot visibly
+showed the uploaded archive and upload completion. A separate Drive
+redownload comparison has not yet been done.
+
+Owner login Belenos-Owner is enrolled with Argon2id hash in
+/data/edgepilot-tenants.db; the original owner token and Public
+credentials remain in the original /data/edgepilot.db. Observe/Paper
+worker remains paused with user approval. No independent HTTPS login,
+second Android device, Public account owner verification, tenant-only
+cutover, order execution or funds transfer has been activated.
+
+v0.2.71 introduces a separately gated read-only trusted-terminal
+Argon2id proof to establish that the operator remembers the new
+owner password, without changing DB, creating sessions, or enabling
+any public identity API. Its return explicitly reports that real
+HTTPS owner login remains unverified. After GitHub PR/main CI and
+existing Render deployment pass, request a one-time operator
+execution. Do not activate tenant identity public routes until
+that result is verified and a separate reversible login rollout
+is reviewed with the operator. No new paid resources.
+
 ## CURRENT checkpoint — v0.2.70, November 11, 2026
 
 The owner successfully completed first-owner bootstrap using the
