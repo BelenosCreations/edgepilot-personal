@@ -69,6 +69,11 @@ owner_login=post(owner,'/api/identity/login',{
     'password':'SYNTHETIC-OWNER-LONG-PASSWORD-2026'})
 assert owner_login.status_code == 200,owner_login.status_code
 owner_csrf=owner_login.json['csrf']
+owner_session=get(owner,'/api/identity/session')
+assert owner_session.status_code==200
+assert owner_session.json['user']['role']=='owner'
+assert owner_session.json['privateInvitationsAvailable'] is True
+owner_csrf=owner_session.json['csrf']
 legacy_login=post(legacy,'/api/login',{'accessToken':os.environ['EDGE_APP_TOKEN']})
 assert legacy_login.status_code == 200,legacy_login.status_code
 assert get(legacy,'/api/session').status_code == 200
@@ -106,6 +111,11 @@ member_login=post(member,'/api/identity/login',{
     'password':'SYNTHETIC-MEMBER-LONG-PASSWORD-2026'})
 assert member_login.status_code == 200,member_login.status_code
 member_csrf=member_login.json['csrf']
+member_session=get(member,'/api/identity/session')
+assert member_session.status_code==200
+assert member_session.json['user']['role']=='member'
+assert member_session.json['privateInvitationsAvailable'] is False
+member_csrf=member_session.json['csrf']
 assert post(member,'/api/identity/admin/invitations',csrf=member_csrf).status_code == 403
 assert get(member,'/api/session').status_code == 401
 assert get(member,'/api/dashboard').status_code == 401
@@ -244,6 +254,11 @@ def login(client,username,password):
         json={'username':username,'password':password})
 assert login(a,'family-owner','SYNTHETIC-OWNER-LONG-PASSWORD-2026').status_code==200
 assert login(b,'family-member','SYNTHETIC-MEMBER-LONG-PASSWORD-2026').status_code==200
+session_owner=a.get('/api/identity/session',base_url=base)
+session_member=b.get('/api/identity/session',base_url=base)
+assert session_owner.status_code==session_member.status_code==200
+assert session_owner.json['privateInvitationsAvailable'] is False
+assert session_member.json['privateInvitationsAvailable'] is False
 assert a.post('/api/identity/admin/invitations',
     base_url=base,headers={'Origin':base},json={}).status_code==404
 assert b.post('/api/identity/register',
