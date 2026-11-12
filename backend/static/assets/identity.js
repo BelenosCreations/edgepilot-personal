@@ -331,7 +331,9 @@
       if (data.readOnly !== true || !Array.isArray(data.accounts)) {
         throw new Error("Invalid read-only account list");
       }
-      if (data.accounts.length === 0) {
+      if (data.discoveryOnlyPilot === true) {
+        el("portfolioSummary").textContent = "Account discovery only — portfolio balances and holdings are not enabled during this pilot.";
+      } else if (data.accounts.length === 0) {
         el("portfolioSummary").textContent = "No verified Public accounts are linked yet.";
       }
       for (const account of data.accounts) {
@@ -345,6 +347,11 @@
         }
         const li = document.createElement("li");
         li.appendChild(document.createTextNode(String(account.label || "Public account") + " "));
+        if (data.discoveryOnlyPilot === true) {
+          li.appendChild(document.createTextNode(" · ownership verified; portfolio, monitor, orders and transfers disabled"));
+          items.appendChild(li);
+          continue;
+        }
         const listInput = document.createElement("input");
         listInput.type = "text";
         listInput.maxLength = 512;

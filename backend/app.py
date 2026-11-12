@@ -72,6 +72,8 @@ tenant_monitor_preview_enabled=os.getenv('EDGE_TENANT_MONITOR_PREVIEW_ENABLED','
 tenant_watchlist_edit_enabled=os.getenv('EDGE_TENANT_WATCHLIST_EDIT_ENABLED','false').lower()=='true'
 tenant_public_vault_enabled=os.getenv('EDGE_TENANT_PUBLIC_VAULT_ENABLED','false').lower()=='true'
 tenant_public_read_enabled=os.getenv('EDGE_TENANT_PUBLIC_READONLY_ENABLED','false').lower()=='true'
+# First limited live rollout may discover and link accounts, but never show balances.
+tenant_public_discovery_only=os.getenv('EDGE_TENANT_PUBLIC_DISCOVERY_ONLY','false').lower()=='true'
 permanent_admin_invites_enabled=os.getenv('EDGE_PERMANENT_OWNER_INVITES_ENABLED','false').lower()=='true'
 if permanent_admin_invites_enabled and not (TENANT_POLICY['tenant_only'] and identity_auth_enabled and tenant_signup_enabled):
     raise RuntimeError('Permanent owner invitations require tenant-only invitation authentication')
@@ -95,6 +97,13 @@ if tenant_public_vault_enabled and not identity_auth_enabled:
     raise RuntimeError('Tenant Public vault requires identity authentication')
 if tenant_public_read_enabled and not (tenant_public_vault_enabled and tenant_read_enabled):
     raise RuntimeError('Tenant Public read-only API requires vault and tenant account reads')
+if tenant_public_discovery_only and (not tenant_public_read_enabled
+        or os.getenv('EDGE_PERMANENT_READONLY_PILOT_ENABLED','false').lower()!='true'
+        or TENANT_POLICY['tenant_only'] or tenant_signup_enabled or tenant_passkeys_enabled
+        or permanent_admin_invites_enabled
+        or os.getenv('EDGE_AUTOMATION_WORKER_ENABLED','false').lower()=='true'
+        or os.getenv('ENABLE_LIVE_ORDERS','false').lower()=='true'):
+    raise RuntimeError('Discovery-only Public pilot requires protected legacy coexistence and inactive execution')
 identity_store=None
 tenant_password_manager=None
 tenant_session_manager=None
@@ -489,7 +498,10 @@ def identity_accounts():
     try:
         return {'accounts':tenant_account_store.list_accounts(token),
                 'readOnly':True,'brokerConnected':False,
-                'note':'Account-scoped storage only; no live broker requests or workers'}
+                'discoveryOnlyPilot':tenant_public_discovery_only,
+                'note':('Verified Public account links; portfolio and execution disabled'
+                        if tenant_public_discovery_only else
+                        'Account-scoped storage only; no live broker requests or workers')}
     except account_scope.TenantAccessError:
         return fail('Not authenticated',401)
 
@@ -551,7 +563,8 @@ def identity_monitor_watchlist(account_id):
 def identity_public_connections():
     try:
         token=request.cookies.get(identity_auth.COOKIE_NAME,'')
-        return tenant_connection_vault.list_connections(token)
+        return {**tenant_connection_vault.list_connections(token),
+                'discoveryOnlyPilot':tenant_public_discovery_only}
     except tenant_public_vault.TenantVaultDenied:
         return fail('Connection unavailable',404)
 
@@ -624,6 +637,9 @@ def identity_public_link_account(connection_id):
 
 @app.get('/api/identity/public/read/accounts/<account_id>/portfolio')
 def identity_public_account_portfolio(account_id):
+    # Production first stage permits provider-verified account discovery, not holdings.
+    if tenant_public_discovery_only:
+        return fail('Not found',404)
     try:
         token=request.cookies.get(identity_auth.COOKIE_NAME,'')
         return tenant_public_reader.portfolio(token,account_id)

@@ -1,3 +1,43 @@
+## CURRENT checkpoint — v0.2.73, approved first Public account discovery, November 12, 2026 UTC
+
+The owner approved LIMITED identity-scoped Public API secret encryption,
+provider-verified account discovery, and verified account binding on the
+existing paid Render instance. The independent Belenos-Owner HTTPS login
+and logout and legacy owner login were confirmed on Android; the separate
+tenant owner backup is privately saved on Android and uploaded to Drive.
+Current GitHub main before development was v0.2.72, all CI passed and
+existing paid Render Starter deployment was live.
+
+v0.2.73 adds a feature flag
+EDGE_TENANT_PUBLIC_DISCOVERY_ONLY=true to the existing
+tenant Public read-only adapter, explicitly disabling portfolio API
+and frontend viewing controls. Provider access must remain limited to
+POST short-lived access token and GET account list; no holdings, order,
+or transfer endpoints may be called. A new synthetic two-user, two-key
+integration regression checks owner isolation and no original global
+Public key reuse. This development CHANGE DOES NOT ITSELF ACTIVATE
+Public features. Required active flags on the existing service:
+EDGE_PERMANENT_READONLY_PILOT_ENABLED=true,
+EDGE_TENANT_ACCOUNT_READS_ENABLED=true,
+EDGE_TENANT_PUBLIC_VAULT_ENABLED=true,
+EDGE_TENANT_PUBLIC_READONLY_ENABLED=true,
+EDGE_TENANT_PUBLIC_DISCOVERY_ONLY=true; retain identity, storage,
+original token login and disabled background worker/trading/signup.
+Stable existing EDGE_CREDENTIAL_KEY must be retained unchanged.
+No actual user key has been entered by the assistant.
+
+After PR and merged-main CI and Render deployment, merge flags into
+existing Render environment (no replacement), verify new deployment
+live, and ask the owner to independently input their Public API
+personal secret on the real HTTPS account page to test discovery.
+NEVER paste keys, passwords, account IDs or JWT in chat. The new
+tenant DB will have sensitive encrypted credentials not yet included
+in the earlier tenant-owner backup if the operator saves one; plan
+a later recovery snapshot that includes connections, without exposing
+credentials. No new paid service, member registration, portfolio
+balances/holdings, independent second physical device, orders,
+bank transfers or automated execution is authorized.
+
 ## CURRENT checkpoint — v0.2.72, November 12, 2026 UTC
 
 The independent Belenos-Owner Argon2id identity was already created
