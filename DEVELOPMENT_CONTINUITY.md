@@ -1,3 +1,38 @@
+## CURRENT operator checkpoint — Controlled HTTPS identity login enabled, November 12, 2026 UTC
+
+The user explicitly approved enabling a limited, reversible identity-only
+HTTPS login test on the same existing paid Render Starter service. The
+Render environment variables were merged (NOT replaced) to retain the
+original /data/edgepilot.db while selecting the separate existing
+/data/edgepilot-tenants.db. EDGE_SHARED_TENANT_DB_PREPARE=true,
+EDGE_TENANT_SCHEMA_PREPARE=true and EDGE_IDENTITY_AUTH_ENABLED=true.
+EDGE_PERMANENT_TENANTS_ONLY=false, allowing the original legacy
+token-based login to coexist. EDGE_PERMANENT_READONLY_PILOT_ENABLED,
+tenant Public vault/read, tenant account reads/monitor/watchlist,
+signup, invites, passkeys and signed Android passkey origin all remain
+false; EDGE_AUTOMATION_WORKER_ENABLED=false and ENABLE_LIVE_ORDERS=false.
+The existing paid Render service deployment dep-dbqhl6ajnfac738nlst0
+of v0.2.71 main commit 9381b3f was verified LIVE. No new paid
+resources or additional database were created.
+
+IMPORTANT: Do NOT claim an end-to-end user login was verified yet.
+The first login on a physical Android browser and subsequent session/
+logout must be tested by the owner using Belenos-Owner and their
+private Argon2id password, without revealing password to ChatGPT.
+Assistant-side public web probing failed to access the URL, but Render
+reported LIVE. The private owner archive was restored/verified and
+copied off-Render with checked SHA-256, then visibly uploaded to Drive;
+Google Drive byte-for-byte redownload verification is still pending.
+See CONTROLLED_OWNER_HTTPS_LOGIN_V0271.md.
+
+After owner confirms new HTTPS session and logout, independently confirm
+original legacy login still works; if failure or unexpected access,
+rollback ONLY EDGE_IDENTITY_AUTH_ENABLED=false on the existing service,
+without replacing secret environment values or deleting databases.
+Do not enable Public account routes, tenant-only cutover, bank transfer,
+autonomous orders, signup, passkeys or restart Observe/Paper worker
+without further explicit approval and acceptance evidence.
+
 ## CURRENT checkpoint — v0.2.71, November 11, 2026
 
 The owner completed v0.2.70 production tenant backup from the existing
