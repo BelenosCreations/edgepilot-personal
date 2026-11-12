@@ -75,8 +75,13 @@ tenant_public_read_enabled=os.getenv('EDGE_TENANT_PUBLIC_READONLY_ENABLED','fals
 # First limited live rollout may discover and link accounts, but never show balances.
 tenant_public_discovery_only=os.getenv('EDGE_TENANT_PUBLIC_DISCOVERY_ONLY','false').lower()=='true'
 permanent_admin_invites_enabled=os.getenv('EDGE_PERMANENT_OWNER_INVITES_ENABLED','false').lower()=='true'
-if permanent_admin_invites_enabled and not (TENANT_POLICY['tenant_only'] and identity_auth_enabled and tenant_signup_enabled):
-    raise RuntimeError('Permanent owner invitations require tenant-only invitation authentication')
+# This has no effect unless separately opted in with all private, no-trade,
+# discovery-only coexistence prerequisites checked by shared_storage_cutover.
+family_invite_coexistence_enabled=shared_storage_cutover.family_invite_coexistence_policy(os.environ)
+if permanent_admin_invites_enabled and not (
+        (TENANT_POLICY['tenant_only'] or family_invite_coexistence_enabled)
+        and identity_auth_enabled and tenant_signup_enabled):
+    raise RuntimeError('Owner invitations require protected private identity registration')
 if identity_auth_enabled and not tenant_schema_enabled:
     raise RuntimeError('Identity subsystem requires the prepared tenant schema')
 if tenant_password_change_enabled and not identity_auth_enabled:
@@ -99,8 +104,10 @@ if tenant_public_read_enabled and not (tenant_public_vault_enabled and tenant_re
     raise RuntimeError('Tenant Public read-only API requires vault and tenant account reads')
 if tenant_public_discovery_only and (not tenant_public_read_enabled
         or os.getenv('EDGE_PERMANENT_READONLY_PILOT_ENABLED','false').lower()!='true'
-        or TENANT_POLICY['tenant_only'] or tenant_signup_enabled or tenant_passkeys_enabled
-        or permanent_admin_invites_enabled
+        or TENANT_POLICY['tenant_only']
+        or (tenant_signup_enabled and not family_invite_coexistence_enabled)
+        or tenant_passkeys_enabled
+        or (permanent_admin_invites_enabled and not family_invite_coexistence_enabled)
         or os.getenv('EDGE_AUTOMATION_WORKER_ENABLED','false').lower()=='true'
         or os.getenv('ENABLE_LIVE_ORDERS','false').lower()=='true'):
     raise RuntimeError('Discovery-only Public pilot requires protected legacy coexistence and inactive execution')
@@ -129,7 +136,9 @@ if tenant_schema_enabled:
         if tenant_signup_enabled:
             tenant_registration.setup(str(TENANT_DB))
             tenant_registration_store=tenant_registration.TenantRegistration(
-                str(TENANT_DB), max_users=10 if TENANT_POLICY['tenant_only'] else None)
+                str(TENANT_DB), max_users=10 if (
+                    TENANT_POLICY['tenant_only'] or family_invite_coexistence_enabled
+                ) else None)
             if permanent_admin_invites_enabled:
                 permanent_admin_invitations.setup(str(TENANT_DB))
                 permanent_admin_invites=permanent_admin_invitations.PermanentAdminInvitations(
