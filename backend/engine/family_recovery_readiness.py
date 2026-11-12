@@ -6,6 +6,7 @@ not authorization to invite a user or enable a worker, trade, or transfer.
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import sqlite3
 from contextlib import closing
@@ -139,12 +140,13 @@ def inspect_family_recovery(env, legacy_path, tenant_path, *,
                         "Encrypted Public connection cannot be recovered") from None
                 # Never print the value or a digest. The equality check is
                 # internal only; distinct users must not reuse one API key.
-                prior = seen_secrets.get(secret)
+                digest = hashlib.sha256(secret).digest()
+                secret = None
+                prior = seen_secrets.get(digest)
                 if prior is not None and prior != user:
                     raise FamilyRecoveryReadinessDenied(
                         "Independent members must not share a Public credential")
-                seen_secrets[secret] = user
-                secret = None
+                seen_secrets[digest] = user
                 if revoked is None and user in enabled_users:
                     active_connection_users.add(user)
 
