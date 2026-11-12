@@ -665,7 +665,14 @@ def identity_public_account_portfolio(account_id):
         return fail('Not found',404)
     try:
         token=request.cookies.get(identity_auth.COOKIE_NAME,'')
-        return tenant_public_reader.portfolio(token,account_id)
+        portfolio=tenant_public_reader.portfolio(token,account_id)
+        # A member might register during the external HTTPS request. Recheck
+        # before returning ANY portfolio data so solo mode fails closed.
+        if tenant_public_discovery_only and not (
+                solo_owner_portfolio_enabled and
+                solo_owner_portfolio.active_for_owner(TENANT_DB,g.edge_identity)):
+            return fail('Not found',404)
+        return portfolio
     except (tenant_public_live_readonly.PublicReadUnavailable,
             tenant_public_vault.TenantVaultDenied):
         return fail('Public portfolio unavailable',404)
