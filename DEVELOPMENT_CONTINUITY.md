@@ -1,3 +1,11 @@
+## CURRENT development — v0.2.79 private owner invitation UI, November 12, 2026
+
+The owner approved invitation-only coexistence; backend v0.2.78 merged to main as `f9ccb329c74fdde7bc2c05a3bba89cbc13d8ca0a`. Both PR #104 test run `43244085948` and merged-main run `43244459815` completed SUCCESS. The independently default-off `EDGE_FAMILY_INVITE_COEXISTENCE_ENABLED` cannot enable enrollment by itself: it requires separate private owner invitation and signup gates, one active owner, prepared shared paid disk, encrypted Public discovery-only pilot, no live execution, passkeys or tenant-only retirement.
+
+The next v0.2.79 feature branch adds an owner-only invitation panel to `backend/static/identity.html` and `backend/static/assets/identity.js`. The server's authenticated owner session returns only a nonsecret capability boolean; the existing owner-only POST performs the actual protected one-hour invitation creation. UI shows a masked one-time token to its creator, allows explicit reveal/copy and clears it on account change/signout, without persisting tokens in URLs or browser storage. This is still developer-only and requires test validation; no owner has been invited in production. Continue respecting PUBLIC GitHub repo constraints and use no real API keys or archive materials.
+
+Next: GitHub PR/main acceptance for v0.2.79, then a separate operator readiness plan (two-device acceptance and verified multi-member recovery) before considering an approved live invitation activation. Do not touch Render environment or enable trading, autonomous orders, transfers, portfolio monitoring, passkeys or new paid services.
+
 ## CURRENT development — v0.2.78 invitation-only private family coexistence, November 12, 2026
 
 The owner explicitly approved the previously recommended **invitation-only coexistence** architecture (not tenant-only forced retirement). This is authorization to develop and synthetically verify the new default-off safety pathway, **not** permission to activate real member signup or invite a live second person. The existing paid Render service and both /data databases, user credentials, v0.2.74 off-service recovery archive, legacy login and protected signing workflows must remain unchanged.
