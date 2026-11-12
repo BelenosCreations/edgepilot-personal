@@ -28,6 +28,50 @@ def _flag(env, key):
     return value == "true"
 
 
+
+# Invitation-based family enrollment can coexist with the known-good legacy
+# login ONLY under this additional, independently default-off safety gate.
+# Never enable it from a public repository commit or deploy alone.
+FAMILY_INVITE_COEXISTENCE_FLAG = "EDGE_FAMILY_INVITE_COEXISTENCE_ENABLED"
+FAMILY_INVITE_REQUIRED = (
+    "EDGE_SHARED_TENANT_DB_PREPARE",
+    "EDGE_TENANT_SCHEMA_PREPARE",
+    "EDGE_IDENTITY_AUTH_ENABLED",
+    "EDGE_PERMANENT_READONLY_PILOT_ENABLED",
+    "EDGE_TENANT_ACCOUNT_READS_ENABLED",
+    "EDGE_TENANT_PUBLIC_VAULT_ENABLED",
+    "EDGE_TENANT_PUBLIC_READONLY_ENABLED",
+    "EDGE_TENANT_PUBLIC_DISCOVERY_ONLY",
+    "EDGE_TENANT_SIGNUP_ENABLED",
+    "EDGE_PERMANENT_OWNER_INVITES_ENABLED",
+)
+FAMILY_INVITE_FORBIDDEN = (
+    "EDGE_PERMANENT_TENANTS_ONLY",
+    "EDGE_PERMANENT_ANDROID_PASSKEY_ORIGIN_ENABLED",
+    "EDGE_TENANT_PASSKEYS_ENABLED",
+    "EDGE_TENANT_MONITOR_PREVIEW_ENABLED",
+    "EDGE_TENANT_WATCHLIST_EDIT_ENABLED",
+    "EDGE_ISOLATED_STAGING",
+    "EDGE_AUTOMATION_WORKER_ENABLED",
+    "ENABLE_LIVE_ORDERS",
+)
+
+
+def family_invite_coexistence_policy(env):
+    """Fail closed unless every discovery-only family-invite boundary is met.
+
+    The flag is OFF by default. This function does not provision any user,
+    issue an invite, reach Public, retire the legacy login, or mutate storage.
+    """
+    if not _flag(env, FAMILY_INVITE_COEXISTENCE_FLAG):
+        return False
+    if (any(not _flag(env, flag) for flag in FAMILY_INVITE_REQUIRED)
+            or any(_flag(env, flag) for flag in FAMILY_INVITE_FORBIDDEN)):
+        raise SharedStorageDenied(
+            "Private invitation coexistence requires protected discovery-only settings")
+    return True
+
+
 def select_tenant_database(env, legacy_path, *, persistent_root=None):
     """Return the separate tenant DB only with all required safety gates.
 
@@ -37,8 +81,10 @@ def select_tenant_database(env, legacy_path, *, persistent_root=None):
     legacy = Path(legacy_path)
     configured = str(env.get("EDGE_TENANT_DB_PATH", ""))
     enabled = _flag(env, "EDGE_SHARED_TENANT_DB_PREPARE")
+    coexistence = family_invite_coexistence_policy(env)
     if not configured:
-        if enabled or _flag(env, "EDGE_PERMANENT_READONLY_PILOT_ENABLED"):
+        if (enabled or coexistence or
+                _flag(env, "EDGE_PERMANENT_READONLY_PILOT_ENABLED")):
             raise SharedStorageDenied("Separate tenant database path required")
         return legacy
     if (not enabled or not _flag(env, "EDGE_TENANT_SCHEMA_PREPARE")
@@ -63,11 +109,11 @@ def select_tenant_database(env, legacy_path, *, persistent_root=None):
         # The first owner must log in before private invitation-based signup;
         # in shared legacy/pilot mode do not permit independent open signup.
         if (_flag(env, "EDGE_TENANT_SIGNUP_ENABLED") and
-                not _flag(env, "EDGE_PERMANENT_TENANTS_ONLY")):
+                not (_flag(env, "EDGE_PERMANENT_TENANTS_ONLY") or coexistence)):
             raise SharedStorageDenied("Signup denied during legacy coexistence")
         if (_flag(env, "EDGE_PERMANENT_OWNER_INVITES_ENABLED") and
-                not _flag(env, "EDGE_PERMANENT_TENANTS_ONLY")):
-            raise SharedStorageDenied("Invitations require deliberate tenant-only routing")
+                not (_flag(env, "EDGE_PERMANENT_TENANTS_ONLY") or coexistence)):
+            raise SharedStorageDenied("Invitations require deliberate private routing")
         if (_flag(env, "EDGE_TENANT_PUBLIC_READONLY_ENABLED") and not (
                 _flag(env, "EDGE_TENANT_PUBLIC_VAULT_ENABLED") and
                 _flag(env, "EDGE_TENANT_ACCOUNT_READS_ENABLED"))):
