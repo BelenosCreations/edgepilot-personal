@@ -15,6 +15,10 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+      # Shallow checkout covers the current PR/main source tree; the separate
+      # manual history audit is intentionally not re-run in every CI job.
+      - name: Scan checked-out source for recognized credential exposures
+        run: python tools/public_git_history_scan.py
       - name: Set up Python
         uses: actions/setup-python@v5
         with:

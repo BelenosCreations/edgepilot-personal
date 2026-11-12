@@ -51,10 +51,14 @@ jobs:
           "$tools/aapt" dump badging "$owner" | grep -Eq "^package: name='com[.]edgepilot[.]mobile' versionCode='1917' "
           "$tools/aapt" dump badging "$release" | grep -Eq "^package: name='com[.]edgepilot[.]mobile' versionCode='1917' "
           "$tools/aapt" dump badging "$staging" | grep -Eq "^package: name='com[.]edgepilot[.]mobile[.]staging' versionCode='1917' "
-      - name: Upload privately to workflow artifacts
+      # A public repository's Actions artifacts should not be described as
+      # private. Only an explicit trusted manual dispatch retains a debug APK;
+      # PRs validate all three unsigned packages without storing artifacts.
+      - name: Upload unsigned debug APK on manual request only
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: EdgePilot-v0.19.17-public-onboarding-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 3

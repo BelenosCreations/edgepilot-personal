@@ -1,27 +1,33 @@
-# EdgePilot — public repository readiness
+# EdgePilot — public repository safeguards
 
-Status (2026-11-12): PREPARATION ONLY. Do not change GitHub visibility until this checklist has been reviewed. The public-visibility preparation branch does not alter Render or production settings.
+**Status verified November 12, 2026:** GitHub now reports `BelenosCreations/edgepilot-personal` as **public**. Security-preparation PR #102 was merged into `main` as `8282564b6a13ceae2254a1f6dc3beb6b491ebd1f`. The full-history credential-pattern scan, PR application tests, unsigned Android test build, and post-merge main tests reported successful results. This replaces the earlier *preparation only* statement. GitHub publication was an operator decision and did **not** authorize backend publication or new trading functionality.
 
-## Why
-Public repositories receive free GitHub-hosted standard-runner Actions compute; private repositories count against a monthly quota. Large runners, artifact/package storage and unrelated hosting services can still incur costs. Preserve existing private Render services and account isolation.
+## Scope: public source, private accounts
 
-## Mandatory checks before switching visibility
-- [ ] Review the public-release-history-preflight workflow result on a branch/PR with a full-history checkout. It inspects reachable history using heuristics and reports paths but not secret values.
-- [ ] Independently review GitHub's secret scanning, old branches, deleted/dangling references, archived logs, Actions artifacts, release files, all committed credentials and operator notes. A passing heuristic does NOT establish a comprehensive audit.
-- [ ] Check old operator documents for SSH usernames, hostnames, personal contacts, private backup locations, live login details, secret recovery files or links. Remove anything that should not become public; removing files from the latest branch does not remove history.
-- [ ] Keep Public brokerage, EdgePilot app, Render, OpenAI, encryption, recovery and Android private signing keys OUT of tracked files, history, APKs, logs, and releases. Rotate any credential ever committed; .gitignore does not erase previous commits.
-- [ ] Review prior signed APK artifacts and releases: artifacts from public Actions may become downloadable. Keep signed builds manually gated to trusted main; do not allow untrusted pull requests to receive signing secrets.
-- [ ] Verify all workflows use standard Ubuntu runners and minimal GITHUB_TOKEN permissions. Require appropriate approvals for first-time/fork contributors before executing untrusted PR workflows.
-- [ ] Configure metered Actions/Packages budgets and alerts, inspect remaining artifact storage, and retain temporary APKs only briefly (existing 7-14-day retention). Public Actions minutes do not waive artifact storage limits.
-- [ ] Verify production Render environment, secrets, encrypted volume, account data and backups remain private. Do not change live trading or bank-transfer gates.
-- [ ] Confirm desired license and public documentation. Publishing source does not automatically grant an open-source license.
-- [ ] Only after all checks pass: an authorized administrator may use GitHub Settings > General > Danger Zone > Change repository visibility; this preparation does NOT change visibility.
+The public repository contains application source and nonsecret documentation, not the user's Render persistent databases, registered EdgePilot accounts, Public API secrets, recovery passwords, cloud backups or Android signing key material. Do not mirror any live files, copy a production environment dump, put secrets into branch notes/PRs/issues/actions logs, or attach a real backup to a release. A source-control update does not approve a Render deploy, provider migration, signup, real brokerage balances, automatic order execution or bank transfers.
 
-## Returning private later
-GitHub permits returning public repositories to private, but existing downloads and public forks cannot be recalled. Private Actions billing/quotas apply again. Review existing forks, public logs, releases and deployments before making that decision.
+The passing history checker uses **heuristic recognizers**, not a complete secrecy or privacy proof. Its success does not audit untracked files, all previously generated workflow logs and artifacts, inaccessible refs, user-shared archive links, metadata or any secrets that don't match its patterns. A user-permitted private document can still be inappropriate to publish even if it contains no recognizable key. If a real credential is ever discovered in a public commit or log, treat it as exposed; rotate/revoke it through its provider and follow an incident review. A later `.gitignore` addition or commit deleting the value does not remove the old public commit.
 
-## Run
-On the preparation pull request, verify the Public release history preflight check. After merge, the same workflow can be manually dispatched. A completed PASS means only that recognized patterns were not detected in the reachable Git objects scanned; it does not clear old Actions logs, inaccessible refs, or live secret configuration.
+## Free runner and artifact policy
 
-## Development independence
-Keep the active EdgePilot development and rollout branches uninterrupted. Do not enable live orders, autonomous trades, withdrawals, or new charges as part of GitHub cost optimization.
+- Use normal `ubuntu-latest` GitHub-hosted runners for standard jobs. Avoid large or metered runners and do not add a paid service without approval.
+- The `EdgePilot tests` workflow runs Python unit/HTTP tests, compiles backend, validates browser JS, and performs a **lightweight current checked-out source** scan. It does **not** download all Git history for every PR. Its concurrency group cancels superseded PR runs.
+- The separate `Public release history preflight` retains a full-history checkout and a non-disclosing scan; it runs only on explicit dispatch or changes to the historical checker/workflow. Its result must not be confused with current-tree scanning.
+- Android unsigned package validation runs for relevant Android source/workflow changes or manual dispatch, not every documentation or backend-only edit. It still checks production/staging package identity. The public PR run produces **no retained APK artifact**; a manual dispatch can upload an unsigned debug APK for three days.
+- Existing **manually dispatched, main-branch-only signed** Android workflows and pinned certificate checks remain unchanged. Their signing secrets must never be exposed to fork or untrusted PR workflows. **On a public GitHub repository, signed APK artifacts and workflow details may be publicly accessible**, despite a filename containing the word `private`; do not assume private artifact distribution merely from the workflow name. An operator should review any signed build before dispatch and use an appropriate private delivery mechanism when confidentiality matters.
+- GitHub's standard public-repository Actions compute policy does not guarantee free artifact storage, paid runner usage or unrelated resources. Observe billing and retention settings periodically.
+
+## Ongoing user/operator checks
+
+1. Periodically inspect public branches, new PRs, Actions logs/artifacts, releases, fork access, metadata, GitHub secret scanning alerts, and current provider credentials. Confirm that public signup or real accounts were not inadvertently exposed by deployment options.
+2. Keep credential recovery keys independent of encrypted archive copies. A backup's matching checksum does not prove that its required decryption keys remain separately recoverable.
+3. Keep Android signing/recovery material out of Git and PRs. If a signing artifact is intended to be shared privately, first verify the delivery channel's access controls.
+4. Review GitHub budgets and alerts and use the existing low-retention, manual-only artifacts; do not proliferate CI configurations, duplicate full-history scans, or builds on unrelated changes.
+5. Decide licensing separately. Public visibility is **not** an open-source license and grants no authority to reuse the project's trademarks or credentials.
+6. Before enrolling a second family member, complete a separately authorized, isolated invitation-coexistence or tenant-only migration acceptance stage. Neither public GitHub nor passing synthetic tests opens these routes.
+
+## Historical checkpoint
+
+PR #102 established the public-source preflight and read-only workflow permissions on November 12, 2026. The old checklist correctly required independent review of historical secrets and artifacts before publication. The repository is now public; any outstanding manual checks above remain ongoing obligations rather than evidence of an incomplete visibility switch.
+
+See [README.md](README.md), [CHANGELOG.md](CHANGELOG.md), and [DEVELOPMENT_CONTINUITY.md](DEVELOPMENT_CONTINUITY.md) for architecture, code milestones, and verified development continuity.
