@@ -80,6 +80,19 @@
         <button id="signOut" type="button">Sign out</button>
         <small id="passkeyInfo">Your device's credential provider handles fingerprint, face or screen-lock verification. EdgePilot does not store biometric templates.</small>
       </div>
+      <section id="familyInvitationsPane" class="panel" hidden>
+        <h2>Invite a family member</h2>
+        <p class="muted">Only your independently authenticated EdgePilot owner account can invite someone. New members create their own EdgePilot login and connect their own Public account; your original dashboard and brokerage connection stay separate.</p>
+        <button id="generateFamilyInvite" class="primary" type="button">Create a private invitation</button>
+        <div id="familyInviteResult" hidden>
+          <label for="familyInviteCode">One-time invitation code</label>
+          <input id="familyInviteCode" type="password" autocomplete="off" spellcheck="false" readonly aria-describedby="familyInviteHelp">
+          <button id="revealFamilyInvite" type="button">Show code</button>
+          <button id="copyFamilyInvite" type="button">Copy invitation code</button>
+          <p id="familyInviteHelp" class="muted" role="status" aria-live="polite"></p>
+        </div>
+        <small>Invitation codes expire in one hour and may be used only once. Share the code privately with your invited person, not in GitHub, screenshots, public posts, logs or URL links. They can open this account screen and use Create an account. This does not enable trading, bank transfers or portfolio reads.</small>
+      </section>
       <form id="passwordChangeForm" class="panel">
         <h2>Account security</h2>
         <p class="muted">Change your EdgePilot password using the current password. This signs out every device currently signed in to your EdgePilot account. It does not modify your Public brokerage key or remove your passkeys.</p>

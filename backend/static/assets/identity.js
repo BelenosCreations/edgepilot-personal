@@ -109,6 +109,14 @@
     el("addPasskey").hidden = true;
     el("addAnotherPasskey").hidden = true;
     el("replacementSecret").value = "";
+    // Invitation code is never stored in URLs, storage or logs; erase it
+    // on sign-out, identity switch, and every account-panel reset.
+    el("familyInviteCode").value = "";
+    el("familyInviteCode").type = "password";
+    el("familyInviteHelp").textContent = "";
+    el("familyInviteResult").hidden = true;
+    el("familyInvitationsPane").hidden = true;
+    el("revealFamilyInvite").textContent = "Show code";
   }
   async function showSession() {
     const startedGeneration = identityViewGeneration;
@@ -120,6 +128,11 @@
     el("welcome").textContent = "Welcome, " + (data.user && data.user.label || "EdgePilot user");
     el("addPasskey").disabled = !supported();
     clearReadOnly();
+    // Never reveal owner-only invitation actions to members or when the
+    // deployment has not explicitly enabled invitation issuance.
+    el("familyInvitationsPane").hidden = !(
+      data.privateInvitationsAvailable === true &&
+      data.user && data.user.role === "owner");
     status("Secure EdgePilot account session active. Brokerage execution remains disabled.");
     await loadPasskeys();
     await loadConnections();
@@ -522,6 +535,54 @@
       } finally { el("loginPassword").value = ""; }
     });
   });
+  el("generateFamilyInvite").addEventListener("click", () => action(async () => {
+    if (el("familyInvitationsPane").hidden) {
+      throw new Error("Private invitations are not enabled for this owner.");
+    }
+    if (!window.confirm("Create a one-time family invitation? It expires after one hour and can be redeemed by one person.")) return;
+    // Wipe a previously revealed code before making another request. The
+    // server stores only a hash; this page keeps the token in RAM/DOM only.
+    el("familyInviteCode").value = "";
+    el("familyInviteResult").hidden = true;
+    const generation = identityViewGeneration;
+    const issued = await api("/admin/invitations", "POST", {}, true);
+    if (generation !== identityViewGeneration) return;
+    if (typeof issued.invitation !== "string" ||
+        !/^[A-Za-z0-9_-]{43}$/.test(issued.invitation) ||
+        issued.expiresInSeconds !== 3600 ||
+        issued.newUserRole !== "member" ||
+        issued.maxPrivateUsers !== 10 ||
+        issued.publicBrokerageEnabled !== false ||
+        issued.tradingEnabled !== false ||
+        issued.fundTransfersEnabled !== false) {
+      throw new Error("The private invitation response could not be verified.");
+    }
+    el("familyInviteCode").value = issued.invitation;
+    el("familyInviteCode").type = "password";
+    el("revealFamilyInvite").textContent = "Show code";
+    el("familyInviteResult").hidden = false;
+    el("familyInviteHelp").textContent =
+      "Created. Valid for one hour and only one registration. Copy it only to your invited family member.";
+    status("A private, one-time invitation was created. No account or brokerage connection was shared.");
+  }));
+  el("revealFamilyInvite").addEventListener("click", () => {
+    if (el("familyInvitationsPane").hidden || !el("familyInviteCode").value) return;
+    const input = el("familyInviteCode");
+    const reveal = input.type === "password";
+    input.type = reveal ? "text" : "password";
+    el("revealFamilyInvite").textContent = reveal ? "Hide code" : "Show code";
+  });
+  el("copyFamilyInvite").addEventListener("click", () => action(async () => {
+    if (el("familyInvitationsPane").hidden ||
+        !/^[A-Za-z0-9_-]{43}$/.test(el("familyInviteCode").value)) {
+      throw new Error("No private invitation is available to copy.");
+    }
+    if (!navigator.clipboard || typeof navigator.clipboard.writeText !== "function") {
+      throw new Error("Secure clipboard is unavailable. Use Show code and copy it manually.");
+    }
+    await navigator.clipboard.writeText(el("familyInviteCode").value);
+    status("Private invitation copied. Send it directly to your invited family member.");
+  }));
   el("registerForm").addEventListener("submit", event => {
     event.preventDefault();
     action(async () => {
