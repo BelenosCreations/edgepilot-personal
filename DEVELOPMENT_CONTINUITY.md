@@ -1,3 +1,11 @@
+## CURRENT development — v0.2.90 independent owner manual Public quotes, November 12, 2026
+
+**Verified base:** main v0.2.89 `612c6227798c190c863611088554091c7dc5eee6`, PR #116 and post-merge GitHub Actions run #43348676641 passed; Render's existing paid Starter `edgepilot-private-h9tl` reported the exact SHA live with its original 1 GB persistent disk. User and private assets remain unchanged. Source-only synthetic v0.2.89 paper backup/restore checks are verified, but no real data migration or production restore occurred.
+
+**v0.2.90 scope:** Authoritative *Public* manual single-symbol quote retrieval using the provider's official `/userapigateway/marketdata/{accountId}/quotes` contract for EQUITY or CRYPTO, scoped to independent identity owner cookie + CSRF and verified account/connection. Requires existing sole-owner flag and a second server-side eligibility check after network. Browser shows only actual provider values and timestamps with stale state and provider attribution; no invented market price, returns or histories. No background quote polling, persistent quote rights claim, additional paid feed, DB writes, paper ledger link, live trade, autonomous order or fund transfer. Real user provider `marketdata` scope and physical phone acceptance remain unproven; request may safely show unavailable. Tests use synthetic provider transport only.
+
+**Next:** Verify PR and merged-main CI and Render, then owner manually tests `/owner` quote and reconciles read-only account total against Public. Later implement licensing-proven quote provenance/retention, read-only historical bar research, trustworthy paper execution guardrails and a production-safe encrypted recovery plan before any real paper-mode activation. All multi-user infrastructure, encrypted broker credentials, offsite backups, and identity/recovery remain preserved. Stop only at verified branch points or real blockers.
+
 ## CURRENT development — v0.2.89 paper-ledger encrypted recovery preflight, November 12, 2026
 
 **Verified starting checkpoint:** `main` v0.2.88 `3c1c8db4b21000425912242083feb286754702a5`, PR #115 merged; post-merge GitHub Actions run `43345843142` succeeded. The preexisting Render Starter service `edgepilot-private-h9tl` deployed that exact SHA live with the same 1 GB attached disk; separate free passkey staging was not altered.
