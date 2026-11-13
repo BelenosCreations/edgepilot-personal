@@ -56,7 +56,10 @@ class IndependentOwnerDashboardTests(unittest.TestCase):
     def test_manual_snapshot_only_and_prevent_cross_account_display(self):
         self.assertIn('el("loadPortfolio").addEventListener("click"', JS)
         path = '"/api/identity/public/read/accounts/" +'
-        self.assertEqual(JS.count(path), 1)
+        # Exactly one manual portfolio request and one separate manual quote
+        # request; neither may share the global legacy token.
+        self.assertEqual(JS.count(path), 2)
+        self.assertIn('encodeURIComponent(id) + "/quote"', JS)
         self.assertIn('encodeURIComponent(id) + "/portfolio"', JS)
         self.assertIn("data.accountId !== selectedId", JS)
         self.assertIn("data.readOnly !== true", JS)
