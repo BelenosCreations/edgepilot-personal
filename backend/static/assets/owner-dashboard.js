@@ -298,10 +298,10 @@
     const ask = readSourcePrice(data.ask);
     const lastAt = readSourceTime(data.lastTimestamp);
     const received = readSourceTime(data.receivedAt);
-    const bidAt = data.bid === null ? "Not supplied" :
-      readSourceTime(data.bidTimestamp);
-    const askAt = data.ask === null ? "Not supplied" :
-      readSourceTime(data.askTimestamp);
+    const bidAt = data.bid === null || data.bidTimestamp === null ?
+      "timestamp unavailable" : readSourceTime(data.bidTimestamp);
+    const askAt = data.ask === null || data.askTimestamp === null ?
+      "timestamp unavailable" : readSourceTime(data.askTimestamp);
     return {last,bid,ask,lastAt,received,bidAt,askAt,
             lastFresh:data.lastFresh,twoSidedFresh:data.twoSidedFresh};
   }
