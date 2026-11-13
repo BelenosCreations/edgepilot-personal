@@ -165,6 +165,19 @@ class PaperRecoveryRehearsal(unittest.TestCase):
         with self.assertRaises(tenant_backup_rehearsal.OfflineBackupDenied):
             tenant_backup_rehearsal.sealed_snapshot(self.path, self.key)
 
+    def test_full_length_valid_instrument_identifier_survives_recovery(self):
+        unusual = quote()
+        unusual["symbol"] = "LONG-SOURCE-IDENTIFIER.WITH-SAFE-CHARACTERS-123456789"
+        paper.record_paper_fill(
+            self.path, principal_user_id=self.owner, account_id=self.primary,
+            request_id=str(uuid.uuid4()), side="BUY", observation=unusual,
+            now=NOW, quantity="1", fee_per_unit="0.02",
+            slippage_per_unit="0.01", protected_pct="80",
+            spend_cap="100", per_trade_cap="20")
+        self.assertEqual(self.check()["verifiedAssumedFills"], 4)
+        token = tenant_backup_rehearsal.sealed_snapshot(self.path, self.key)
+        self.assertTrue(token)
+
     def test_paper_restore_never_adds_http_or_production_migration(self):
         app = (Path(__file__).resolve().parents[1] / "app.py").read_text()
         self.assertNotIn("tenant_paper_recovery_audit", app)
