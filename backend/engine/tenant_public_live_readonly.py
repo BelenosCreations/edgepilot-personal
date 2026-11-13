@@ -51,6 +51,26 @@ def _decimal(value):
         raise PublicReadUnavailable("Public portfolio unavailable") from None
 
 
+def _quantity(value):
+    """Preserve Public's position units without pretending they're shares.
+
+    Supports negative short quantities and fractional crypto positions, while
+    rejecting malformed, nonfinite or oversized values from the broker.
+    """
+    if (isinstance(value, bool) or not isinstance(value, (str, int, float, Decimal))
+            or len(str(value)) > 64):
+        raise PublicReadUnavailable("Public portfolio unavailable")
+    try:
+        number = Decimal(str(value))
+        if (not number.is_finite() or
+                abs(number) > Decimal("1000000000000000000") or
+                number.as_tuple().exponent < -18):
+            raise InvalidOperation
+        return format(number, "f")
+    except (InvalidOperation, ValueError, TypeError, OverflowError):
+        raise PublicReadUnavailable("Public portfolio unavailable") from None
+
+
 def setup(path):
     """Opt-in quota table; not a production ledger, no legacy mutations."""
     with tenant_foundation._open(path) as db:
@@ -263,6 +283,10 @@ class TenantPublicReadOnly:
                 headers={"Authorization":"Bearer "+token,
                          "Accept":"application/json"},timeout=TIMEOUT)
             data=self._get_json(response)
+            # Public's documented portfolio/v2 contract includes accountId.
+            # Never display one provider account's snapshot as another.
+            if _safe_id(data.get("accountId")) != provider_id:
+                raise ValueError
             amount=_decimal(data.get("totalAccountValue"))
             if not isinstance(data.get("positions"),list) or len(data["positions"])>MAX_POSITIONS:
                 raise ValueError
@@ -279,7 +303,7 @@ class TenantPublicReadOnly:
                 positions.append({
                     "symbol":symbol,
                     "currentValue":_decimal(item.get("currentValue")),
-                    "quantity":str(item.get("quantity","0"))[:40],
+                    "quantity":_quantity(item.get("quantity")),
                 })
         except (requests.RequestException,TypeError,ValueError,PublicReadUnavailable):
             raise PublicReadUnavailable("Public portfolio unavailable") from None
