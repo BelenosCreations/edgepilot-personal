@@ -174,6 +174,11 @@ def record_paper_fill(path, *, principal_user_id, account_id, request_id,
         raise PaperLedgerDenied("Verified fresh market evidence required") from None
     if quote.asset_class not in ("stock", "etf", "crypto"):
         raise PaperLedgerDenied("Separate prediction contract model required")
+    # Unlike an ephemeral estimate, a durable simulated fill retains a
+    # source, observation time and quote reference. Refuse when the provider
+    # has not explicitly permitted caching/persistent evidence.
+    if not quote.rights.allowed_cache:
+        raise PaperLedgerDenied("Persistent market evidence rights unavailable")
     qty = _number(quantity, "paper quantity", positive=True)
     fee = _number(fee_per_unit, "fee assumption")
     slip = _number(slippage_per_unit, "slippage assumption")
