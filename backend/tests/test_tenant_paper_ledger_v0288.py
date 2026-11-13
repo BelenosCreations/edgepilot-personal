@@ -18,7 +18,7 @@ def observation(asset="stock"):
     quote = {
         "assetClass": asset, "symbol": "TEST.1",
         "rights": {"provider": "SYNTHETIC_TEST_FEED", "analysis": True,
-                   "cache": False, "redistribute": False,
+                   "cache": True, "redistribute": False,
                    "coverageVerified": True},
         "observedAt": "2026-11-12T19:59:55Z",
         "receivedAt": "2026-11-12T19:59:58Z",
@@ -161,6 +161,8 @@ class TenantPaperLedgerTests(unittest.TestCase):
             ({**observation(), "observedAt": "2026-11-12T19:55:00Z"}, NOW),
             ({**observation(), "rights": {
                 **observation()["rights"], "analysis": False}}, NOW),
+            ({**observation(), "rights": {
+                **observation()["rights"], "cache": False}}, NOW),
             (observation("prediction"), NOW),
             (observation("crypto"), "2026-11-12T20:03:00Z"),
         ]:
