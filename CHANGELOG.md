@@ -1,3 +1,15 @@
+## v0.2.115 — 2026-11-13 America/New_York — Independent checkpoint recovery
+
+**Added** — Authenticated checkpoint export and explicit recovery against the latest independently retained receipt, exact witness tip, signed approval and prepared ledger.
+
+**Changed** — Pinned restore audits compare archived account, connection, passkey and identity state through publication and cleanup.
+
+**Fixed** — Restore inspection now refuses rewritten passkey revocations and unlinked connection credentials.
+
+**Tests** — 103 focused tests and all 868 local tests passed. Seven new regressions exercise lost checkpoints, stale or foreign evidence, terminal quarantine, restored security history and revoked owner sessions.
+
+**Limitations** — Combined rollback and cross-resource power loss remain open. Real Public history acceptance is pending on the owner's device. Production execution remains disabled.
+
 ## v0.2.114 — 2026-11-13 America/New_York — Independent promotion checkpoint
 
 **Added** — A separately keyed checkpoint can retain the exact signed promotion receipt before local retention.

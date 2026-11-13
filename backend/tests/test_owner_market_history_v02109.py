@@ -146,3 +146,9 @@ class OwnerMarketHistoryTests(unittest.TestCase):
         with self.assertRaises(quote_tests.market.OwnerQuoteUnavailable):
             self.history(period="SINCE_PURCHASE")
         self.assertEqual(self.history_calls, [])
+
+    def test_history_is_discarded_when_owner_session_ends_during_request(self):
+        self.provider(self.payload(), during=lambda: self.identities.revoke(self.a["token"]))
+        with self.assertRaises(quote_tests.market.OwnerQuoteUnavailable):
+            self.history()
+        self.assertEqual(len(self.history_calls), 1)

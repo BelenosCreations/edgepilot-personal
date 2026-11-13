@@ -15,6 +15,7 @@ from . import tenant_paper_decimal_recovery as recovery
 
 _PROTOCOL = "EDGEPILOT-SYNTHETIC-DECIMAL-RECEIPT-v1"
 _PROMOTION_PROTOCOL = "EDGEPILOT-SYNTHETIC-DECIMAL-PROMOTION-CHECKPOINT-v1"
+_EXPORT_PROTOCOL = "EDGEPILOT-SYNTHETIC-DECIMAL-PROMOTION-EXPORT-v1"
 _SCHEMA = """CREATE TABLE retained_receipt (
     id INTEGER PRIMARY KEY CHECK (id = 1), number INTEGER NOT NULL,
     tip TEXT NOT NULL, pending INTEGER NOT NULL, signature TEXT NOT NULL)"""
@@ -330,3 +331,51 @@ class DecimalPromotionCheckpoint:
     def latest(self):
         """Read the authenticated checkpoint held by the separate custodian."""
         return self._store.latest()
+
+    def _export_mac(self, receipt):
+        return ledger._mac(self._store.key, _EXPORT_PROTOCOL, receipt["number"], receipt["mac"])
+
+    def export(self, *, expected_receipt):
+        """Authenticate a retained receipt for separate storage by the custodian."""
+        with self._store._pin(expected_receipt) as receipt:
+            if receipt != expected_receipt:
+                recovery._deny()
+            return {"receipt": receipt, "mac": self._export_mac(receipt)}
+
+    @classmethod
+    def recover(cls, path, exported, *, trusted_receipt, checkpoint_key, receipts, witness,
+                ledger_path, reserved_receipt, prepared_receipt, operator_record,
+                journal_key, anchor_key):
+        """Recreate a lost checkpoint at an independently pinned completed promotion."""
+        checkpoint = cls(path, checkpoint_key=checkpoint_key)
+        checkpoint._verify_separation(receipts, witness, journal_key, anchor_key)
+        if (type(exported) is not dict or exported.keys() != {"receipt", "mac"}
+                or type(trusted_receipt) is not dict
+                or trusted_receipt.keys() != {"number", "mac"}
+                or type(trusted_receipt["number"]) is not int
+                or type(trusted_receipt["mac"]) is not str
+                or exported["receipt"] != trusted_receipt or type(exported["mac"]) is not str
+                or not exported["mac"].isascii()
+                or not hmac.compare_digest(exported["mac"], checkpoint._export_mac(trusted_receipt))):
+            recovery._deny()
+        with receipts._open() as db, witness._open(write=False) as journal:
+            retained, pending = receipts._read_state(db)
+            witness._read(journal, reserved_receipt, exact=False)
+            witness._read(journal, prepared_receipt, exact=False)
+            record, tip, _ = witness._read(journal, trusted_receipt, exact=True)
+            number, _, _, _, mac = witness._next_event(prepared_receipt, "record", operator_record)
+            if (prepared_receipt["number"] not in (reserved_receipt["number"],
+                                                   reserved_receipt["number"] + 1)
+                    or tip != {"number": number, "mac": mac}
+                    or record != operator_record or record["status"] != "ACTIVE"
+                    or retained != (reserved_receipt if pending else tip)):
+                recovery._deny()
+            source = recovery._source(ledger_path)
+            with (witness._hold_original(witness.path) as same_witness,
+                  witness._hold_original(source) as same_ledger,
+                  recovery._fixture(source) as candidate):
+                recovery._require_checkpoint(candidate, journal_key, anchor_key, record["current"])
+                if not same_witness() or not same_ledger():
+                    recovery._deny()
+                checkpoint._store._initialize(tip)
+        return checkpoint

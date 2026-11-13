@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 import fcntl
 import hashlib
 import hmac
+from itertools import zip_longest
 import json
 import os
 from pathlib import Path
@@ -44,9 +45,22 @@ _REQUIRED_TABLES = frozenset({
 _SIDECARS = ("-journal", "-wal", "-shm")
 _STAGE_PREFIX = ".edgepilot-synthetic-restore-"
 _INVALIDATE_RESTORED = (
-    "tenant_identity_sessions", "tenant_passkey_challenges",
+    "tenant_session_account_selection", "tenant_identity_sessions", "tenant_passkey_challenges",
     "tenant_signup_invites", "tenant_worker_leases",
 )
+_SECURITY_RECORDS = {
+    "tenant_users": None,
+    "tenant_identities": None,
+    "tenant_accounts": "disabled_at",
+    "tenant_connections": "revoked_at",
+    "tenant_passkey_credentials": "revoked_at",
+    "tenant_runtime_status": None,
+    "tenant_auth_failures": None,
+    "tenant_signup_attempts": None,
+    "tenant_session_control_events": None,
+    "tenant_public_vault_events": None,
+    "tenant_audit_events": None,
+}
 
 
 class OfflineBackupDenied(RuntimeError):
@@ -255,12 +269,7 @@ def _audit_publication(candidate, raw, policies):
         schema = "SELECT name,type,tbl_name,sql FROM sqlite_master ORDER BY name"
         if (archived.execute(schema).fetchall() != candidate.execute(schema).fetchall()
                 or _paper_data_digest(archived) != _paper_data_digest(candidate)
-                or not _quarantine_preserved(archived, candidate)
-                or any(candidate.execute("SELECT 1 FROM " + name + " LIMIT 1").fetchone()
-                       for name in _INVALIDATE_RESTORED if name in tables)
-                or ("tenant_passkey_credentials" in tables and candidate.execute(
-                    "SELECT 1 FROM tenant_passkey_credentials WHERE revoked_at IS NULL LIMIT 1"
-                ).fetchone())):
+                or not _quarantine_preserved(archived, candidate, tables)):
             raise OfflineBackupDenied("Synthetic restore candidate differs from archive")
 
 
@@ -328,19 +337,31 @@ def cleanup_pinned_paper_staging_link(token, archive_key, destination_path, stag
         raise OfflineBackupDenied("Synthetic restore staging link unavailable") from None
 
 
-def _quarantine_preserved(archived, candidate):
-    original, restored = _paper_scope(archived), _paper_scope(candidate)
-    if len(original) != len(restored):
+def _quarantine_preserved(archived, candidate, tables):
+    if any(candidate.execute("SELECT 1 FROM " + name + " LIMIT 1").fetchone()
+           for name in _INVALIDATE_RESTORED if name in tables):
         return False
-    for before, after in zip(original, restored):
-        if before[:-2] != after[:-2]:
-            return False
-        for prior, current in zip(before[-2:], after[-2:]):
-            if prior is not None:
-                if prior != current:
-                    return False
-            else:
-                tenant_paper_recovery_audit._event_time(current)
+    for name, marker in _SECURITY_RECORDS.items():
+        if name not in tables:
+            continue
+        query = "SELECT * FROM " + name + " ORDER BY rowid"
+        original = archived.execute(query)
+        restored = candidate.execute(query)
+        fields = [column[0] for column in original.description]
+        index = fields.index(marker) if marker else None
+        for before, after in zip_longest(original, restored):
+            if before is None or after is None:
+                return False
+            if index is not None and before[index] is None:
+                timestamp = after[index]
+                if name == "tenant_passkey_credentials":
+                    if type(timestamp) is not int or timestamp <= 0:
+                        return False
+                else:
+                    tenant_paper_recovery_audit._event_time(timestamp)
+                before = before[:index] + (timestamp,) + before[index + 1:]
+            if before != after:
+                return False
     return True
 
 
@@ -375,13 +396,16 @@ def _restore(token, archive_key, destination_path, *, magic, policies):
             writer.flush()
             os.fsync(writer.fileno())
         shadow_storage.require_isolated_source(stage)
-        with closing(sqlite3.connect(str(stage), timeout=10)) as restored:
+        with ExitStack() as connections:
+            restored = connections.enter_context(closing(sqlite3.connect(str(stage), timeout=10)))
             restored.execute("PRAGMA foreign_keys=ON")
             restored.execute("PRAGMA trusted_schema=OFF")
             restored.execute("BEGIN IMMEDIATE")
             tables = _check_contents(restored, require_quiescent=False, policies=policies)
             if policies is not None:
-                prior_scope = _paper_scope(restored)
+                archived = connections.enter_context(closing(sqlite3.connect(":memory:")))
+                archived.deserialize(raw)
+                archived.execute("PRAGMA trusted_schema=OFF")
                 prior_digest = _paper_data_digest(restored)
             for name in _INVALIDATE_RESTORED:
                 if name in tables:
@@ -396,12 +420,9 @@ def _restore(token, archive_key, destination_path, *, magic, policies):
                     SET revoked_at=COALESCE(revoked_at,?)""", (int(time.time()),))
             _check_contents(restored, require_quiescent=True, policies=policies)
             if policies is not None:
-                expected = [(*scope, disabled if disabled is not None else quarantined_at,
-                             revoked if revoked is not None else quarantined_at)
-                            for *scope, disabled, revoked in prior_scope]
-                if (expected != _paper_scope(restored)
+                if (not _quarantine_preserved(archived, restored, tables)
                         or prior_digest != _paper_data_digest(restored)):
-                    raise OfflineBackupDenied("Synthetic paper scope changed during quarantine")
+                    raise OfflineBackupDenied("Synthetic security or paper state changed during quarantine")
             restored.commit()
         # The staged file is complete before publication; a failed fsync
         # cannot leave a partial database at the caller's final path.

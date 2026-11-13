@@ -126,3 +126,84 @@ class PromotionCheckpointTests(unittest.TestCase):
                 self.assertEqual(self.checkpoint.latest(), resolved)
                 self.assertEqual(resolved["number"], self.claim["number"] + 1)
                 self.assertEqual(self.path.read_bytes(), ledger)
+
+    def recover_checkpoint(self, exported, tip):
+        return receipts.DecimalPromotionCheckpoint.recover(
+            self.checkpoint_path, exported, trusted_receipt=tip,
+            checkpoint_key=self.checkpoint_key, receipts=self.pins, witness=self.store,
+            ledger_path=self.path, reserved_receipt=self.prepared, prepared_receipt=self.claim,
+            operator_record=self.promotion, journal_key=self.replacement, anchor_key=self.anchor)
+
+    def test_lost_checkpoint_recovers_at_exact_signed_export_only(self):
+        self.prepare_checkpoint()
+        stale = self.checkpoint.export(expected_receipt=self.claim)
+        tip = self.promote()
+        exported = self.checkpoint.export(expected_receipt=tip)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.recover_checkpoint(exported, tip)
+        self.checkpoint_path.unlink()
+        for rejected, receipt in ((stale, tip), (stale, self.claim),
+                                  ({**exported, "mac": "0" * 64}, tip)):
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                self.recover_checkpoint(rejected, receipt)
+            self.assertFalse(self.checkpoint_path.exists())
+        rebuilt = self.recover_checkpoint(exported, tip)
+        self.assertEqual(rebuilt.latest(), tip)
+        self.assertEqual(rebuilt.export(expected_receipt=tip), exported)
+
+    def test_checkpoint_recovery_preserves_unacknowledged_local_reservation(self):
+        self.prepare_checkpoint()
+        reserved = self.pin_path.read_bytes()
+        tip = self.promote()
+        exported = self.checkpoint.export(expected_receipt=tip)
+        self.pin_path.write_bytes(reserved)
+        self.checkpoint_path.unlink()
+        self.checkpoint = self.recover_checkpoint(exported, tip)
+        self.assertEqual(self.pin_path.read_bytes(), reserved)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.pins.latest()
+        self.assertEqual(self.promote(), tip)
+        self.assertEqual(self.pins.latest(), tip)
+
+    def test_lost_checkpoint_refuses_missing_stale_or_foreign_resources(self):
+        self.prepare_checkpoint()
+        old_witness = self.store_path.read_bytes()
+        tip = self.promote()
+        exported = self.checkpoint.export(expected_receipt=tip)
+        self.checkpoint_path.unlink()
+        for path, stale in ((self.store_path, old_witness), (self.path, self.before),
+                            (self.pin_path, None)):
+            original = path.read_bytes()
+            path.unlink()
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                self.recover_checkpoint(exported, tip)
+            if stale is not None:
+                path.write_bytes(stale)
+                path.chmod(0o600)
+                with self.assertRaises(recovery.DecimalRecoveryDenied):
+                    self.recover_checkpoint(exported, tip)
+            path.write_bytes(original)
+            path.chmod(0o600)
+        fixtures.IndependentReceiptTests.setUp(self)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.recover_checkpoint(exported, tip)
+        self.assertFalse(self.checkpoint_path.exists())
+
+    def test_missing_checkpoint_allows_explicit_terminal_quarantine(self):
+        self.prepare_checkpoint()
+        prepared_export = self.checkpoint.export(expected_receipt=self.claim)
+        self.checkpoint_path.unlink()
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.promote()
+        quarantine = recovery.quarantine_decimal_recovery(
+            record=self.pending, trusted_tip=recovery.evidence_tip(self.pending),
+            operator_key=self.operator, reason="AMBIGUOUS_OLD_STATE")
+        before = self.path.read_bytes()
+        tip = self.pins.quarantine_frozen(
+            self.store, reserved_receipt=self.prepared, observed_receipt=self.claim,
+            operator_record=quarantine)
+        self.assertEqual(self.store.read(trusted_receipt=tip)[0], quarantine)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.recover_checkpoint(prepared_export, self.claim)
+        self.assertEqual(self.path.read_bytes(), before)
+        self.assertFalse(self.checkpoint_path.exists())

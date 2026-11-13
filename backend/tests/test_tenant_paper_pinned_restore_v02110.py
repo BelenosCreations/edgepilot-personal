@@ -12,7 +12,7 @@ from uuid import uuid4
 
 from cryptography.fernet import Fernet
 
-from engine import account_scope
+from engine import account_scope, tenant_passkeys, tenant_registration
 from engine import tenant_backup_rehearsal as backup
 from engine import tenant_paper_authenticated_preflight as preflight
 from engine import tenant_paper_ledger as ledger
@@ -383,3 +383,67 @@ class PinnedPaperRestoreTests(unittest.TestCase):
                 token, self.archive_key, self.destination, policies=self.policies,
                 trusted_pin=pin)["additionalLinkPresent"], not remove)
         self.assert_cleaned_publication(token, pin, stage, identity, before)
+
+    def test_quarantine_preserves_passkeys_and_unlinked_connection_history(self):
+        self.prepare()
+        tenant_passkeys.setup(self.path)
+        tenant_registration.setup(self.path)
+        tenant_registration.TenantRegistration(self.path).issue_invitation()
+        revoked = "2026-10-01T12:00:00+00:00"
+        orphan = str(uuid4())
+        with closing(sqlite3.connect(self.path)) as db, db:
+            db.executemany("INSERT INTO tenant_passkey_credentials VALUES (?,?,?,?,?,?,?,?)", (
+                (b"active", self.owner, b"synthetic-key-a", 4, "single_device", 0, 100, None),
+                (b"revoked", self.member, b"synthetic-key-b", 7, "single_device", 0, 100, 200),
+            ))
+            db.execute("INSERT INTO tenant_passkey_challenges VALUES (?,?,?,?,?,?,?)",
+                       ("synthetic", "register", self.owner, b"challenge", 123, "example.test",
+                        "https://example.test"))
+            db.execute("INSERT INTO tenant_connections VALUES (?,?,?,?,?,?)",
+                       (orphan, self.member, "public", b"synthetic-ciphertext", revoked, revoked))
+        token, pin = self.seal()
+        stage = self.orphan_stage(token, pin)
+        self.cleanup(token, pin, stage)
+        with closing(sqlite3.connect(self.destination)) as db:
+            self.assertEqual(db.execute("SELECT revoked_at FROM tenant_connections "
+                                        "WHERE connection_id=?", (orphan,)).fetchone(), (revoked,))
+            self.assertEqual(db.execute("SELECT public_key,sign_count,revoked_at "
+                                        "FROM tenant_passkey_credentials WHERE credential_id=?",
+                                        (b"revoked",)).fetchone(), (b"synthetic-key-b", 7, 200))
+            self.assertGreater(db.execute("SELECT revoked_at FROM tenant_passkey_credentials "
+                                          "WHERE credential_id=?", (b"active",)).fetchone()[0], 100)
+            for table in ("tenant_identity_sessions", "tenant_passkey_challenges",
+                          "tenant_signup_invites", "tenant_worker_leases"):
+                self.assertEqual(db.execute("SELECT COUNT(*) FROM " + table).fetchone(), (0,))
+
+    def test_inspection_and_cleanup_refuse_rewritten_security_history(self):
+        self.prepare()
+        tenant_passkeys.setup(self.path)
+        orphan = str(uuid4())
+        revoked = "2026-10-01T12:00:00+00:00"
+        with closing(sqlite3.connect(self.path)) as db, db:
+            db.execute("INSERT INTO tenant_passkey_credentials VALUES (?,?,?,?,?,?,?,?)",
+                       (b"revoked", self.member, b"synthetic-key", 7, "single_device", 0, 100, 200))
+            db.execute("INSERT INTO tenant_connections VALUES (?,?,?,?,?,?)",
+                       (orphan, self.member, "public", b"synthetic-ciphertext", revoked, revoked))
+        token, pin = self.seal()
+        stage = self.orphan_stage(token, pin)
+        before = self.destination.read_bytes()
+        for change, values in (
+                ("UPDATE tenant_passkey_credentials SET revoked_at=201", ()),
+                ("UPDATE tenant_connections SET revoked_at=NULL WHERE connection_id=?", (orphan,)),
+                ("UPDATE tenant_identities SET credential_version=credential_version+1", ()),
+                ("UPDATE tenant_connections SET credential_ciphertext=? WHERE connection_id=?",
+                 (b"changed", orphan))):
+            with self.subTest(change=change):
+                with closing(sqlite3.connect(self.destination)) as db, db:
+                    db.execute(change, values)
+                with self.assertRaises(backup.OfflineBackupDenied):
+                    backup.inspect_pinned_paper_publication(
+                        token, self.archive_key, self.destination, policies=self.policies,
+                        trusted_pin=pin)
+                with self.assertRaises(backup.OfflineBackupDenied):
+                    self.cleanup(token, pin, stage)
+                self.assertTrue(stage.samefile(self.destination))
+                self.destination.write_bytes(before)
+        self.cleanup(token, pin, stage)
