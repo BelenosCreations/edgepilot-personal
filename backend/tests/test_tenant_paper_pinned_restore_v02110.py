@@ -2,6 +2,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from datetime import datetime, timezone
+import os
 import sqlite3
 from threading import Barrier
 import unittest
@@ -192,3 +193,42 @@ class PinnedPaperRestoreTests(unittest.TestCase):
                 self.assertEqual(sidecar.read_bytes(), b"prior file")
                 self.assertFalse(self.destination.exists())
                 sidecar.unlink()
+
+    def test_process_exit_after_link_requires_exact_read_only_inspection(self):
+        self.prepare()
+        token, pin = self.seal()
+        link = os.link
+
+        def link_then_exit(source, destination):
+            link(source, destination)
+            os._exit(81)
+
+        pid = os.fork()
+        if pid == 0:
+            try:
+                with patch.object(backup.os, "link", side_effect=link_then_exit):
+                    self.restore(token, pin)
+            finally:
+                os._exit(82)
+        _, status = os.waitpid(pid, 0)
+        self.assertEqual(os.waitstatus_to_exitcode(status), 81)
+        self.assertEqual(self.destination.stat().st_nlink, 2)
+        stages = list(self.destination.parent.glob(".edgepilot-synthetic-restore-*"))
+        self.assertEqual(len(stages), 1)
+        self.assertTrue(self.destination.samefile(stages[0]))
+        before = self.destination.read_bytes()
+
+        def inspect():
+            return backup.inspect_pinned_paper_publication(
+                token, self.archive_key, self.destination, policies=self.policies,
+                trusted_pin=pin)
+
+        self.assertEqual(inspect(), {"quarantineVerified": True, "additionalLinkPresent": True})
+        self.assertEqual(self.destination.read_bytes(), before)
+        with self.assertRaises(backup.OfflineBackupDenied):
+            self.restore(token, pin)
+        self.assertTrue(stages[0].exists())
+        with closing(sqlite3.connect(self.destination)) as db, db:
+            db.execute("UPDATE tenant_paper_events SET request_sha256=?", ("a" * 64,))
+        with self.assertRaises(backup.OfflineBackupDenied):
+            inspect()

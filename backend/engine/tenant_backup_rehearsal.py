@@ -22,8 +22,10 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+import stat
 import time
 import tempfile
+from urllib.parse import quote
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -134,12 +136,17 @@ def seal_pinned_paper_fixture(source_path, archive_key, *, policies):
     return token, _paper_pin(token, checked)
 
 
-def restore_pinned_paper_fixture(token, archive_key, destination_path, *, policies, trusted_pin):
-    """Restore the externally pinned archive with its original synthetic policies."""
+def _require_paper_pin(token, policies, trusted_pin):
     checked = _paper_policies(policies)
     if (type(trusted_pin) is not str or not trusted_pin.isascii()
             or not hmac.compare_digest(trusted_pin, _paper_pin(token, checked))):
         raise OfflineBackupDenied("Pinned synthetic archive unavailable")
+    return checked
+
+
+def restore_pinned_paper_fixture(token, archive_key, destination_path, *, policies, trusted_pin):
+    """Restore the externally pinned archive with its original synthetic policies."""
+    checked = _require_paper_pin(token, policies, trusted_pin)
     return _restore(token, archive_key, destination_path, magic=_PAPER_MAGIC, policies=checked)
 
 
@@ -210,7 +217,7 @@ def restore_sealed_fixture(token, archive_key, destination_path):
     return _restore(token, archive_key, destination_path, magic=_MAGIC, policies=None)
 
 
-def _restore(token, archive_key, destination_path, *, magic, policies):
+def _decrypt(token, archive_key, magic):
     cipher = _archive_cipher(archive_key)
     if not isinstance(token, bytes) or len(token) > 2 * _MAX_DB_SIZE + 8192:
         raise OfflineBackupDenied("Synthetic archive input unavailable")
@@ -222,6 +229,68 @@ def _restore(token, archive_key, destination_path, *, magic, policies):
             not payload[len(magic):].startswith(b"SQLite format 3\x00") or
             len(payload) - len(magic) > _MAX_DB_SIZE):
         raise OfflineBackupDenied("Synthetic archive format unavailable")
+    return payload[len(magic):]
+
+
+def inspect_pinned_paper_publication(token, archive_key, destination_path, *, policies, trusted_pin):
+    """Audit a candidate after interrupted publication without changing any file."""
+    checked = _require_paper_pin(token, policies, trusted_pin)
+    raw = _decrypt(token, archive_key, _PAPER_MAGIC)
+    try:
+        target = Path(destination_path)
+        source, _ = shadow_storage.require_isolated_source(target)
+        info = source.lstat()
+        if (source != target or info.st_uid != os.getuid()
+                or stat.S_IMODE(info.st_mode) != 0o600 or info.st_nlink not in (1, 2)
+                or any(os.path.lexists(str(source) + suffix) for suffix in _SIDECARS)):
+            raise OfflineBackupDenied("Synthetic restore candidate unavailable")
+        uri = "file:" + quote(str(source), safe="/") + "?mode=ro"
+        with closing(sqlite3.connect(":memory:")) as archived:
+            archived.deserialize(raw)
+            archived.execute("PRAGMA trusted_schema=OFF")
+            _check_contents(archived, require_quiescent=True, policies=checked)
+            with closing(sqlite3.connect(uri, uri=True)) as candidate:
+                candidate.execute("PRAGMA trusted_schema=OFF")
+                candidate.execute("BEGIN")
+                tables = _check_contents(candidate, require_quiescent=True, policies=checked)
+                schema = "SELECT name,type,tbl_name,sql FROM sqlite_master ORDER BY name"
+                if (archived.execute(schema).fetchall() != candidate.execute(schema).fetchall()
+                        or _paper_data_digest(archived) != _paper_data_digest(candidate)
+                        or not _quarantine_preserved(archived, candidate)
+                        or any(candidate.execute("SELECT 1 FROM " + name + " LIMIT 1").fetchone()
+                               for name in _INVALIDATE_RESTORED if name in tables)
+                        or ("tenant_passkey_credentials" in tables and candidate.execute(
+                            "SELECT 1 FROM tenant_passkey_credentials WHERE revoked_at IS NULL LIMIT 1"
+                        ).fetchone())):
+                    raise OfflineBackupDenied("Synthetic restore candidate differs from archive")
+        after = source.lstat()
+        if ((info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns, info.st_nlink)
+                != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns,
+                    after.st_ctime_ns, after.st_nlink)):
+            raise OfflineBackupDenied("Synthetic restore candidate changed during inspection")
+        return {"quarantineVerified": True, "additionalLinkPresent": info.st_nlink == 2}
+    except (OSError, sqlite3.Error, ValueError, shadow_storage.MemoryStorageError):
+        raise OfflineBackupDenied("Synthetic restore candidate unavailable") from None
+
+
+def _quarantine_preserved(archived, candidate):
+    original, restored = _paper_scope(archived), _paper_scope(candidate)
+    if len(original) != len(restored):
+        return False
+    for before, after in zip(original, restored):
+        if before[:-2] != after[:-2]:
+            return False
+        for prior, current in zip(before[-2:], after[-2:]):
+            if prior is not None:
+                if prior != current:
+                    return False
+            else:
+                tenant_paper_recovery_audit._event_time(current)
+    return True
+
+
+def _restore(token, archive_key, destination_path, *, magic, policies):
+    raw = _decrypt(token, archive_key, magic)
     try:
         root = shadow_storage.memory_root()
         target = Path(destination_path)
@@ -247,7 +316,7 @@ def _restore(token, archive_key, destination_path, *, magic, policies):
             dir=str(parent))
         stage = Path(name)
         with os.fdopen(fd, "wb") as writer:
-            writer.write(payload[len(magic):])
+            writer.write(raw)
             writer.flush()
             os.fsync(writer.fileno())
         shadow_storage.require_isolated_source(stage)
