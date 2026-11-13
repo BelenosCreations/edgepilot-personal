@@ -178,8 +178,8 @@ def record_paper_fill(path, *, principal_user_id, account_id, request_id,
         if net_unit <= 0:
             raise PaperLedgerDenied("Nonpositive paper sale proceeds")
         change = _cents(net_unit * qty, ROUND_DOWN)
-    if change == 0:
-        raise PaperLedgerDenied("Paper fill too small to account for safely")
+    if change == 0 or abs(change) > _cents(MAX):
+        raise PaperLedgerDenied("Paper fill notional outside safe accounting bounds")
     quote_price = quote.ask if side == "BUY" else quote.bid
     request_record = {
         "requestId": key, "side": side, "asset": quote.asset_class,
@@ -207,8 +207,11 @@ def record_paper_fill(path, *, principal_user_id, account_id, request_id,
         if prev:
             if prev["request_sha256"] != digest:
                 raise PaperLedgerDenied("Conflicting paper request replay")
+            # The old event's balance is historical; a retry must not
+            # mislabel it as current after subsequent paper fills.
             return {"duplicate": True, "paperOnly": True,
-                    "paperCash": _money(prev["cash_after_cents"])}
+                    "paperCash": _money(wallet["cash_cents"]),
+                    "originalPaperCashAfter": _money(prev["cash_after_cents"])}
         position = db.execute("""SELECT quantity,cost_basis_cents,realized_cents
             FROM tenant_paper_positions
             WHERE user_id=? AND account_id=? AND asset_class=? AND symbol=?""",
