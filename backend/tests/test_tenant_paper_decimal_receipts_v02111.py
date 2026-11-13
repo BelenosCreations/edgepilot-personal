@@ -8,10 +8,12 @@ import sqlite3
 import tempfile
 import unittest
 from unittest.mock import patch
+from uuid import uuid4
 
 from cryptography.fernet import Fernet
 
 from engine import tenant_paper_decimal_archive as archive
+from engine import tenant_paper_decimal_atomic_rehearsal as ledger
 from engine import tenant_paper_decimal_receipts as receipts
 from engine import tenant_paper_decimal_recovery as recovery
 import test_tenant_paper_decimal_custody_v02109 as fixtures
@@ -267,3 +269,102 @@ class IndependentReceiptTests(unittest.TestCase):
             with self.assertRaises(recovery.DecimalRecoveryDenied):
                 self.rotate()
         self.assert_no_retry()
+
+    def approve_prepared(self, path, record, key):
+        return recovery.approve_decimal_promotion(
+            path, record=record, trusted_tip=recovery.evidence_tip(record),
+            **(self.keys | {"journal_key": key}))
+
+    def test_frozen_claim_does_not_promote_an_old_or_unclaimed_rotation(self):
+        claim, hold = self.freeze_after_claim()
+        promotion = recovery._next(self.operator, self.pending, "ACTIVE",
+                                   current=self.pending["target"],
+                                   retired=[self.pending["current"]["journalKeyId"]])
+        for reviewed in (self.prepared, claim):
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                self.pins.promote_frozen(
+                    self.store, self.path, reserved_receipt=self.prepared,
+                    prepared_receipt=reviewed, operator_record=promotion,
+                    journal_key=self.replacement, anchor_key=self.anchor)
+        self.assert_no_retry()
+        self.assertEqual(self.store.read(trusted_receipt=claim), (self.pending, claim, True))
+        self.resolve(claim, hold)
+
+    def test_lost_rotation_promotion_ack_reaudits_exact_prepared_target(self):
+        claim = self.rotate()
+        promotion = self.approve_prepared(self.path, self.pending, self.replacement)
+        rotated = self.path.read_bytes()
+        publish = self.store.publish
+        with patch.object(self.store, "publish", side_effect=lambda proposed, **kwargs:
+                          publish(proposed, _interrupt="after_commit", **kwargs)):
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                self.pins.publish(self.store, promotion)
+        observed, tip, _ = self.store.read(trusted_receipt=claim)
+        self.assertEqual(observed, promotion)
+
+        def resolve(path, *, reserved=claim, prepared=claim, approval=promotion, anchor=self.anchor):
+            return self.pins.promote_frozen(
+                self.store, path, reserved_receipt=reserved, prepared_receipt=prepared,
+                operator_record=approval, journal_key=self.replacement, anchor_key=anchor)
+
+        self.old.write_bytes(self.before)
+        self.old.chmod(0o600)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            resolve(self.old)
+        for options in (dict(reserved=self.prepared), dict(prepared=tip),
+                        dict(approval={**promotion, "mac": "0" * 64}),
+                        dict(anchor=os.urandom(32))):
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                resolve(self.path, **options)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.pins.latest()
+        self.assertEqual(resolve(self.path), tip)
+        self.assertEqual(self.pins.latest(), tip)
+        self.assertEqual(self.path.read_bytes(), rotated)
+        self.assertEqual(self.inspect(promotion, self.replacement), "PINNED_ACTIVE")
+
+    def test_reviewed_advance_promotes_after_frozen_pending_publication(self):
+        # Use an independent lineage so the prior rotation plan is left intact.
+        fixtures.DecimalCustodyTests.setUp(self)
+        pin_path = self.pin_path.with_name("advance-receipt.db")
+        pins = receipts.DecimalReceiptStore.create(
+            pin_path, receipt_key=self.pin_key, witness=self.store, genesis=self.genesis)
+        shutil.copy2(self.path, self.old)
+        ledger.register_decimal_account(
+            self.old, hmac_key=self.journal, initial_cash_cents=10000, protected_pct=90,
+            spend_cap_cents=2000, per_trade_cap_cents=800, max_loss_cents=14,
+            principal_user_id=self.scope["principal_user_id"], account_id=str(uuid4()))
+        pending = recovery.prepare_decimal_advance(
+            self.path, self.old, record=self.active, trusted_tip=recovery.evidence_tip(self.active),
+            **self.keys)
+        publish = self.store.publish
+        with patch.object(self.store, "publish", side_effect=lambda proposed, **kwargs:
+                          publish(proposed, _interrupt="after_commit", **kwargs)):
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                pins.publish(self.store, pending)
+        _, prepared, _ = self.store.read(trusted_receipt=self.genesis)
+        approval = self.approve_prepared(self.old, pending, self.journal)
+        before = self.old.read_bytes()
+
+        def resolve(path):
+            return pins.promote_frozen(
+                self.store, path, reserved_receipt=self.genesis, prepared_receipt=prepared,
+                operator_record=approval, journal_key=self.journal, anchor_key=self.anchor)
+
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            resolve(self.path)
+        pid = os.fork()
+        if pid == 0:
+            try:
+                with patch.object(pins, "_save", side_effect=lambda *a, **k: os._exit(84)):
+                    resolve(self.old)
+            finally:
+                os._exit(85)
+        _, status = os.waitpid(pid, 0)
+        self.assertEqual(os.waitstatus_to_exitcode(status), 84)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            pins.latest()
+        self.assertEqual(self.store.read(trusted_receipt=prepared)[0], approval)
+        self.assertEqual(resolve(self.old)["number"], prepared["number"] + 1)
+        self.assertEqual(pins.latest(), self.store.read(trusted_receipt=prepared)[1])
+        self.assertEqual(self.old.read_bytes(), before)
