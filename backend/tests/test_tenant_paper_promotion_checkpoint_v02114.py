@@ -2,11 +2,14 @@
 from concurrent.futures import ThreadPoolExecutor
 import os
 from pathlib import Path
+import shutil
 import tempfile
 from threading import Barrier
 import unittest
 from unittest.mock import patch
+from uuid import uuid4
 
+from engine import tenant_paper_decimal_atomic_rehearsal as ledger
 from engine import tenant_paper_decimal_receipts as receipts
 from engine import tenant_paper_decimal_recovery as recovery
 import test_tenant_paper_decimal_receipts_v02111 as fixtures
@@ -170,6 +173,90 @@ class PromotionCheckpointTests(unittest.TestCase):
             self.pins.latest()
         self.assertEqual(self.promote(), tip)
         self.assertEqual(self.pins.latest(), tip)
+
+    def test_advanced_witness_refuses_previous_export_after_interrupted_next_promotion(self):
+        self.prepare_checkpoint()
+        previous_tip = self.promote()
+        previous_export = self.checkpoint.export(expected_receipt=previous_tip)
+        previous_receipts = self.pin_path.read_bytes()
+        previous_evidence = self.recovery_evidence()
+        self.checkpoint_path.unlink()
+
+        candidate = self.path.with_name("next.db")
+        shutil.copy2(self.path, candidate)
+        ledger.register_decimal_account(
+            candidate, hmac_key=self.replacement, initial_cash_cents=10000,
+            protected_pct=90, spend_cap_cents=2000, per_trade_cap_cents=800,
+            max_loss_cents=14, principal_user_id=self.scope["principal_user_id"],
+            account_id=str(uuid4()))
+        pending = recovery.prepare_decimal_advance(
+            self.path, candidate, record=self.promotion,
+            trusted_tip=recovery.evidence_tip(self.promotion),
+            **(self.keys | {"journal_key": self.replacement}))
+        publish = self.store.publish
+        with patch.object(self.store, "publish", side_effect=lambda record, **options:
+                          publish(record, _interrupt="after_commit", **options)):
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                self.pins.publish(self.store, pending)
+        _, prepared, _ = self.store.read(trusted_receipt=previous_tip)
+        approval = self.approve_prepared(candidate, pending, self.replacement)
+        evidence = previous_evidence | dict(
+            ledger_path=candidate, reserved_receipt=previous_tip,
+            prepared_receipt=prepared, operator_record=approval)
+        checkpoint = receipts.DecimalPromotionCheckpoint.create(
+            self.checkpoint_path, checkpoint_key=self.checkpoint_key, receipts=self.pins,
+            witness=self.store, reserved_receipt=previous_tip, prepared_receipt=prepared)
+
+        def promote():
+            return self.pins.promote_frozen(
+                self.store, candidate, reserved_receipt=previous_tip, prepared_receipt=prepared,
+                operator_record=approval, journal_key=self.replacement, anchor_key=self.anchor,
+                checkpoint=checkpoint)
+
+        pid = os.fork()
+        if pid == 0:
+            try:
+                with patch.object(self.pins, "_save", side_effect=lambda *a, **k: os._exit(90)):
+                    promote()
+            finally:
+                os._exit(91)
+        _, status = os.waitpid(pid, 0)
+        self.assertEqual(os.waitstatus_to_exitcode(status), 90)
+        latest = checkpoint.latest()
+        self.assertEqual(self.store.read(trusted_receipt=latest), (approval, latest, False))
+        latest_export = checkpoint.export(expected_receipt=latest)
+        reserved = self.pin_path.read_bytes()
+        candidate_bytes = candidate.read_bytes()
+        previous_ledger = self.path.read_bytes()
+        self.checkpoint_path.unlink()
+
+        # The old local receipt and ledger both agree with the earlier export.
+        # The independently advanced witness alone must still refuse it.
+        self.pin_path.write_bytes(previous_receipts)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            receipts.DecimalPromotionCheckpoint.recover(
+                self.checkpoint_path, previous_export, trusted_receipt=previous_tip,
+                checkpoint_key=self.checkpoint_key, **previous_evidence)
+        self.assertFalse(self.checkpoint_path.exists())
+        self.assertEqual(self.pin_path.read_bytes(), previous_receipts)
+
+        self.pin_path.write_bytes(reserved)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            receipts.DecimalPromotionCheckpoint.recover(
+                self.checkpoint_path, latest_export, trusted_receipt=latest,
+                checkpoint_key=self.checkpoint_key, **(evidence | {"ledger_path": self.path}))
+        self.assertFalse(self.checkpoint_path.exists())
+        checkpoint = receipts.DecimalPromotionCheckpoint.recover(
+            self.checkpoint_path, latest_export, trusted_receipt=latest,
+            checkpoint_key=self.checkpoint_key, **evidence)
+        self.assertEqual(checkpoint.inspect_recovered(
+            latest_export, trusted_receipt=latest, **evidence),
+            {"receipt": latest, "additionalLinkPresent": False})
+        self.assertEqual(self.pin_path.read_bytes(), reserved)
+        self.assertEqual(promote(), latest)
+        self.assertEqual(self.pins.latest(), latest)
+        self.assertEqual(candidate.read_bytes(), candidate_bytes)
+        self.assertEqual(self.path.read_bytes(), previous_ledger)
 
     def test_lost_checkpoint_refuses_missing_stale_or_foreign_resources(self):
         self.prepare_checkpoint()

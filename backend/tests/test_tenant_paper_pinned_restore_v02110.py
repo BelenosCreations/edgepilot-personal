@@ -565,10 +565,10 @@ class PinnedPaperRestoreTests(unittest.TestCase):
                             source="synthetic-restore")
 
         self.rehearse_second_restore(
-            pin, auth, restored_passkeys, signup, (fresh, member, *passkey_sessions),
+            (token, pin), auth, restored_passkeys, signup, (fresh, member, *passkey_sessions),
             (invite, new_invite), (owner_account, member_account), (owner_conn, member_conn))
 
-    def rehearse_second_restore(self, first_pin, auth, passkeys, signup, restored_sessions,
+    def rehearse_second_restore(self, first_archive, auth, passkeys, signup, restored_sessions,
                                 earlier_invites, accounts, connections):
         unused_invite = signup.issue_invitation()["invitation"]
         challenge = passkeys.begin_authentication()["requestId"]
@@ -576,29 +576,63 @@ class PinnedPaperRestoreTests(unittest.TestCase):
         for user, account in ((self.owner, owner_account), (self.member, member_account)):
             ledger.open_wallet(self.destination, principal_user_id=user, account_id=account,
                                initial_paper_cash="100.00")
-        ledger.record_paper_fill(
-            self.destination, principal_user_id=self.owner, now=datetime.now(timezone.utc).isoformat(),
-            **self.params(account_id=owner_account, protected_pct="90", per_trade_cap="3"))
+        shared_id = self.request["request_id"]
+        for user, account, params in (
+                (self.owner, owner_account, dict(request_id=shared_id, quantity="0.75")),
+                (self.owner, owner_account,
+                 dict(side="SELL", observation=fixtures.evidence("0.99", "1.00"))),
+                (self.owner, owner_account,
+                 dict(side="SELL", quantity="0.25", observation=fixtures.evidence("9.00", "9.01"))),
+                (self.member, member_account, dict(request_id=shared_id))):
+            result = ledger.record_paper_fill(
+                self.destination, principal_user_id=user, now=datetime.now(timezone.utc),
+                **self.params(account_id=account, protected_pct="90", per_trade_cap="3", **params))
+            self.assertFalse(result["duplicate"])
         second_policies = self.policies | dict.fromkeys(
             [(self.owner, owner_account), (self.member, member_account)],
             PaperRestorePolicy(90, 1000, 300, 54))
         first_restore = self.destination
+        request_query = (
+            "SELECT user_id,account_id,request_sha256 FROM tenant_paper_events "
+            "WHERE request_id=? ORDER BY user_id,account_id")
         with closing(sqlite3.connect(first_restore)) as db:
             prior_digest = backup._paper_data_digest(db)
+            request_rows = db.execute(request_query, (shared_id,)).fetchall()
+            self.assertEqual({(u, a) for u, a, _ in request_rows}, {
+                (self.owner, self.account), (self.owner, owner_account),
+                (self.member, member_account)})
+            self.assertEqual(len({digest for _, _, digest in request_rows}), 3)
             prior_scope = backup._paper_scope(db)
             prior_passkeys = dict(db.execute("SELECT credential_id,revoked_at FROM tenant_passkey_credentials"))
             prior_connections = dict(db.execute("SELECT connection_id,revoked_at FROM tenant_connections"))
         second_token, second_pin = backup.seal_pinned_paper_fixture(
             first_restore, self.archive_key, policies=second_policies)
         self.destination = first_restore.with_name("restored-again.db")
-        with self.assertRaises(backup.OfflineBackupDenied):
-            self.restore(second_token, first_pin, second_policies)
+        first_token, first_pin = first_archive
+        for token, pin, policies in ((second_token, first_pin, second_policies),
+                                     (first_token, second_pin, self.policies),
+                                     (first_token, second_pin, second_policies)):
+            with self.assertRaises(backup.OfflineBackupDenied):
+                self.restore(token, pin, policies)
+            self.assertFalse(self.destination.exists())
         self.assertEqual(self.restore(second_token, second_pin, second_policies), self.destination)
         self.assertEqual(backup.inspect_pinned_paper_publication(
             second_token, self.archive_key, self.destination, policies=second_policies,
             trusted_pin=second_pin), {"quarantineVerified": True, "additionalLinkPresent": False})
         with closing(sqlite3.connect(self.destination)) as db:
             self.assertEqual(backup._paper_data_digest(db), prior_digest)
+            self.assertEqual(db.execute(request_query, (shared_id,)).fetchall(), request_rows)
+            for user, account, expected in (
+                    (self.owner, self.account, (119, -54, 2)),
+                    (self.owner, self.alternate, (0, 0, 0)),
+                    (self.owner, owner_account, (119, -54, 2)),
+                    (self.member, self.other, (0, 0, 0)),
+                    (self.member, member_account, (0, 0, 0))):
+                with self.subTest(user=user, account=account):
+                    self.assertEqual(_replay_realized(db.execute(
+                        "SELECT side,asset_class,symbol,quantity,signed_cash_change_cents "
+                        "FROM tenant_paper_events WHERE user_id=? AND account_id=? ORDER BY rowid",
+                        (user, account))), expected)
             for before, after in zip(prior_scope, backup._paper_scope(db), strict=True):
                 self.assertEqual(before[:-2], after[:-2])
                 for old, current in zip(before[-2:], after[-2:], strict=True):
