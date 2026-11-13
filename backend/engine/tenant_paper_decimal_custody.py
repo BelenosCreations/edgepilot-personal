@@ -135,13 +135,17 @@ class DecimalCustody:
     def _mac(self, number, kind, payload, previous):
         return ledger._mac(self.custody_key, _PROTOCOL, number, kind, payload, previous)
 
-    def _append(self, db, receipt, kind, data):
+    def _next_event(self, receipt, kind, data):
         number = 1 if receipt is None else receipt["number"] + 1
         previous = ledger._GENESIS if receipt is None else receipt["mac"]
         payload = json.dumps(data, sort_keys=True, separators=(",", ":"))
         mac = self._mac(number, kind, payload, previous)
-        db.execute("INSERT INTO custody_events VALUES (?,?,?,?,?)",
-                   (number, kind, payload, previous, mac))
+        return number, kind, payload, previous, mac
+
+    def _append(self, db, receipt, kind, data):
+        event = self._next_event(receipt, kind, data)
+        db.execute("INSERT INTO custody_events VALUES (?,?,?,?,?)", event)
+        number, _, _, _, mac = event
         return {"number": number, "mac": mac}
 
     def _read(self, db, trusted_receipt, *, exact):

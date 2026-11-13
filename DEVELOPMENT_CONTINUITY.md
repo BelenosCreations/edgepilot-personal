@@ -8,14 +8,14 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 
 ## Verification and checkpoint
 
-- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.113 from the merged PR for `development/v0.2.113-reviewed-recovery`. A later verified main checkpoint takes precedence.
-- Verified v0.2.112 baseline. PR #139 head `7b3d708e827523df817aadc620b9a2a30eb9ef78` passed [Actions #43456620631](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43456620631). Main `e78b215d0ad15314d90ff02ee6951bf91e26af79` passed [Actions #43456988925](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43456988925), matched live Render deployment `dep-dbrj4hc9v7es73abrlb0`, and returned HTTP 200 from `/healthz`. No PRs were open.
-- v0.2.113 adds signed promotion of an exact prepared ledger after frozen handoff and verified removal of one orphan restore staging link. See [milestone notes](PAPER_REVIEWED_RECOVERY_V02113.md).
+- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.114 from the merged PR for `development/v0.2.114-promotion-checkpoint`. A later verified main checkpoint takes precedence.
+- Verified v0.2.113 baseline. PR #140 head `bb93d65d2f25e7942f9481c988282acda29e58e8` passed [Actions #43460114041](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43460114041). Main `a11268584de2d6f51a3c4287a076c0532749f1e3` passed [Actions #43460516814](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43460516814), matched live Render deployment `dep-dbrje8c9v7es73acdspg`, and returned HTTP 200 from `/healthz`. No PRs were open.
+- v0.2.114 adds an independent promotion checkpoint rehearsal and verifies restore cleanup under concurrent operations and process exit. See [milestone notes](PAPER_PROMOTION_CHECKPOINT_V02114.md).
 
 ## Next safe development batch
 
-1. Rehearse a separately retained monotonic receipt checkpoint for the operator promotion workflow. Exercise rollback of the receipt store, witness and ledger under independent latest evidence and document which combinations remain ambiguous. Verify process exit at each evidence publication boundary. Keep terminal quarantine and refusal of stale ledgers. Cross-resource power-loss consistency remains open.
-2. Extend offline restore cleanup acceptance to concurrent operators and process exit at unlink. Verify the destination, pinned history, archived request digests and quarantine through readback. Preserve the existing restore paths.
+1. Rehearse recovery when the independent checkpoint is unavailable. Compare an independently retained signed checkpoint export with the exact witness and ledger. Exercise stale exports, wrong lineages, missing resources and explicit terminal quarantine. Combined rollback and cross-resource power-loss consistency remain open.
+2. Audit offline restore quarantine across the full restored security state and verify that revoked passkey and connection records retain their historical revocation evidence through publication and cleanup. Preserve the existing restore paths.
 3. Continue source-attributed and session-only Public research under the user's instruction to assume provider permission. Use real history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance). Earlier snapshot and MSFT quote acceptance still apply.
 
 ## Restrictions and workflow
@@ -26,6 +26,12 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.113 — 2026-11-13 — Reviewed synthetic paper recovery
+
+Starting checkpoint independently verified. PR #139 head `7b3d708e827523df817aadc620b9a2a30eb9ef78` passed [Actions #43456620631](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43456620631). Main `e78b215d0ad15314d90ff02ee6951bf91e26af79` passed [Actions #43456988925](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43456988925), matched live Render deployment `dep-dbrj4hc9v7es73abrlb0` and returned HTTP 200 from `/healthz`. No PRs were open.
+
+The milestone adds signed promotion of an exact prepared ledger after frozen handoff and verified removal of one orphan restore staging link. See [reviewed synthetic paper recovery](PAPER_REVIEWED_RECOVERY_V02113.md).
 
 ## v0.2.112 — 2026-11-13 — Terminal quarantine and interrupted restore inspection
 

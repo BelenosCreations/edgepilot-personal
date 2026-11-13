@@ -1,5 +1,5 @@
 """Independent receipt storage for the offline synthetic Decimal rehearsal."""
-from contextlib import closing, contextmanager
+from contextlib import closing, contextmanager, ExitStack
 import hmac
 import os
 from pathlib import Path
@@ -14,6 +14,7 @@ from . import tenant_paper_decimal_recovery as recovery
 
 
 _PROTOCOL = "EDGEPILOT-SYNTHETIC-DECIMAL-RECEIPT-v1"
+_PROMOTION_PROTOCOL = "EDGEPILOT-SYNTHETIC-DECIMAL-PROMOTION-CHECKPOINT-v1"
 _SCHEMA = """CREATE TABLE retained_receipt (
     id INTEGER PRIMARY KEY CHECK (id = 1), number INTEGER NOT NULL,
     tip TEXT NOT NULL, pending INTEGER NOT NULL, signature TEXT NOT NULL)"""
@@ -22,9 +23,10 @@ _SCHEMA = """CREATE TABLE retained_receipt (
 class DecimalReceiptStore:
     """A separately operated receipt pin and persistent rotation reservation."""
 
-    def __init__(self, path, *, receipt_key):
+    def __init__(self, path, *, receipt_key, _protocol=_PROTOCOL):
         self.path = Path(path)
         self.key = ledger._key(receipt_key)
+        self._protocol = _protocol
 
     def _check_directory(self):
         parent = self.path.parent
@@ -43,26 +45,29 @@ class DecimalReceiptStore:
         """Provision only at a verified new witness genesis."""
         store = cls(path, receipt_key=receipt_key)
         store._verify_separation(witness)
+        with witness._open(write=False) as db:
+            _, receipt, _ = witness._read(db, genesis, exact=True)
+            if receipt["number"] != 1:
+                recovery._deny()
+            store._initialize(receipt)
+        return store
+
+    def _initialize(self, receipt):
         try:
-            store._check_directory()
-            with witness._open(write=False) as db:
-                _, receipt, _ = witness._read(db, genesis, exact=True)
-                if receipt["number"] != 1:
-                    recovery._deny()
-                fd = os.open(store.path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+            self._check_directory()
+            fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+            os.close(fd)
+            with closing(sqlite3.connect(self.path, isolation_level=None)) as pins:
+                pins.execute("PRAGMA synchronous=EXTRA")
+                pins.execute("BEGIN IMMEDIATE")
+                pins.execute(_SCHEMA)
+                self._save(pins, receipt, pending=False)
+                pins.commit()
+            fd = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(fd)
+            finally:
                 os.close(fd)
-                with closing(sqlite3.connect(store.path, isolation_level=None)) as pins:
-                    pins.execute("PRAGMA synchronous=EXTRA")
-                    pins.execute("BEGIN IMMEDIATE")
-                    pins.execute(_SCHEMA)
-                    store._save(pins, receipt, pending=False)
-                    pins.commit()
-                fd = os.open(store.path.parent, os.O_RDONLY | os.O_DIRECTORY)
-                try:
-                    os.fsync(fd)
-                finally:
-                    os.close(fd)
-            return store
         except (OSError, sqlite3.Error, recovery.DecimalRecoveryDenied):
             recovery._deny()
 
@@ -88,7 +93,7 @@ class DecimalReceiptStore:
             recovery._deny()
 
     def _signature(self, number, tip, pending):
-        return ledger._mac(self.key, _PROTOCOL, number, tip, pending)
+        return ledger._mac(self.key, self._protocol, number, tip, pending)
 
     def _save(self, db, receipt, *, pending):
         number, tip = receipt["number"], receipt["mac"]
@@ -96,17 +101,23 @@ class DecimalReceiptStore:
         db.execute("INSERT OR REPLACE INTO retained_receipt VALUES (1,?,?,?,?)",
                    (number, tip, reserved, self._signature(number, tip, reserved)))
 
-    def _read(self, db, *, pending):
+    def _read_state(self, db):
         row = db.execute("SELECT number,tip,pending,signature FROM retained_receipt WHERE id=1"
                          ).fetchone()
         if row is None:
             recovery._deny()
         number, tip, reserved, signature = row
         if (type(number) is not int or number < 1 or type(tip) is not str or len(tip) != 64
-                or reserved != pending or type(signature) is not str or not signature.isascii()
+                or reserved not in (0, 1) or type(signature) is not str or not signature.isascii()
                 or not hmac.compare_digest(signature, self._signature(number, tip, reserved))):
             recovery._deny()
-        return {"number": number, "mac": tip}
+        return {"number": number, "mac": tip}, bool(reserved)
+
+    def _read(self, db, *, pending):
+        receipt, reserved = self._read_state(db)
+        if reserved != pending:
+            recovery._deny()
+        return receipt
 
     @contextmanager
     def _pin(self, expected=None):
@@ -173,28 +184,48 @@ class DecimalReceiptStore:
             return tip
 
     def promote_frozen(self, witness, path, *, reserved_receipt, prepared_receipt,
-                       operator_record, journal_key, anchor_key):
+                       operator_record, journal_key, anchor_key, checkpoint=None):
         """Retain an explicitly approved prepared target without writing the ledger.
 
         Both receipts come from independent review. An exact committed promotion
         can be acknowledged after a lost reply, with the same target reaudited.
+        An independent checkpoint can pin the promotion before local retention.
         """
         self._verify_separation(witness, journal_key, anchor_key)
-        with self._open() as db, witness._open(write=True) as journal:
-            reserved = self._read(db, pending=True)
-            if reserved != reserved_receipt:
-                recovery._deny()
-            witness._read(journal, reserved, exact=False)
+        if checkpoint is not None:
+            checkpoint._verify_separation(self, witness, journal_key, anchor_key)
+        with ExitStack() as locks:
+            external = None
+            if checkpoint is not None:
+                external = locks.enter_context(checkpoint._store._open())
+            db = locks.enter_context(self._open())
+            journal = locks.enter_context(witness._open(write=True))
+            retained, pending = self._read_state(db)
+            witness._read(journal, reserved_receipt, exact=False)
             record, tip, claimed = witness._read(journal, prepared_receipt, exact=False)
-            if prepared_receipt["number"] not in (reserved["number"], reserved["number"] + 1):
+            if prepared_receipt["number"] not in (reserved_receipt["number"],
+                                                  reserved_receipt["number"] + 1):
                 recovery._deny()
             witness._verify_record(operator_record)
             if operator_record["status"] != "ACTIVE":
                 recovery._deny()
+            number, _, _, _, mac = witness._next_event(prepared_receipt, "record", operator_record)
+            promoted = {"number": number, "mac": mac}
+            anchored = None
+            if checkpoint is not None:
+                anchored = checkpoint._store._read(external, pending=False)
+                if (anchored not in (prepared_receipt, promoted)
+                        or (anchored == promoted and tip != promoted)):
+                    recovery._deny()
+            if pending:
+                if retained != reserved_receipt:
+                    recovery._deny()
+            elif anchored != promoted or retained != promoted:
+                recovery._deny()
             publish = tip == prepared_receipt
             if publish:
                 custody._check_transition(record, operator_record, claimed)
-            elif tip["number"] != prepared_receipt["number"] + 1 or record != operator_record:
+            elif tip != promoted or record != operator_record:
                 recovery._deny()
 
             source = recovery._source(path)
@@ -212,8 +243,12 @@ class DecimalReceiptStore:
                     witness._read(readback, tip, exact=True)
                     if not same_ledger() or not same_witness():
                         recovery._deny()
-                    self._save(db, tip, pending=False)
-                    db.commit()
+                    if checkpoint is not None and anchored == prepared_receipt:
+                        checkpoint._store._save(external, tip, pending=False)
+                        external.commit()
+                    if pending:
+                        self._save(db, tip, pending=False)
+                        db.commit()
                 return tip
 
     def _retain_claim(self, expected, claim):
@@ -260,3 +295,38 @@ class DecimalReceiptStore:
                 custody_key=witness.custody_key, operator_key=witness.operator_key,
                 ledger_path=ledger_path, journal_key=journal_key, anchor_key=anchor_key,
                 _require_prepared_target=True)
+
+
+class DecimalPromotionCheckpoint:
+    """Separately keyed, one-promotion compare-and-swap checkpoint rehearsal."""
+
+    def __init__(self, path, *, checkpoint_key):
+        self._store = DecimalReceiptStore(path, receipt_key=checkpoint_key,
+                                         _protocol=_PROMOTION_PROTOCOL)
+
+    def _verify_separation(self, receipts, witness, *keys):
+        self._store._verify_separation(witness, receipts.key, *keys)
+        if self._store.path.parent == receipts.path.parent:
+            recovery._deny()
+
+    @classmethod
+    def create(cls, path, *, checkpoint_key, receipts, witness, reserved_receipt,
+               prepared_receipt):
+        """Provision before promotion at an independently reviewed prepared tip."""
+        checkpoint = cls(path, checkpoint_key=checkpoint_key)
+        checkpoint._verify_separation(receipts, witness)
+        with receipts._open() as db, witness._open(write=False) as journal:
+            if receipts._read(db, pending=True) != reserved_receipt:
+                recovery._deny()
+            witness._read(journal, reserved_receipt, exact=False)
+            record, tip, claimed = witness._read(journal, prepared_receipt, exact=True)
+            if (tip["number"] not in (reserved_receipt["number"], reserved_receipt["number"] + 1)
+                    or record["status"] not in recovery._PENDING
+                    or (record["status"] == "ROTATION_PENDING" and not claimed)):
+                recovery._deny()
+            checkpoint._store._initialize(tip)
+        return checkpoint
+
+    def latest(self):
+        """Read the authenticated checkpoint held by the separate custodian."""
+        return self._store.latest()
