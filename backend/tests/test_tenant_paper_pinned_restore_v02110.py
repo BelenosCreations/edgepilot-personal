@@ -659,6 +659,10 @@ class PinnedPaperRestoreTests(unittest.TestCase):
             for _ in range(2):
                 self.assertEqual(inspect(second_token, second_pin, second_policies),
                                  {"quarantineVerified": True, "additionalLinkPresent": link_remains})
+            for unavailable_pin in (None, first_pin):
+                for operation in (inspect, cleanup):
+                    with self.assertRaises(backup.OfflineBackupDenied):
+                        operation(second_token, unavailable_pin, second_policies)
             with self.assertRaises(backup.OfflineBackupDenied):
                 inspect(first_token, first_pin, self.policies)
             with self.assertRaises(backup.OfflineBackupDenied):

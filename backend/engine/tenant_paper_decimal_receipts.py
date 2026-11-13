@@ -423,8 +423,10 @@ class DecimalRecoveryReceipt:
 
     def inspect_local_terminal(self, receipts, witness, *, reviewed_receipt, operator_record):
         """Verify a published terminal receipt after interruption without changing files."""
-        with self._verified_terminal(receipts, witness, reviewed_receipt, operator_record) as tip:
+        with self._verified_terminal(
+                receipts, witness, reviewed_receipt, operator_record) as (tip, recheck_evidence):
             with receipts._read_published(tip) as info:
+                recheck_evidence()
                 return {"receipt": tip, "additionalLinkPresent": info.st_nlink == 2}
 
     def cleanup_local_terminal_stage(self, staging_path, receipts, witness, *, reviewed_receipt,
@@ -438,7 +440,8 @@ class DecimalRecoveryReceipt:
         stage = DecimalReceiptStore(stage_path, receipt_key=receipts.key)
         try:
             with (stage._lock_staging_directory() as folder_fd,
-                  self._verified_terminal(receipts, witness, reviewed_receipt, operator_record) as tip,
+                  self._verified_terminal(receipts, witness, reviewed_receipt, operator_record)
+                  as (tip, recheck_evidence),
                   receipts._read_published(tip) as verified):
                 # Make the destination name durable before removing its other link.
                 self._sync_receipt_directory(target.parent)
@@ -452,6 +455,7 @@ class DecimalRecoveryReceipt:
                         or any(os.path.lexists(str(path) + suffix)
                                for path in (target, stage_path) for suffix in _SIDECARS)):
                     recovery._deny()
+                recheck_evidence()
                 os.unlink(stage_path.name, dir_fd=folder_fd)
                 os.fsync(folder_fd)
         except OSError:
@@ -460,12 +464,27 @@ class DecimalRecoveryReceipt:
     @contextmanager
     def _verified_terminal(self, receipts, witness, reviewed_receipt, operator_record):
         self._verify_separation(receipts, witness)
-        with (self._store._pin(reviewed_receipt) as tip,
-              witness._open(write=False) as journal):
-            if tip != reviewed_receipt:
-                recovery._deny()
-            self._require_terminal(witness, journal, tip, operator_record)
-            yield tip
+        paths = (self._store.path, witness.path)
+
+        def file_state():
+            return tuple((info.st_dev, info.st_ino, info.st_ctime_ns)
+                         for info in (path.lstat() for path in paths))
+
+        try:
+            original = file_state()
+
+            def recheck_evidence():
+                if file_state() != original:
+                    recovery._deny()
+
+            with (self._store._pin(reviewed_receipt) as tip,
+                  witness._open(write=False) as journal):
+                if tip != reviewed_receipt:
+                    recovery._deny()
+                self._require_terminal(witness, journal, tip, operator_record)
+                yield tip, recheck_evidence
+        except OSError:
+            recovery._deny()
 
     @staticmethod
     def _require_terminal(witness, journal, tip, operator_record):
