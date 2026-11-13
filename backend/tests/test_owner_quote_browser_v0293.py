@@ -18,6 +18,9 @@ class OwnerQuoteBrowserAcceptanceTests(unittest.TestCase):
         self.assertIn('el("loadQuote").addEventListener("click"', JS)
         self.assertIn('  }, "quote"));', JS)
         self.assertIn('Public quote request unavailable (HTTP ', JS)
+        self.assertIn('quoteSpread', JS)
+        self.assertIn('Fresh at receipt is not a live/current price guarantee.', JS)
+        self.assertNotIn('quoteHistory', JS)
         self.assertIn('Quote response could not be verified by the browser.', JS)
         for bad in ("localStorage", "sessionStorage", "indexedDB", "document.cookie",
                     "setInterval(", "setTimeout(", "innerHTML"):
@@ -34,7 +37,7 @@ const begin=js.indexOf('  const readSourcePrice = raw => {');
 const end=js.indexOf('  el("quoteSymbol").addEventListener("input", clearQuote);',begin);
 assert.ok(begin>0 && end>begin);
 const parser=Function('quotePricePattern',js.slice(begin,end)+
- '\nreturn {readSourceTime,validateQuote};')(
+ '\nreturn {readSourceTime,validateQuote,quotedSpread};')(
  /^(?:0|[1-9]\d{0,11})(?:\.\d{1,12})?$/
 );
 assert.equal(parser.readSourceTime('2026-11-12T20:00:00+00:00'),
@@ -59,6 +62,18 @@ assert.equal(q.bid,'200.11');
 assert.equal(q.bidAt,'timestamp unavailable');
 assert.equal(q.askAt,'timestamp unavailable');
 assert.equal(q.twoSidedFresh,false);
+assert.equal(q.spread,'Unavailable');
+assert.throws(()=>parser.validateQuote({...p,twoSidedFresh:true},id,'MSFT','EQUITY'));
+const verified={...p,twoSidedFresh:true,
+ bidTimestamp:'2026-11-12T20:00:01Z',
+ askTimestamp:'2026-11-12T20:00:01Z'};
+assert.equal(parser.validateQuote(verified,id,'MSFT','EQUITY').spread,
+ '0.04 price units');
+assert.equal(parser.quotedSpread('0.000000000001','0.000000000003',true),
+ '0.000000000002 price units');
+assert.equal(parser.quotedSpread('100.10','100.10',true),'0 price units');
+assert.equal(parser.quotedSpread('100.10','100.15',false),'Unavailable');
+assert.throws(()=>parser.quotedSpread('100.15','100.10',true));
 assert.throws(()=>parser.validateQuote({...p,accountId:'cross-account'},id,'MSFT','EQUITY'));
 assert.throws(()=>parser.validateQuote({...p,paperFillEligible:true},id,'MSFT','EQUITY'));
 assert.throws(()=>parser.validateQuote({...p,lastTimestamp:'invalid'},id,'MSFT','EQUITY'));
