@@ -93,7 +93,9 @@ def audit_tenant_paper_ledger(db):
             if (wallet is None or not _canonical_uuid(request_id)
                     or not isinstance(digest, str) or not _SHA.fullmatch(digest)
                     or side not in ("BUY", "SELL") or asset not in _ASSETS
-                    or not isinstance(symbol, str) or not 0 < len(symbol) <= 30
+                    or not isinstance(symbol, str) or not 0 < len(symbol) <= 96
+                    or symbol.strip() != symbol
+                    or not all(c.isalnum() or c in "._:-" for c in symbol)
                     or not isinstance(provider, str) or not provider.strip()
                     or not isinstance(observed, str) or not observed.strip()
                     or type(delta) is not int or type(after) is not int):
