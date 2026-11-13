@@ -1,3 +1,11 @@
+## CURRENT development — v0.2.100 synthetic paper loss-stop latch atomicity, November 12, 2026 (America/New_York)
+
+**Verified starting point:** v0.2.99 main `bf5ec2bc11973d796d8f9c583d9044818313a539` identical to supplied checkpoint, merged-main Actions #43367286446 succeeded, existing Render Starter/1 GB persistent disk service `edgepilot-private-h9tl` deployment `dep-dbr9aiijnfac73977sl0` LIVE at that exact SHA. Prior same-account Public value acceptance and real MSFT quote acceptance are already complete.
+
+**v0.2.100 proposed change:** Dedicated synthetic-only new /dev/shm fixture and HMAC-chained per-user/account policy journal for sticky loss-stop decisions; SQLite BEGIN IMMEDIATE atomicity for fictional OPEN / REALIZE entries, exact integer cents, duplicate request idempotency, fail-before-commit rollback and independent family/account tests. Explicitly disconnected from Flask, dormant paper ledger writer and all production data. Existing encryption, credentials, multi-user architecture and Render deployment unchanged. See PAPER_ATOMIC_LATCH_REHEARSAL_V02100.md.
+
+**Verification to complete:** Exact-head PR Actions, merge only if successful, merged-main Actions and existing Render live at merged main SHA. Next priorities: independent policy/latch backup anti-rollback, key rotation and crash-recovery rehearsal; session-derived identity and market data retention rights require separate approval before any production paper fill. Preserve all disabled real orders, autonomous execution and bank transfers.
+
 ## CURRENT development — v0.2.99 offline realized paper loss-stop preflight, November 12, 2026 (America/New_York)
 
 **Verified base:** v0.2.98 main `72455d35ad02027c195cbccf4684d92f71bdbeac`, exact-head PR #125 Actions #43366420941 passed; merged-main Actions #43366653601 passed. Existing Render Starter service `edgepilot-private-h9tl` with its original 1 GB disk deployed `dep-dbr97ne7bikc73en1h10` LIVE on the same SHA. Previous owner same-account Public value match and real MSFT quote retrieval are complete; no rerun needed for these synthetic changes.
