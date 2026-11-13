@@ -356,6 +356,64 @@ class DecimalRecoveryReceipt:
                 db.commit()
             return receipt
 
+    def retain_terminal(self, receipts, witness, *, expected_receipt, reviewed_receipt,
+                        operator_record):
+        """Retain an explicitly reviewed terminal witness tip after a lost handoff."""
+        self._verify_separation(receipts, witness)
+        with self._store._open() as db, witness._open(write=False) as journal:
+            current = self._store._read(db, pending=False)
+            if current != expected_receipt:
+                recovery._deny()
+            witness._read(journal, current, exact=False)
+            self._require_terminal(witness, journal, reviewed_receipt, operator_record)
+            if reviewed_receipt != current:
+                self._store._save(db, reviewed_receipt, pending=False)
+                db.commit()
+            return reviewed_receipt
+
+    def repair_local_terminal(self, receipts, witness, *, reviewed_receipt, operator_record):
+        """Restore only a terminal local pin from the exact independent and witness tips."""
+        self._verify_separation(receipts, witness)
+        with self._store._pin(reviewed_receipt) as tip:
+            if tip != reviewed_receipt:
+                recovery._deny()
+            local = receipts._open() if os.path.lexists(receipts.path) else nullcontext()
+            with local as db, witness._open(write=False) as journal:
+                self._require_terminal(witness, journal, tip, operator_record)
+                if db is None:
+                    self._publish_missing_local(receipts, tip)
+                else:
+                    previous, pending = receipts._read_state(db)
+                    witness._read(journal, previous, exact=False)
+                    if previous != tip or pending:
+                        receipts._save(db, tip, pending=False)
+                        db.commit()
+                return tip
+
+    @staticmethod
+    def _require_terminal(witness, journal, tip, operator_record):
+        record, _, _ = witness._read(journal, tip, exact=True)
+        if record["status"] != "QUARANTINED" or record != operator_record:
+            recovery._deny()
+
+    @staticmethod
+    def _publish_missing_local(receipts, tip):
+        path = receipts.path
+        receipts._check_directory()
+        with tempfile.TemporaryDirectory(prefix=".decimal-terminal-receipt-", dir=path.parent) as folder:
+            stage = DecimalReceiptStore(Path(folder) / "receipt.db", receipt_key=receipts.key)
+            stage._initialize(tip)
+            with stage._open(read_only=True) as db:
+                if (stage._read(db, pending=False) != tip
+                        or any(os.path.lexists(str(path) + suffix) for suffix in _SIDECARS)):
+                    recovery._deny()
+                os.link(stage.path, path, follow_symlinks=False)
+            fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+
 
 class DecimalPromotionCheckpoint:
     """Separately keyed, one-promotion compare-and-swap checkpoint rehearsal."""
