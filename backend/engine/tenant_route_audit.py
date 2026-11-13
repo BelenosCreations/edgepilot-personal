@@ -34,6 +34,8 @@ IDENTITY_ROUTES=frozenset((
     ("GET","/api/identity/public/read/connections/<connection_id>/accounts"),
     ("POST","/api/identity/public/read/connections/<connection_id>/accounts"),
     ("GET","/api/identity/public/read/accounts/<account_id>/portfolio"),
+    # v0.2.90: manual, independently authenticated, source-only owner quote.
+    ("POST","/api/identity/public/read/accounts/<account_id>/quote"),
 ))
 HTTP={"get":"GET","post":"POST","put":"PUT","delete":"DELETE",
       "patch":"PATCH"}
@@ -109,6 +111,11 @@ def inspect_sources(app_source,worker_source):
         "request.path.startswith('/api/identity/public/connections')",
         "request.path.startswith('/api/identity/public/read/')",
         "tenant_public_read_enabled",
+        # New market-data POST is still under the same-origin identity CSRF
+        # boundary and requires sole-owner scope before and after HTTPS.
+        "same_origin_request()",
+        "@app.post('/api/identity/public/read/accounts/<account_id>/quote')",
+        "solo_owner_portfolio.active_for_owner(TENANT_DB,g.edge_identity)",
     )
     if not all(value in app_source for value in required_guard):
         raise ApiBoundaryError("Legacy/identity authorization boundary has changed")
