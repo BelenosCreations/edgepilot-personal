@@ -4,6 +4,7 @@
   let ownerSession = null;
   let revision = 0;
   let busy = false;
+  let historyRevision = 0;
   // Ephemeral, selected-account-only comparison: never sent to EdgePilot or Public.
   let snapshotBalance = null;
   let snapshotAccount = null;
@@ -70,9 +71,16 @@
     el("quoteEvidence").textContent =
       "No quote requested. Provider timestamps, not device retrieval time, determine whether observations are current.";
   }
+  function clearHistory() {
+    historyRevision += 1;
+    el("historyRows").replaceChildren();
+    el("historyTable").hidden = true;
+    el("historyEvidence").textContent = "No history loaded.";
+  }
   function clearSnapshot() {
     revision += 1;
     clearQuote();
+    clearHistory();
     snapshotBalance = null;
     snapshotAccount = null;
     el("publicAppValue").value = "";
@@ -93,6 +101,7 @@
     el("accountChoice").replaceChildren();
     el("loadPortfolio").disabled = true;
     el("loadQuote").disabled = true;
+    el("loadHistory").disabled = true;
   }
   function validatePortfolio(data, selectedId) {
     if (!data || data.accountId !== selectedId ||
@@ -118,6 +127,7 @@
     el("accountChoice").replaceChildren();
     el("loadPortfolio").disabled = true;
     el("loadQuote").disabled = true;
+    el("loadHistory").disabled = true;
     clearSnapshot();
     const current = revision;
     const data = await api("/api/identity/accounts");
@@ -151,6 +161,7 @@
     }
     el("loadPortfolio").disabled = false;
     el("loadQuote").disabled = false;
+    el("loadHistory").disabled = false;
     setStatus("Verified account found. Select Retrieve read-only snapshot to contact Public.");
   }
   async function run(action, context = "read") {
@@ -159,6 +170,7 @@
     el("reloadAccounts").disabled = true;
     el("loadPortfolio").disabled = true;
     el("loadQuote").disabled = true;
+    el("loadHistory").disabled = true;
     el("signOut").disabled = true;
     try {
       await action();
@@ -184,7 +196,7 @@
       el("signOut").disabled = false;
       el("loadPortfolio").disabled =
         !ownerSession || !accountIdPattern.test(el("accountChoice").value);
-      el("loadQuote").disabled =
+      el("loadQuote").disabled = el("loadHistory").disabled =
         !ownerSession || !accountIdPattern.test(el("accountChoice").value);
     }
   }
@@ -361,8 +373,62 @@
     return {last,bid,ask,lastAt,received,bidAt,askAt,spread,relativeSpread,
             lastFresh:data.lastFresh,twoSidedFresh:data.twoSidedFresh};
   }
-  el("quoteSymbol").addEventListener("input", clearQuote);
-  el("quoteType").addEventListener("change", clearQuote);
+  function clearMarketResearch() {
+    clearQuote();
+    clearHistory();
+  }
+  el("quoteSymbol").addEventListener("input", clearMarketResearch);
+  el("quoteType").addEventListener("change", clearMarketResearch);
+  el("historyPeriod").addEventListener("change", clearHistory);
+  el("loadHistory").addEventListener("click", () => run(async () => {
+    const id = el("accountChoice").value;
+    const symbol = el("quoteSymbol").value.trim().toUpperCase();
+    const type = el("quoteType").value;
+    const period = el("historyPeriod").value;
+    if (!ownerSession || !accountIdPattern.test(id) || !quoteSymbolPattern.test(symbol))
+      throw new Error("Choose a valid Public symbol and account");
+    clearHistory();
+    const current = historyRevision;
+    try {
+      const data = await api("/api/identity/public/read/accounts/" +
+        encodeURIComponent(id) + "/market-history", "POST", ownerSession.csrf,
+        {symbol, type, period});
+      if (current !== historyRevision || !ownerSession) return;
+      if (!data || data.accountId !== id || data.symbol !== symbol ||
+          data.assetClass !== type || data.period !== period || data.provider !== "Public API" ||
+          data.source !== "Get bars v2" || data.readOnly !== true ||
+          data.dataPersisted !== false || data.ordersEnabled !== false ||
+          data.transfersEnabled !== false || data.paperFillEligible !== false ||
+          !Array.isArray(data.bars) || data.bars.length !== data.barCount ||
+          data.bars.length < 1 || data.bars.length > 5000)
+        throw new Error("Unverified Public history");
+      const received = readSourceTime(data.receivedAt);
+      const volumePattern = type === "CRYPTO" ? /^\d{1,19}(?:\.\d{1,18})?$/ : /^\d{1,19}$/;
+      const rows = data.bars.slice().reverse().map(bar => {
+        const when = readSourceTime(bar.timestamp);
+        const prices = [bar.open, bar.high, bar.low, bar.close].map(readSourcePrice);
+        if (prices.includes("Not provided by Public") ||
+            typeof bar.volume !== "string" || !volumePattern.test(bar.volume))
+          throw new Error("Incomplete source bar");
+        const row = document.createElement("tr");
+        for (const value of [when, ...prices, bar.volume]) {
+          const cell = document.createElement("td");
+          cell.textContent = value;
+          row.appendChild(cell);
+        }
+        return row;
+      });
+      el("historyRows").replaceChildren(...rows);
+      el("historyTable").hidden = false;
+      el("historyEvidence").textContent = "Public API · " + symbol + " · " +
+        data.barCount + " source bars · received " + received;
+      setStatus("Public price history retrieved.");
+    } catch (error) {
+      if (current === historyRevision)
+        el("historyEvidence").textContent = "Public history unavailable for this request.";
+      throw error;
+    }
+  }));
   el("loadQuote").addEventListener("click", () => run(async () => {
     const id = el("accountChoice").value;
     const symbol = el("quoteSymbol").value.trim().toUpperCase();

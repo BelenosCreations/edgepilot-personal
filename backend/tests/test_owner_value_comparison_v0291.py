@@ -34,7 +34,7 @@ class OwnerValueComparisonTests(unittest.TestCase):
                           "innerHTML", "setInterval(", "setTimeout("):
             self.assertNotIn(forbidden, JS)
         # The new manual comparison must not introduce additional API access.
-        self.assertEqual(JS.count('"/api/identity/public/read/accounts/" +'), 2)
+        self.assertEqual(JS.count('"/api/identity/public/read/accounts/" +'), 3)
 
     @unittest.skipUnless(shutil.which("node"), "Node runtime not present")
     def test_exact_cent_math_using_actual_frontend_functions(self):

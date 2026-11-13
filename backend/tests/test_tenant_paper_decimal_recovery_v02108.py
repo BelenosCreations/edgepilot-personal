@@ -304,8 +304,10 @@ class DecimalRecoveryTests(unittest.TestCase):
     def test_recovery_is_absent_from_runtime_imports(self):
         backend = Path(__file__).resolve().parents[1]
         runtime = [backend / "app.py", *sorted((backend / "engine").glob("*.py"))]
-        offline = {Path(recovery.__file__), Path(archive.__file__)}
+        custody = backend / "engine" / "tenant_paper_decimal_custody.py"
+        offline = {Path(recovery.__file__), Path(archive.__file__), custody}
         for path in set(runtime) - offline:
             content = path.read_text(encoding="utf-8")
             self.assertNotIn("tenant_paper_decimal_recovery", content)
             self.assertNotIn("tenant_paper_decimal_archive", content)
+            self.assertNotIn("tenant_paper_decimal_custody", content)

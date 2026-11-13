@@ -1,3 +1,13 @@
+## v0.2.109 — 2026-11-13 America/New_York — Synthetic recovery custody and owner history
+
+**Added** — Offline signed evidence journal, durable SQLite compare-and-swap publication, independent receipt readback and a consumed rotation claim across process interruption. Manual Public stock, ETF and crypto history on the owner dashboard uses current session, CSRF and linked account checks.
+
+**Changed** — The history validator excludes chart lead-in intervals, supports exact fractional crypto volume and returns source values for the dashboard. The history view requests a bounded one-week or one-month series and holds it for the session.
+
+**Tests** — Fifteen new synthetic recovery and market-history tests. Extended the owner HTTP pilot test to exercise history, CSRF and sole-owner denial.
+
+**Limitations** — Provider permission is a development assumption. Real owner history and independently operated custody remain unverified. Production paper fills, live trading, autonomous orders and transfers remain disabled.
+
 ## v0.2.108 — 2026-11-13 America/New_York — Offline Decimal recovery and Public data-rights review
 
 **Added** — Independent operator records and prepared checkpoint transitions for synthetic fractional fixtures. The restore rehearsal authenticates explicit operator approval and independently audits Fernet backups before no-replace publication.

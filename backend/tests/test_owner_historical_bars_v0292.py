@@ -19,7 +19,9 @@ def sample():
              "open":"100.50","high":"101.50","low":"100.11",
              "close":"101.12","volume":"101"},
         ]},
-        "leadingFill": {"value":"1234.00", "count":10},
+        "leadingFill": {"value":"1234.00", "count":10,
+                        "startTimestamp":"2026-11-12T18:00:00Z",
+                        "endTimestamp":"2026-11-12T19:59:59Z"},
     }
 
 

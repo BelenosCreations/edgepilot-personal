@@ -29,6 +29,11 @@ label{display:block;font-weight:600;font-size:.9rem;margin-top:12px}
 .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .tile{background:#1b2d46;border-radius:12px;padding:15px;min-width:0}
 .tile small{display:block;color:#b8c7d5}
+.history-table{overflow:auto;max-height:22rem}
+.history-table table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;white-space:nowrap}
+.history-table th,.history-table td{text-align:right;padding:8px;border-bottom:1px solid #344761}
+.history-table th:first-child,.history-table td:first-child{text-align:left}
+.history-table thead{position:sticky;top:0;background:#142238}
 .metric{font-size:1.8rem;font-weight:760;overflow-wrap:anywhere}
 .chip{display:inline-block;background:#244a42;border-radius:90px;padding:5px 10px;font-size:.8rem;color:#b9fbe5}
 .alert{border-left:3px solid #e3a45d;padding:10px 12px;background:#29313d}
@@ -116,10 +121,25 @@ label{display:block;font-weight:600;font-size:.9rem;margin-top:12px}
       <p class="muted small">Bid–ask spread is computed from Public-reported prices only when both sides have provider timestamps fresh at EdgePilot receipt. The absolute value is in quoted price units; the relative value divides the source difference by the source midpoint and expresses it in basis points (1 bp = 0.01%). Neither is a fee, expected return, liquidity guarantee or fillable price. Both are unavailable for stale, untimed, missing or crossed books. Fresh at receipt does not mean live now.</p>
       <p class="alert small">Public may return stale or unavailable quotes. Data retention and paper execution require separate permission. <a href="https://public.com/api/docs/resources/market-data/get-quotes" target="_blank" rel="noopener noreferrer">Quote documentation</a> · <a href="https://public.com/disclosures/individual-api-program" target="_blank" rel="noopener noreferrer">Public API terms</a></p>
     </section>
+    <section class="panel" aria-labelledby="historyHeading">
+      <h2 id="historyHeading">Public price history</h2>
+      <p class="muted small">Use the symbol and category above to retrieve Public’s historical bars. Equity results use Public’s regular-market series. Prices are shown as supplied. Coverage and corporate-action adjustments may vary.</p>
+      <label for="historyPeriod">History period</label>
+      <select id="historyPeriod"><option value="WEEK">One week</option><option value="MONTH">One month</option></select>
+      <p><button id="loadHistory" type="button" disabled>Retrieve price history</button></p>
+      <p class="muted small" id="historyEvidence" role="status">No history loaded.</p>
+      <div class="history-table" id="historyTable" role="region" aria-label="Public price history" tabindex="0" hidden>
+        <table aria-label="Source-reported historical prices and volume">
+          <thead><tr><th scope="col">Time (UTC)</th><th scope="col">Open</th><th scope="col">High</th><th scope="col">Low</th><th scope="col">Close</th><th scope="col">Volume</th></tr></thead>
+          <tbody id="historyRows"></tbody>
+        </table>
+      </div>
+      <a class="small" href="https://public.com/api/docs/resources/market-data/get-bars-v2" target="_blank" rel="noopener noreferrer">Public historical data documentation</a>
+    </section>
     <section class="panel">
       <h2>Trading safeguards</h2>
       <p class="alert">Live trading, autonomous orders and bank transfers remain disabled. This page cannot issue orders or transfer funds.</p>
-      <p class="muted small">Market analysis, reliable price histories, account performance and risk-controlled paper trading remain separate development milestones. No chart or returns are fabricated from a single snapshot.</p>
+      <p class="muted small">The portfolio panel shows a point-in-time account snapshot. Historical bars above come from Public and carry their own timestamps. No chart or returns are fabricated from a single snapshot.</p>
       <button type="button" id="signOut">Sign out of EdgePilot</button>
     </section>
   </section>
