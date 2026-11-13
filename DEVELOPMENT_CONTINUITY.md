@@ -1,3 +1,11 @@
+## CURRENT development — v0.2.97 dormant paper event-time audit, November 12, 2026 (America/New_York)
+
+**Verified base:** v0.2.96 PR #123 merged at main `c7b3170292f7c98324bcb569c1605664d1edbba7`; PR CI #43363374078 passed, merged-main GitHub Actions #43363596703 passed, and the same Render Starter service `edgepilot-private-h9tl` auto-deployed `dep-dbr8qm942hec73bb4pbg` LIVE. Its 1 GB disk and credentials remain unchanged. Previous owner Public snapshot same-account cent match and MSFT quote acceptance are complete; no new manual acceptance needed for offline source changes.
+
+**v0.2.97 scope:** The previously dormant synthetic paper archive auditor verifies UTC event observed/created time syntax and chronological order before permitting sealing/restoration. Refuse corrupt source-observation chronology despite intact SQLite relations or otherwise valid arithmetic. Preserve all per-user and per-account isolation, revalidated quarantine, no-overwrite publication and production-disabled execution. No inference of market-data rights or real provider authenticity from an internally valid timestamp. See PAPER_EVENT_TIME_INTEGRITY_V0297.md.
+
+**Next:** Verify PR CI, merge, post-merge GitHub Actions and matching live Render deployment. Continue production backup/restore operator safeguards offline and design explicitly approved quote-retention and server-authenticated identity paper controls before even considering active paper fills. Do not activate new paid services, autonomous brokerage execution or bank transfers.
+
 ## CURRENT development — v0.2.96 owner quote relative-spread research, November 12, 2026 (America/New_York)
 
 **Verified base:** v0.2.95 main `2addc778425b2852677988ef4b0d6d6e5dc6c45c`, GitHub Actions #43359984066 passed, existing Render `edgepilot-private-h9tl` deployment `dep-dbr8avu8bjmc73bgecgg` confirmed LIVE at that exact commit. Service remains Starter with the same 1 GB disk. Earlier owner comparison and real MSFT Public quote acceptance are complete and preserved; do not repeat absent regression.

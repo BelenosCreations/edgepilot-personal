@@ -158,6 +158,44 @@ class PaperRecoveryRehearsal(unittest.TestCase):
         with self.assertRaises(tenant_backup_rehearsal.OfflineBackupDenied):
             tenant_backup_rehearsal.sealed_snapshot(self.path, self.key)
 
+    def test_synthetic_event_utc_timestamp_integrity_and_chronology(self):
+        # An authenticated encrypted archive can still carry an internally
+        # inconsistent timestamp. The audit must reject it before sealing or
+        # publishing a recovered fixture, without relying on provider rights.
+        with sqlite3.connect(self.path) as db:
+            original = db.execute("""SELECT observed_at,created_at
+                FROM tenant_paper_events ORDER BY rowid LIMIT 1""").fetchone()
+        self.assertEqual(self.check()["verifiedAssumedFills"], 3)
+        cases = (
+            ("observed_at", "not-a-timestamp"),
+            ("observed_at", "2026-11-12T19:59:55"),
+            ("observed_at", "2026-11-12T14:59:55-05:00"),
+            ("observed_at", "2026-02-30T19:59:55Z"),
+            ("observed_at", "2030-01-01T00:00:00Z"),
+            ("created_at", "2026-11-12T19:59:54Z"),
+            ("created_at", "2026-11-12T19:59:56"),
+            ("created_at", "2026-11-12T14:59:56-05:00"),
+        )
+        for field, value in cases:
+            with self.subTest(field=field, value=value):
+                with sqlite3.connect(self.path) as db:
+                    db.execute("""UPDATE tenant_paper_events SET """ + field +
+                               """=? WHERE rowid=(SELECT MIN(rowid)
+                               FROM tenant_paper_events)""", (value,))
+                try:
+                    with self.assertRaises(audit.PaperRecoveryDenied):
+                        self.check()
+                    with self.assertRaises(tenant_backup_rehearsal.OfflineBackupDenied):
+                        tenant_backup_rehearsal.sealed_snapshot(self.path, self.key)
+                finally:
+                    with sqlite3.connect(self.path) as db:
+                        db.execute("""UPDATE tenant_paper_events SET
+                            observed_at=?,created_at=? WHERE rowid=
+                            (SELECT MIN(rowid) FROM tenant_paper_events)""",
+                            original)
+        self.assertEqual(self.check()["verifiedAssumedFills"], 3)
+        self.assertTrue(tenant_backup_rehearsal.sealed_snapshot(self.path, self.key))
+
     def test_partial_paper_schema_denied_without_touching_other_tables(self):
         with sqlite3.connect(self.path) as db:
             db.execute("DROP TABLE tenant_paper_positions")
