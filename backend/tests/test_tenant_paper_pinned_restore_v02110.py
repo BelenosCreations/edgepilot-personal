@@ -640,14 +640,30 @@ class PinnedPaperRestoreTests(unittest.TestCase):
                         operation(token, pin, policies)
                     self.assertTrue(stage.samefile(self.destination))
                     self.assertEqual(self.destination.read_bytes(), published)
-        for remove in (False, True):
-            self.interrupt_cleanup(
-                lambda: cleanup(second_token, second_pin, second_policies), remove=remove)
+        fsync = os.fsync
+        for failed_sync in (1, 2):
+            calls = []
+
+            def fail_directory_sync(fd):
+                self.assertTrue(os.path.samestat(os.fstat(fd), self.destination.parent.stat()))
+                calls.append(stage.exists())
+                if len(calls) == failed_sync:
+                    raise OSError("synthetic directory sync failure")
+                fsync(fd)
+
+            with patch.object(backup.os, "fsync", side_effect=fail_directory_sync):
+                with self.assertRaises(backup.OfflineBackupDenied):
+                    cleanup(second_token, second_pin, second_policies)
+            self.assertEqual(calls, [True] if failed_sync == 1 else [True, False])
+            link_remains = failed_sync == 1
+            self.assertEqual(inspect(second_token, second_pin, second_policies),
+                             {"quarantineVerified": True, "additionalLinkPresent": link_remains})
+            with self.assertRaises(backup.OfflineBackupDenied):
+                inspect(first_token, first_pin, self.policies)
             with self.assertRaises(backup.OfflineBackupDenied):
                 cleanup(first_token, first_pin, self.policies)
-            self.assertEqual(stage.exists(), not remove)
-            self.assertEqual(inspect(second_token, second_pin, second_policies),
-                             {"quarantineVerified": True, "additionalLinkPresent": not remove})
+            self.assertEqual(stage.exists(), link_remains)
+            self.assertEqual(self.destination.read_bytes(), published)
         self.assertFalse(stage.exists())
         self.assertTrue(os.path.samestat(published_inode, self.destination.stat()))
         self.assertEqual(self.destination.read_bytes(), published)

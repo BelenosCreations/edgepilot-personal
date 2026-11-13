@@ -1,3 +1,13 @@
+## v0.2.122 — 2026-11-13 America/New_York — Interrupted recovery publication
+
+**Added** — Offline read-only inspection verifies a published terminal receipt against the independent receipt and signed witness. The response reports whether an additional hard link is present.
+
+**Changed** — Second-generation restore tests inject directory sync errors before and after unlink. Synthetic Public history coverage verifies source attribution and the requested period in the HTTP response.
+
+**Tests** — All 885 local tests passed, including 114 focused tests.
+
+**Limitations** — Terminal receipt staging cleanup remains open. Combined rollback, cross-resource power loss and owner-device Public history acceptance remain open. Production execution remains disabled.
+
 ## v0.2.121 — 2026-11-13 America/New_York — Terminal quarantine readback
 
 **Added** — Explicit terminal witness readback can advance the independent receipt after an interrupted local handoff. An exact terminal receipt and matching witness can repair a missing, stale or frozen local receipt.
