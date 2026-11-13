@@ -1,3 +1,13 @@
+## v0.2.119 — 2026-11-13 America/New_York — Recovery evidence across generations
+
+**Added** — Rehearsed a process exit during a second promotion and verified that the advanced witness rejects the first signed export even with matching older local resources.
+
+**Changed** — The second tenant restore rehearsal checks request digests and historical loss stops by account. Browser coverage checks that Public history clears on account changes and page exit.
+
+**Tests** — All 880 local tests passed, including 95 focused tests.
+
+**Limitations** — Combined rollback and cross-resource power loss remain open. Real Public history acceptance is pending on the owner's device. Production execution remains disabled.
+
 ## v0.2.118 — 2026-11-13 America/New_York — Repeated offline recovery rehearsal
 
 **Added** — Regression coverage for interrupted and concurrent checkpoint cleanup, signed terminal quarantine, and a second pinned restore after synthetic tenant re-enrollment.

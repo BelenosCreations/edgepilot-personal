@@ -32,6 +32,7 @@ function el(id) {
   return elements.get(id);
 }
 const id = "00000000-0000-0000-0000-000000000001";
+const otherId = "00000000-0000-0000-0000-000000000002";
 const reply = (status, data) => ({ok: status === 200, status, json: async () => data});
 const timestamp = "2026-11-12T19:00:00Z";
 const result = period => ({
@@ -43,21 +44,24 @@ const result = period => ({
           close: "201.10", volume: "100"}]
 });
 const pending = [];
+const windowHandlers = {};
 const fetch = async (path, options) => {
   assert.equal(options.cache, "no-store");
   if (path === "/api/identity/session")
     return reply(200, {ok: true, csrf: "synthetic", user: {role: "owner", userId: id}});
   if (path === "/api/identity/accounts")
     return reply(200, {readOnly: true, discoveryOnlyPilot: true,
-                       soloOwnerPortfolioAvailable: true, accounts: [{accountId: id}]});
-  assert.equal(path, "/api/identity/public/read/accounts/" + id + "/market-history");
+                       soloOwnerPortfolioAvailable: true,
+                       accounts: [{accountId: id}, {accountId: otherId}]});
+  assert.equal(path, "/api/identity/public/read/accounts/" + el("accountChoice").value +
+                    "/market-history");
   assert.equal(options.method, "POST");
   assert.equal(options.headers["X-Edge-Identity-CSRF"], "synthetic");
   return new Promise(resolve => pending.push({resolve, payload: JSON.parse(options.body)}));
 };
 vm.runInNewContext(fs.readFileSync(process.argv[1], "utf8"), {
   document: {getElementById: el, createElement: () => new Element()},
-  window: {addEventListener() {}}, fetch
+  window: {addEventListener(name, handler) { windowHandlers[name] = handler; }}, fetch
 });
 (async () => {
   await new Promise(resolve => setImmediate(resolve));
@@ -95,6 +99,31 @@ vm.runInNewContext(fs.readFileSync(process.argv[1], "utf8"), {
   await stale;
   assert.equal(el("historyTable").hidden, true);
   assert.equal(el("historyRows").children.length, 0);
+
+  const previousAccount = el("loadHistory").fire("click");
+  el("accountChoice").value = otherId;
+  el("accountChoice").fire("change");
+  pending.shift().resolve(reply(200, result("WEEK")));
+  await previousAccount;
+  assert.equal(el("historyTable").hidden, true);
+  assert.equal(el("historyRows").children.length, 0);
+
+  const currentAccount = el("loadHistory").fire("click");
+  pending.shift().resolve(reply(200, {...result("WEEK"), accountId: otherId}));
+  await currentAccount;
+  assert.equal(el("historyTable").hidden, false);
+  windowHandlers.pagehide();
+  assert.equal(el("historyTable").hidden, true);
+  assert.equal(el("historyRows").children.length, 0);
+
+  const previousPage = el("loadHistory").fire("click");
+  windowHandlers.pagehide();
+  pending.shift().resolve(reply(200, {...result("WEEK"), accountId: otherId}));
+  await previousPage;
+  assert.equal(el("historyTable").hidden, true);
+  assert.equal(el("historyEvidence").textContent, "No history loaded.");
+  el("accountChoice").value = id;
+  el("accountChoice").fire("change");
 
   const denied = el("loadHistory").fire("click");
   pending.shift().resolve(reply(404, {privateDiagnostic: "ignore me"}));

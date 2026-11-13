@@ -8,14 +8,14 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 
 ## Verification and checkpoint
 
-- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.118 from the merged PR for `development/v0.2.118-recovery-rehearsals`. A later verified main checkpoint takes precedence.
-- Verified v0.2.117 baseline. PR #144 head `2bcc9252b44ecac9f8dc0ebbda732cb20b39fbea` passed [Actions #43476209547](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43476209547). Main `baf7058941a8f1260ef5c591134c8578ffee5a18` passed [Actions #43476604533](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43476604533), matched live Render deployment `dep-dbrkradbedkc73bfgei0`, and returned HTTP 200 from `/healthz`. No PRs were open.
-- v0.2.118 tests checkpoint cleanup across process exit and concurrency, plus a second pinned tenant restore after re-enrollment. See [milestone notes](PAPER_REPEAT_RECOVERY_V02118.md).
+- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.119 from the merged PR for `development/v0.2.119-recovery-evidence`. A later verified main checkpoint takes precedence.
+- Verified v0.2.118 baseline. PR #145 head `46358645fae81bd76183195fdc6138f0999cc804` passed [Actions #43478544712](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43478544712). Main `4d44033e162f5638484b701c97bf74e98b2b7e51` passed [Actions #43478937561](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43478937561), matched live Render deployment `dep-dbrl23lg1s2s73clviog`, and returned HTTP 200 from `/healthz`. No PRs were open.
+- v0.2.119 verifies rejection of stale exports across successive promotions and account-scoped evidence across repeat restores. See [milestone notes](PAPER_RECOVERY_EVIDENCE_V02119.md).
 
 ## Next safe development batch
 
-1. Review the remaining boundaries between the independent checkpoint, witness and local receipt store. Rehearse stale exports against an advanced witness and the exact latest evidence after interruption. Preserve signed terminal quarantine and refusal of ambiguous ledger state. Combined rollback and cross-resource power-loss consistency remain open.
-2. Verify that separately retained latest archive pins reject older restore generations and that second-generation archived request digests and historical loss stops remain scoped to their original paper accounts. Preserve existing restore paths.
+1. Evaluate a separately retained monotonic receipt for recovery when the witness and local receipt store are rolled back together. Rehearse retaining terminal quarantine evidence across checkpoint loss. Continue to refuse ambiguous older ledgers. Combined rollback of every retained resource and cross-resource power loss remain open.
+2. Rehearse interrupted publication of a second-generation synthetic archive under the separately retained latest pin. Verify that stale evidence cannot inspect or clean a newer publication and that exact-pin cleanup preserves scoped requests, historical stops and quarantined bindings.
 3. Continue source-attributed and session-only Public research under the user's instruction to assume provider permission. Use real history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance). Earlier snapshot and MSFT quote acceptance still apply.
 
 ## Restrictions and workflow
@@ -26,6 +26,12 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.118 — 2026-11-13 — Repeated offline recovery rehearsal
+
+Starting checkpoint independently verified. PR #144 head `2bcc9252b44ecac9f8dc0ebbda732cb20b39fbea` passed [Actions #43476209547](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43476209547). Main `baf7058941a8f1260ef5c591134c8578ffee5a18` passed [Actions #43476604533](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43476604533), matched live Render deployment `dep-dbrkradbedkc73bfgei0`, and returned HTTP 200 from `/healthz`. No PRs were open.
+
+Checkpoint cleanup survives process exit and concurrent attempts. A second pinned tenant restore after re-enrollment preserves prior revocations and paper records. See [repeated offline recovery](PAPER_REPEAT_RECOVERY_V02118.md).
 
 ## v0.2.117 — 2026-11-13 — Reviewed checkpoint staging cleanup
 
