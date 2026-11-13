@@ -9,6 +9,8 @@
   const symbolPattern = /^[A-Za-z0-9.^_-]{1,30}$/;
   const moneyPattern = /^\d+(?:\.\d{1,2})?$/;
   const unitsPattern = /^-?\d+(?:\.\d{1,18})?$/;
+  const quoteSymbolPattern = /^[A-Z0-9.^_-]{1,30}$/;
+  const quotePricePattern = /^(?:0|[1-9]\d{0,11})(?:\.\d{1,12})?$/;
 
   const setStatus = (message, error = false) => {
     el("status").textContent = message;
@@ -26,7 +28,7 @@
       throw new Error("Public position units could not be verified");
     return raw;
   };
-  async function api(path, method = "GET", csrf = "") {
+  async function api(path, method = "GET", csrf = "", payload = null) {
     const headers = method === "POST"
       ? {"Content-Type":"application/json", "X-Edge-Identity-CSRF":csrf} : {};
     const response = await fetch(path, {
@@ -34,7 +36,7 @@
       headers,
       credentials:"same-origin",
       cache:"no-store",
-      body:method === "POST" ? "{}" : undefined
+      body:method === "POST" ? JSON.stringify(payload === null ? {} : payload) : undefined
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -44,8 +46,16 @@
     }
     return result;
   }
+  function clearQuote() {
+    el("quoteLast").textContent = "Not loaded";
+    el("quoteBid").textContent = "Not loaded";
+    el("quoteAsk").textContent = "Not loaded";
+    el("quoteEvidence").textContent =
+      "No quote requested. Provider timestamps, not device retrieval time, determine whether observations are current.";
+  }
   function clearSnapshot() {
     revision += 1;
+    clearQuote();
     el("portfolioValue").textContent = "Not loaded";
     el("portfolioPositions").textContent = "Not loaded";
     el("positions").replaceChildren();
@@ -59,6 +69,7 @@
     el("signedOut").hidden = false;
     el("accountChoice").replaceChildren();
     el("loadPortfolio").disabled = true;
+    el("loadQuote").disabled = true;
   }
   function validatePortfolio(data, selectedId) {
     if (!data || data.accountId !== selectedId ||
@@ -83,6 +94,7 @@
     const stamp = ++revision;
     el("accountChoice").replaceChildren();
     el("loadPortfolio").disabled = true;
+    el("loadQuote").disabled = true;
     clearSnapshot();
     const current = revision;
     const data = await api("/api/identity/accounts");
@@ -115,6 +127,7 @@
       el("accountChoice").appendChild(option);
     }
     el("loadPortfolio").disabled = false;
+    el("loadQuote").disabled = false;
     setStatus("Verified account found. Select Retrieve read-only snapshot to contact Public.");
   }
   async function run(action) {
@@ -122,6 +135,7 @@
     busy = true;
     el("reloadAccounts").disabled = true;
     el("loadPortfolio").disabled = true;
+    el("loadQuote").disabled = true;
     el("signOut").disabled = true;
     try {
       await action();
@@ -137,6 +151,8 @@
       el("reloadAccounts").disabled = false;
       el("signOut").disabled = false;
       el("loadPortfolio").disabled =
+        !ownerSession || !accountIdPattern.test(el("accountChoice").value);
+      el("loadQuote").disabled =
         !ownerSession || !accountIdPattern.test(el("accountChoice").value);
     }
   }
@@ -186,6 +202,80 @@
       "Retrieved " + new Date().toLocaleString() +
       " on this device; not a market quote timestamp. Read-only, no orders or transfers.";
     setStatus("Read-only Public portfolio retrieved. No trade or bank action occurred.");
+  }));
+  // One intentional POST; no timers, bulk quote retrieval, client caching,
+  // paper fills, account aggregation or execution capabilities.
+  const readSourcePrice = raw => {
+    if (raw === null) return "Not provided by Public";
+    if (typeof raw !== "string" || !quotePricePattern.test(raw) ||
+        raw.length > 48 || Number(raw) <= 0)
+      throw new Error("Unverified quote price");
+    return raw;
+  };
+  const readSourceTime = raw => {
+    if (typeof raw !== "string" || raw.length > 40 ||
+        !/^\\d{4}-\\d{2}-\\d{2}T/.test(raw) ||
+        !Number.isFinite(Date.parse(raw)))
+      throw new Error("Unverified quote timestamp");
+    return raw;
+  };
+  function validateQuote(data, id, symbol, type) {
+    if (!data || data.accountId !== id || data.symbol !== symbol ||
+        data.assetClass !== type || data.provider !== "Public API" ||
+        data.sourceReportedOnly !== true || data.readOnly !== true ||
+        data.cacheRightsVerified !== false ||
+        data.paperFillEligible !== false || data.executable !== false ||
+        data.ordersEnabled !== false || data.transfersEnabled !== false ||
+        typeof data.lastFresh !== "boolean" ||
+        typeof data.twoSidedFresh !== "boolean")
+      throw new Error("Unverified quote response");
+    const last = readSourcePrice(data.last);
+    const bid = readSourcePrice(data.bid);
+    const ask = readSourcePrice(data.ask);
+    const lastAt = readSourceTime(data.lastTimestamp);
+    const received = readSourceTime(data.receivedAt);
+    const bidAt = data.bid === null ? "Not supplied" :
+      readSourceTime(data.bidTimestamp);
+    const askAt = data.ask === null ? "Not supplied" :
+      readSourceTime(data.askTimestamp);
+    return {last,bid,ask,lastAt,received,bidAt,askAt,
+            lastFresh:data.lastFresh,twoSidedFresh:data.twoSidedFresh};
+  }
+  el("quoteSymbol").addEventListener("input", clearQuote);
+  el("quoteType").addEventListener("change", clearQuote);
+  el("loadQuote").addEventListener("click", () => run(async () => {
+    const id = el("accountChoice").value;
+    const symbol = el("quoteSymbol").value.trim().toUpperCase();
+    const type = el("quoteType").value;
+    if (!ownerSession || !accountIdPattern.test(id) ||
+        !quoteSymbolPattern.test(symbol) ||
+        !["EQUITY","CRYPTO"].includes(type))
+      throw new Error("Choose a valid quote symbol and account");
+    clearQuote();
+    const current = revision;
+    const response = await api("/api/identity/public/read/accounts/" +
+      encodeURIComponent(id) + "/quote", "POST", ownerSession.csrf,
+      {symbol, type});
+    if (revision !== current || !ownerSession ||
+        el("accountChoice").value !== id ||
+        el("quoteSymbol").value.trim().toUpperCase() !== symbol ||
+        el("quoteType").value !== type) return;
+    const q = validateQuote(response,id,symbol,type);
+    if (revision !== current || !ownerSession) return;
+    el("quoteLast").textContent = q.last;
+    el("quoteBid").textContent = q.bid;
+    el("quoteAsk").textContent = q.ask;
+    el("quoteEvidence").textContent =
+      "Public API • " + type + " " + symbol +
+      " • last quote timestamp " + q.lastAt +
+      " • bid as of " + q.bidAt + " • ask as of " + q.askAt +
+      " • received by EdgePilot " + q.received +
+      " • last observation " + (q.lastFresh ? "within freshness window" :
+        "STALE / not current") +
+      " • two-sided quote " + (q.twoSidedFresh ? "within freshness window" :
+        "not current or incomplete") +
+      ". Source-reported reference only; not executable or eligible for paper fills.";
+    setStatus("Public quote retrieved for research. No order, paper fill or transfer occurred.");
   }));
   el("signOut").addEventListener("click", () => run(async () => {
     const csrf = ownerSession && ownerSession.csrf;
