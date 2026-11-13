@@ -1,3 +1,11 @@
+## CURRENT development — v0.2.91 owner manual account-value display comparison, November 12, 2026
+
+**Verified starting checkpoint:** main `a584f726b107834c66115bf30836a98977996e02` v0.2.90. PR #117 merged and GitHub Actions #43350512741 completed successfully. Render's existing `edgepilot-private-h9tl` service and exact deployment `dep-dbr745psrm7s73dlobo0` reported live at that SHA with the original 1 GB disk and original auto-deploy. No new paid service or environment change.
+
+**v0.2.91 scope:** Owner's independent identity-backed `/owner` UI includes a manually entered official Public-app display amount for the currently selected, freshly manually loaded Public brokerage account. Strict exact-cent client-side comparison with no persistence, submission, brokerage lookup, clock claim or conflation of independent account totals. Every new snapshot, account selection, logout and page exit clears this reference. This feature does **not** certify actual account-value reconciliation or license/availability of real `marketdata`; those require the owner's device and provider evidence. Maintains the dormant synthetic paper ledger, recovery and fully isolated multi-user architecture. No live orders, bank transfers, autonomous workers, production paper fills or additional paid services.
+
+**Next:** Complete CI/merge/Render verification, then the owner compares the selected account against the official Public app and manually requests a source quote. If `marketdata` is unauthorized or unavailable, show a safe unavailable status; do not fabricate prices. Separately research Public historical bars and source retention permissions, and design an offline recovery/restore operator preflight before persistent paper trading may be enabled. Preserve all credentials, existing paid deployment, backup and multi-user systems.
+
 ## CURRENT development — v0.2.90 independent owner manual Public quotes, November 12, 2026
 
 **Verified base:** main v0.2.89 `612c6227798c190c863611088554091c7dc5eee6`, PR #116 and post-merge GitHub Actions run #43348676641 passed; Render's existing paid Starter `edgepilot-private-h9tl` reported the exact SHA live with its original 1 GB persistent disk. User and private assets remain unchanged. Source-only synthetic v0.2.89 paper backup/restore checks are verified, but no real data migration or production restore occurred.
