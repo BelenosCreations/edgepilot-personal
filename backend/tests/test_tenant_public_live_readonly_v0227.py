@@ -75,6 +75,7 @@ class FakePublic:
                 self.after_portfolio=None
                 callback()
             return self.reply({
+                "accountId":account,
                 "totalAccountValue":"1234.56" if account==ACCOUNT_A else "987.65",
                 "positions":[{"instrument":{"symbol":"SPY" if account==ACCOUNT_A else "QQQ"},
                               "currentValue":"321.00","quantity":"2"}]})
