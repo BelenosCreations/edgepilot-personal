@@ -1,5 +1,6 @@
 """Independent receipt storage for the offline synthetic Decimal rehearsal."""
 from contextlib import closing, contextmanager, ExitStack
+import fcntl
 import hmac
 import os
 from pathlib import Path
@@ -18,6 +19,7 @@ _PROTOCOL = "EDGEPILOT-SYNTHETIC-DECIMAL-RECEIPT-v1"
 _PROMOTION_PROTOCOL = "EDGEPILOT-SYNTHETIC-DECIMAL-PROMOTION-CHECKPOINT-v1"
 _EXPORT_PROTOCOL = "EDGEPILOT-SYNTHETIC-DECIMAL-PROMOTION-EXPORT-v1"
 _SIDECARS = ("-journal", "-wal", "-shm")
+_CHECKPOINT_STAGE_PREFIX = ".edgepilot-checkpoint-"
 _SCHEMA = """CREATE TABLE retained_receipt (
     id INTEGER PRIMARY KEY CHECK (id = 1), number INTEGER NOT NULL,
     tip TEXT NOT NULL, pending INTEGER NOT NULL, signature TEXT NOT NULL)"""
@@ -370,22 +372,49 @@ class DecimalPromotionCheckpoint:
         target = self._store.path
         try:
             self._store._check_directory()
-            with tempfile.TemporaryDirectory(prefix=".edgepilot-checkpoint-", dir=target.parent) as folder:
+            with tempfile.TemporaryDirectory(prefix=_CHECKPOINT_STAGE_PREFIX, dir=target.parent) as folder:
                 stage = DecimalPromotionCheckpoint(Path(folder) / "checkpoint.db",
                                                    checkpoint_key=self._store.key)
-                stage._store._initialize(receipt)
-                with stage._store._open(read_only=True) as db:
-                    if stage._store._read(db, pending=False) != receipt:
-                        recovery._deny()
-                if any(os.path.lexists(str(target) + suffix) for suffix in _SIDECARS):
+                with stage._lock_staging_directory():
+                    stage._store._initialize(receipt)
+                    with stage._read_published(receipt):
+                        if any(os.path.lexists(str(target) + suffix) for suffix in _SIDECARS):
+                            recovery._deny()
+                        os.link(stage._store.path, target, follow_symlinks=False)
+                    stage._store.path.unlink()
+                    fd = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
+                    try:
+                        os.fsync(fd)
+                    finally:
+                        os.close(fd)
+        except OSError:
+            recovery._deny()
+
+    @contextmanager
+    def _lock_staging_directory(self):
+        self._store._check_directory()
+        fd = os.open(self._store.path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            # Cleanup takes this lock before the evidence locks. A publisher
+            # already holding the staging lock must be refused immediately.
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            yield fd
+        finally:
+            os.close(fd)
+
+    @contextmanager
+    def _read_published(self, receipt):
+        path = self._store.path
+        try:
+            before = path.lstat()
+            with self._store._open(read_only=True) as db:
+                if self._store._read(db, pending=False) != receipt:
                     recovery._deny()
-                os.link(stage._store.path, target, follow_symlinks=False)
-                stage._store.path.unlink()
-                fd = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
-                try:
-                    os.fsync(fd)
-                finally:
-                    os.close(fd)
+                after = path.lstat()
+                if (not os.path.samestat(before, after) or before.st_ctime_ns != after.st_ctime_ns
+                        or before.st_nlink != after.st_nlink):
+                    recovery._deny()
+                yield after
         except OSError:
             recovery._deny()
 
@@ -398,19 +427,38 @@ class DecimalPromotionCheckpoint:
                 ledger_path=ledger_path, reserved_receipt=reserved_receipt,
                 prepared_receipt=prepared_receipt, operator_record=operator_record,
                 journal_key=journal_key, anchor_key=anchor_key):
-            try:
-                path = self._store.path
-                before = path.lstat()
-                with self._store._open(read_only=True) as db:
-                    if self._store._read(db, pending=False) != trusted_receipt:
+            with self._read_published(trusted_receipt) as info:
+                return {"receipt": trusted_receipt.copy(), "additionalLinkPresent": info.st_nlink == 2}
+
+    def cleanup_recovered_stage(self, staging_path, exported, *, trusted_receipt, receipts,
+                                witness, ledger_path, reserved_receipt, prepared_receipt,
+                                operator_record, journal_key, anchor_key):
+        """Remove only the operator-selected orphan hard link to an exact checkpoint."""
+        target, stage_path = self._store.path, Path(staging_path)
+        if (stage_path.parent.parent != target.parent or stage_path.name != "checkpoint.db"
+                or not stage_path.parent.name.startswith(_CHECKPOINT_STAGE_PREFIX)):
+            recovery._deny()
+        stage = DecimalPromotionCheckpoint(stage_path, checkpoint_key=self._store.key)
+        try:
+            with stage._lock_staging_directory() as folder_fd, self._verified_recovery(
+                    exported, trusted_receipt=trusted_receipt, receipts=receipts, witness=witness,
+                    ledger_path=ledger_path, reserved_receipt=reserved_receipt,
+                    prepared_receipt=prepared_receipt, operator_record=operator_record,
+                    journal_key=journal_key, anchor_key=anchor_key):
+                with self._read_published(trusted_receipt) as verified:
+                    current = target.lstat()
+                    link = os.stat(stage_path.name, dir_fd=folder_fd, follow_symlinks=False)
+                    if (verified.st_nlink != 2 or current.st_nlink != 2
+                            or current.st_ctime_ns != verified.st_ctime_ns
+                            or not os.path.samestat(verified, current)
+                            or not os.path.samestat(verified, link)
+                            or not os.path.samestat(os.fstat(folder_fd), stage_path.parent.lstat())
+                            or any(os.path.lexists(str(stage_path) + suffix) for suffix in _SIDECARS)):
                         recovery._deny()
-                    after = path.lstat()
-                    if (not os.path.samestat(before, after) or before.st_ctime_ns != after.st_ctime_ns
-                            or before.st_nlink != after.st_nlink):
-                        recovery._deny()
-            except OSError:
-                recovery._deny()
-            return {"receipt": trusted_receipt.copy(), "additionalLinkPresent": before.st_nlink == 2}
+                    os.unlink(stage_path.name, dir_fd=folder_fd)
+                    os.fsync(folder_fd)
+        except OSError:
+            recovery._deny()
 
     @contextmanager
     def _verified_recovery(self, exported, *, trusted_receipt, receipts, witness, ledger_path,

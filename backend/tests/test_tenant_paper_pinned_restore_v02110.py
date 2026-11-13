@@ -6,6 +6,7 @@ import fcntl
 import os
 import sqlite3
 from threading import Barrier
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 from uuid import uuid4
@@ -20,6 +21,7 @@ from engine import tenant_paper_ledger as ledger
 from engine.tenant_paper_loss_stop import _replay_realized
 from engine.tenant_paper_recovery_audit import PaperRestorePolicy
 import test_tenant_paper_authenticated_preflight_v02107 as fixtures
+from test_tenant_passkeys_v0225 import b64url
 
 
 class PinnedPaperRestoreTests(unittest.TestCase):
@@ -506,3 +508,56 @@ class PinnedPaperRestoreTests(unittest.TestCase):
         for connection in (self.owner_conn, self.member_conn):
             with self.assertRaises(tenant_public_vault.TenantVaultDenied):
                 vault._credential_for_provider_only(fresh["token"], connection)
+
+        member = auth.authenticate("member", "fixture-password-for-member", "synthetic-member")
+        tenants = tenant_foundation.TenantStore(self.destination, self.fixture_vault_key)
+        owner_secret = "synthetic-reenrolled-owner-placeholder"
+        member_secret = "synthetic-reenrolled-member-placeholder"
+        owner_conn = vault.save(fresh["token"], fresh["csrf"], owner_secret)["connectionId"]
+        member_conn = vault.save(member["token"], member["csrf"], member_secret)["connectionId"]
+        owner_account = tenants.link_account(self.owner, owner_conn, "restored-new-owner", "New owner")
+        member_account = tenants.link_account(self.member, member_conn, "restored-new-member", "New member")
+
+        for session, account, other, connection, other_conn, old_conn, secret in (
+                (fresh, owner_account, member_account, owner_conn, member_conn,
+                 self.owner_conn, owner_secret),
+                (member, member_account, owner_account, member_conn, owner_conn,
+                 self.member_conn, member_secret)):
+            self.assertEqual([row["account_id"] for row in scopes.list_accounts(session["token"])],
+                             [account])
+            with self.assertRaises(tenant_foundation.TenantAccessError):
+                scopes.account_summary(session["token"], other)
+            self.assertEqual(vault._credential_for_provider_only(session["token"], connection), secret)
+            with self.assertRaises(tenant_public_vault.TenantVaultDenied):
+                vault._credential_for_provider_only(session["token"], other_conn)
+            with self.assertRaises(tenant_public_vault.TenantVaultDenied):
+                vault.rotate(session["token"], session["csrf"], old_conn, secret)
+
+        def enroll(session, credential):
+            request = restored_passkeys.begin_registration(session["token"], session["csrf"])
+            verified = SimpleNamespace(credential_id=credential, credential_public_key=b"new-test-key",
+                                       sign_count=0, credential_device_type="single_device",
+                                       credential_backed_up=False)
+            with patch.object(tenant_passkeys, "verify_registration_response", return_value=verified):
+                return restored_passkeys.finish_registration(
+                    session["token"], session["csrf"], request["requestId"], {})
+
+        with self.assertRaises(tenant_passkeys.PasskeyDenied):
+            enroll(fresh, b"synthetic-key-id")
+        for session, user, credential in ((fresh, self.owner, b"new-owner-passkey"),
+                                          (member, self.member, b"new-member-passkey")):
+            self.assertTrue(enroll(session, credential)["registered"])
+            request_id = restored_passkeys.begin_authentication()["requestId"]
+            identifier = b64url(credential)
+            with patch.object(tenant_passkeys, "verify_authentication_response",
+                              return_value=SimpleNamespace(new_sign_count=1, credential_backed_up=False)):
+                issued = restored_passkeys.finish_authentication(
+                    request_id, {"id": identifier, "rawId": identifier})
+            self.assertEqual(auth.principal(issued["token"], issued["csrf"])["user_id"], user)
+
+        new_invite = signup.issue_invitation()["invitation"]
+        self.assertTrue(signup.register(new_invite, "new_member", "synthetic-new-password",
+                                        "New member", source="synthetic-new-invitation")["registered"])
+        with self.assertRaises(tenant_registration.RegistrationDenied):
+            signup.register(invite, "another_member", "synthetic-new-password", "Another member",
+                            source="synthetic-restore")
