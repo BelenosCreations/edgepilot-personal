@@ -23,7 +23,7 @@ import tempfile
 
 from cryptography.fernet import Fernet, InvalidToken
 
-from . import shadow_storage
+from . import shadow_storage, tenant_paper_recovery_audit
 
 _MAGIC = b"EDGEPILOT-SYNTHETIC-TENANT-BACKUP-v1\n"
 _MAX_DB_SIZE = 16 * 1024 * 1024
@@ -61,6 +61,12 @@ def _check_contents(db, *, require_quiescent):
         }
         if not _REQUIRED_TABLES.issubset(tables):
             raise OfflineBackupDenied("Synthetic tenant schema not supported")
+        # Verify dormant paper-wallet cash, event replay and per-account
+        # positions before sealing OR accepting a recovered fixture.
+        try:
+            tenant_paper_recovery_audit.audit_tenant_paper_ledger(db)
+        except tenant_paper_recovery_audit.PaperRecoveryDenied:
+            raise OfflineBackupDenied("Synthetic paper ledger verification failed") from None
         integrity = db.execute("PRAGMA integrity_check").fetchone()
         if integrity is None or integrity[0] != "ok":
             raise OfflineBackupDenied("Synthetic tenant integrity unavailable")
