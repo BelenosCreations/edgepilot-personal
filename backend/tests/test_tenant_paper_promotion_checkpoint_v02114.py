@@ -304,6 +304,85 @@ class PromotionCheckpointTests(unittest.TestCase):
         self.checkpoint.cleanup_recovered_stage(
             stage, exported, trusted_receipt=tip, **self.recovery_evidence())
 
+    def reviewed_staging_link(self):
+        self.prepare_checkpoint()
+        tip = self.promote()
+        exported = self.checkpoint.export(expected_receipt=tip)
+        folder = tempfile.TemporaryDirectory(prefix=".edgepilot-checkpoint-",
+                                             dir=self.checkpoint_path.parent)
+        self.addCleanup(folder.cleanup)
+        stage = Path(folder.name) / "checkpoint.db"
+        os.link(self.checkpoint_path, stage)
+        return stage, exported, tip
+
+    def assert_checkpoint_readback(self, stage, exported, tip, original, content, *, linked):
+        self.assertEqual(stage.exists(), linked)
+        self.assertTrue(os.path.samestat(original, self.checkpoint_path.stat()))
+        self.assertEqual(self.checkpoint_path.read_bytes(), content)
+        self.assertEqual(self.checkpoint.inspect_recovered(
+            exported, trusted_receipt=tip, **self.recovery_evidence()),
+            {"receipt": tip, "additionalLinkPresent": linked})
+
+    def test_process_exit_immediately_before_and_after_checkpoint_cleanup_unlink(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        original, content = self.checkpoint_path.stat(), self.checkpoint_path.read_bytes()
+        unlink = os.unlink
+        for remove in (False, True):
+            with self.subTest(unlink_committed=remove):
+                def exit_at_unlink(*args, **kwargs):
+                    if remove:
+                        unlink(*args, **kwargs)
+                    os._exit(95)
+
+                pid = os.fork()
+                if pid == 0:
+                    try:
+                        with patch.object(receipts.os, "unlink", side_effect=exit_at_unlink):
+                            self.cleanup_stage(stage, exported, tip)
+                    finally:
+                        os._exit(96)
+                _, status = os.waitpid(pid, 0)
+                self.assertEqual(os.waitstatus_to_exitcode(status), 95)
+                self.assert_checkpoint_readback(stage, exported, tip, original, content,
+                                                linked=not remove)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.cleanup_stage(stage, exported, tip)
+        self.assertEqual(self.checkpoint.latest(), tip)
+
+    def test_concurrent_checkpoint_cleanup_has_one_winner(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        original, content = self.checkpoint_path.stat(), self.checkpoint_path.read_bytes()
+        start = Barrier(2, timeout=5)
+
+        def cleanup():
+            start.wait()
+            self.cleanup_stage(stage, exported, tip)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            attempts = [pool.submit(cleanup) for _ in range(2)]
+        self.assertEqual(sum(job.exception() is None for job in attempts), 1)
+        self.assertEqual(sum(isinstance(job.exception(), recovery.DecimalRecoveryDenied)
+                             for job in attempts), 1)
+        self.assert_checkpoint_readback(stage, exported, tip, original, content, linked=False)
+
+    def test_terminal_quarantine_prevents_old_checkpoint_readback_and_cleanup(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        original, content = self.checkpoint_path.stat(), self.checkpoint_path.read_bytes()
+        quarantine = recovery.quarantine_decimal_recovery(
+            record=self.promotion, trusted_tip=recovery.evidence_tip(self.promotion),
+            operator_key=self.operator, reason="AMBIGUOUS_OLD_STATE")
+        terminal = self.pins.publish(self.store, quarantine)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.checkpoint.inspect_recovered(exported, trusted_receipt=tip,
+                                              **self.recovery_evidence())
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.cleanup_stage(stage, exported, tip)
+        self.assertTrue(stage.samefile(self.checkpoint_path))
+        self.assertTrue(os.path.samestat(original, self.checkpoint_path.stat()))
+        self.assertEqual(self.checkpoint_path.read_bytes(), content)
+        self.assertEqual(self.pins.latest(), terminal)
+        self.assertEqual(self.store.read(trusted_receipt=terminal)[0], quarantine)
+
     def test_concurrent_checkpoint_recovery_has_one_exclusive_winner(self):
         self.prepare_checkpoint()
         tip = self.promote()

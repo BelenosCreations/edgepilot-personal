@@ -8,14 +8,14 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 
 ## Verification and checkpoint
 
-- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.117 from the merged PR for `development/v0.2.117-checkpoint-cleanup`. A later verified main checkpoint takes precedence.
-- Verified v0.2.116 baseline. PR #143 head `67c903c293e3f0e7f16aca31eecdf1c45385fcc4` passed [Actions #43472793250](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43472793250). Main `eafa812e3cfa31933bb413508dc7b9630bd85e7c` passed [Actions #43473212122](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43473212122), matched live Render deployment `dep-dbrkhme8bjmc73f68rug`, and returned HTTP 200 from `/healthz`. No PRs were open.
-- v0.2.117 adds verified cleanup of an orphan checkpoint staging link and tests explicit tenant re-enrollment after quarantine. See [milestone notes](PAPER_CHECKPOINT_CLEANUP_V02117.md).
+- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.118 from the merged PR for `development/v0.2.118-recovery-rehearsals`. A later verified main checkpoint takes precedence.
+- Verified v0.2.117 baseline. PR #144 head `2bcc9252b44ecac9f8dc0ebbda732cb20b39fbea` passed [Actions #43476209547](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43476209547). Main `baf7058941a8f1260ef5c591134c8578ffee5a18` passed [Actions #43476604533](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43476604533), matched live Render deployment `dep-dbrkradbedkc73bfgei0`, and returned HTTP 200 from `/healthz`. No PRs were open.
+- v0.2.118 tests checkpoint cleanup across process exit and concurrency, plus a second pinned tenant restore after re-enrollment. See [milestone notes](PAPER_REPEAT_RECOVERY_V02118.md).
 
 ## Next safe development batch
 
-1. Exercise process exit immediately before and after checkpoint staging unlink and concurrent cleanup attempts. Reverify the original signed export, destination receipt, inode and terminal quarantine behavior during readback. Combined rollback and cross-resource power-loss consistency remain open.
-2. Rehearse a second offline backup and restore after explicit synthetic tenant re-enrollment. Verify the new bindings are quarantined on the second restore, earlier revocations survive, and no old session or invitation becomes usable. Preserve existing restore paths.
+1. Review the remaining boundaries between the independent checkpoint, witness and local receipt store. Rehearse stale exports against an advanced witness and the exact latest evidence after interruption. Preserve signed terminal quarantine and refusal of ambiguous ledger state. Combined rollback and cross-resource power-loss consistency remain open.
+2. Verify that separately retained latest archive pins reject older restore generations and that second-generation archived request digests and historical loss stops remain scoped to their original paper accounts. Preserve existing restore paths.
 3. Continue source-attributed and session-only Public research under the user's instruction to assume provider permission. Use real history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance). Earlier snapshot and MSFT quote acceptance still apply.
 
 ## Restrictions and workflow
@@ -26,6 +26,12 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.117 — 2026-11-13 — Reviewed checkpoint staging cleanup
+
+Starting checkpoint independently verified. PR #143 head `67c903c293e3f0e7f16aca31eecdf1c45385fcc4` passed [Actions #43472793250](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43472793250). Main `eafa812e3cfa31933bb413508dc7b9630bd85e7c` passed [Actions #43473212122](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43473212122), matched Render deployment `dep-dbrkhme8bjmc73f68rug`, and returned HTTP 200 from `/healthz`.
+
+The milestone adds verified staging-link cleanup and exercises new synthetic tenant bindings after quarantine. See [checkpoint cleanup and tenant re-enrollment](PAPER_CHECKPOINT_CLEANUP_V02117.md).
 
 ## v0.2.116 — 2026-11-13 — Interrupted checkpoint publication
 

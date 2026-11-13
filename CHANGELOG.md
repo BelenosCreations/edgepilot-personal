@@ -1,3 +1,13 @@
+## v0.2.118 — 2026-11-13 America/New_York — Repeated offline recovery rehearsal
+
+**Added** — Regression coverage for interrupted and concurrent checkpoint cleanup, signed terminal quarantine, and a second pinned restore after synthetic tenant re-enrollment.
+
+**Changed** — Owner history browser coverage checks that a late successful response stays hidden after a period change.
+
+**Tests** — All 879 local tests passed, including 114 focused tests.
+
+**Limitations** — Combined rollback, cross-resource power loss, and owner-device Public history acceptance remain open. Production execution remains disabled.
+
 ## v0.2.117 — 2026-11-13 America/New_York — Reviewed checkpoint staging cleanup
 
 **Added** — Operator-selected cleanup of an orphan checkpoint staging link after exact signed receipt and inode verification.
