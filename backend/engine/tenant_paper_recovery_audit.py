@@ -6,6 +6,7 @@ market licensing, broker transactions, or production restore readiness.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_DOWN, ROUND_UP
 import re
@@ -25,6 +26,21 @@ _UTC_EVENT_TIME = re.compile(
 
 class PaperRecoveryDenied(ValueError):
     """Never expose private user, account, event, or SQL content."""
+
+
+@dataclass(frozen=True)
+class PaperRestorePolicy:
+    protected_pct: int
+    spend_cap_cents: int
+    per_trade_cap_cents: int
+    max_loss_cents: int
+
+    def __post_init__(self):
+        if (type(self.protected_pct) is not int or not 0 <= self.protected_pct <= 99
+                or any(type(cap) is not int or not 0 < cap <= 100000000000
+                       for cap in (self.spend_cap_cents, self.per_trade_cap_cents,
+                                   self.max_loss_cents))):
+            raise PaperRecoveryDenied("Synthetic paper restore policy unavailable")
 
 
 def _decimal(raw, *, positive=False):
@@ -68,18 +84,19 @@ def _event_time(value):
         ) from None
 
 
-def audit_tenant_paper_ledger(db):
+def audit_tenant_paper_ledger(db, *, policies=None, required_provider=None):
     """Fail closed on missing/mixed schema, inconsistent rows or cash arithmetic.
 
     Uses rowid insertion order for this append-only prototype's event replay.
-    The historical synthetic quote rights are NOT cryptographically attested.
+    A pinned synthetic archive additionally supplies the immutable policy per
+    scope. Older archives retain their structural audit without a policy input.
     """
     deny = "Synthetic paper ledger integrity unavailable"
     try:
         tables = {row[0] for row in db.execute(
             "SELECT name FROM sqlite_master WHERE type='table'")}
         existing = tables & PAPER_TABLES
-        if not existing:
+        if not existing and policies is None:
             return {"paperSchemaPresent": False, "verifiedWallets": 0,
                     "verifiedAssumedFills": 0}
         if existing != PAPER_TABLES:
@@ -88,6 +105,10 @@ def audit_tenant_paper_ledger(db):
         wallets = db.execute("""SELECT user_id, account_id, seeded_cents,
             cash_cents, opened_at FROM tenant_paper_wallets""").fetchall()
         if len(wallets) > 10000:
+            raise PaperRecoveryDenied(deny)
+        scopes = {(user, account) for user, account, *_ in wallets}
+        if (len(scopes) != len(wallets)
+                or (policies is not None and (not scopes or scopes != policies.keys()))):
             raise PaperRecoveryDenied(deny)
         expected = {}
         for user, account, seed, cash, opened in wallets:
@@ -98,8 +119,9 @@ def audit_tenant_paper_ledger(db):
                 raise PaperRecoveryDenied(deny)
             opened_time = _event_time(opened)
             expected[(user, account)] = {
-                "cash": seed, "actualCash": cash, "positions": {},
-                "previousCreated": opened_time,
+                "seed": seed, "cash": seed, "actualCash": cash, "positions": {},
+                "previousCreated": opened_time, "realized": 0, "worst": 0,
+                "exposure": 0,
             }
         events = db.execute("""SELECT user_id,account_id,request_id,
             request_sha256,side,asset_class,symbol,quantity,quote_price,
@@ -108,21 +130,25 @@ def audit_tenant_paper_ledger(db):
         ).fetchall()
         if len(events) > 50000:
             raise PaperRecoveryDenied(deny)
+        requests = set()
         for row in events:
             (user, account, request_id, digest, side, asset, symbol,
              quantity, price, friction, delta, after, provider, observed,
              created) = row
             wallet = expected.get((user, account))
-            if (wallet is None or not _canonical_uuid(request_id)
+            request_scope = (user, account, request_id)
+            if (wallet is None or not _canonical_uuid(request_id) or request_scope in requests
                     or not isinstance(digest, str) or not _SHA.fullmatch(digest)
                     or side not in ("BUY", "SELL") or asset not in _ASSETS
                     or not isinstance(symbol, str) or not 0 < len(symbol) <= 96
                     or symbol.strip() != symbol
                     or not all(c.isalnum() or c in "._:-" for c in symbol)
                     or not isinstance(provider, str) or not provider.strip()
+                    or (required_provider is not None and provider != required_provider)
                     or not isinstance(observed, str) or not observed.strip()
                     or type(delta) is not int or type(after) is not int):
                 raise PaperRecoveryDenied(deny)
+            requests.add(request_scope)
             # Both the source observation and local paper event must be
             # independently parseable UTC timestamps. A recovered event
             # cannot predate the observation it purports to have used.
@@ -146,6 +172,15 @@ def audit_tenant_paper_ledger(db):
             if (required != delta or not required
                     or abs(delta) > 100000000000):
                 raise PaperRecoveryDenied(deny)
+            policy = policies[(user, account)] if policies is not None else None
+            if side == "BUY" and policy is not None:
+                budget = min(wallet["seed"]
+                             * (100 - policy.protected_pct) // 100,
+                             policy.spend_cap_cents)
+                if (wallet["worst"] <= -policy.max_loss_cents
+                        or -delta > policy.per_trade_cap_cents
+                        or wallet["exposure"] - delta > budget):
+                    raise PaperRecoveryDenied(deny)
             wallet["cash"] += delta
             if wallet["cash"] < 0 or wallet["cash"] != after:
                 raise PaperRecoveryDenied(deny)
@@ -154,7 +189,8 @@ def audit_tenant_paper_ledger(db):
                 key, {"qty": Decimal(0), "basis": 0, "realized": 0})
             if side == "BUY":
                 position["qty"] += qty
-                position["basis"] += -delta
+                position["basis"] -= delta
+                wallet["exposure"] -= delta
             else:
                 held = position["qty"]
                 if held <= 0 or qty > held:
@@ -165,6 +201,9 @@ def audit_tenant_paper_ledger(db):
                 position["qty"] -= qty
                 position["basis"] -= released
                 position["realized"] += delta - released
+                wallet["exposure"] -= released
+                wallet["realized"] += delta - released
+                wallet["worst"] = min(wallet["worst"], wallet["realized"])
         if any(w["cash"] != w["actualCash"] for w in expected.values()):
             raise PaperRecoveryDenied(deny)
 

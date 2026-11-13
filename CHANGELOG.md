@@ -1,3 +1,15 @@
+## v0.2.110 — 2026-11-13 America/New_York — Pinned tenant restore and separate custody recovery
+
+**Added** — Pinned encrypted restore audits for marked synthetic tenant fixtures, including active and revoked account scope, exact archived request digests, immutable policies, fractional cost basis and historical loss stops. The Decimal custody rehearsal can recover the ledger or witness at an exact independently retained receipt.
+
+**Changed** — A rotation claim must be independently retained and acknowledged before the synthetic ledger is written. The owner dashboard shows Public's regular-series expected bar count when provided.
+
+**Fixed** — Recovery refuses stale witness snapshots, uncertain unclaimed pending rotations, stale ciphertext, policy changes and purchases after a historical stop under the pinned synthetic policy.
+
+**Tests** — Eight regression cases extend existing restore, custody and market-history coverage. The full local regression covers 830 tests.
+
+**Limitations** — Live owner-device history acceptance, operational receipt custody, combined rollback protection and cross-resource power-loss verification remain open. Production paper fills, autonomous and live orders and bank transfers remain disabled.
+
 ## v0.2.109 — 2026-11-13 America/New_York — Synthetic recovery custody and owner history
 
 **Added** — Offline signed evidence journal, durable SQLite compare-and-swap publication, independent receipt readback and a consumed rotation claim across process interruption. Manual Public stock, ETF and crypto history on the owner dashboard uses current session, CSRF and linked account checks.

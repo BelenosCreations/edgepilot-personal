@@ -110,3 +110,21 @@ class OwnerMarketHistoryTests(unittest.TestCase):
         with patch.object(quote_tests.market, "_MAX_HISTORY_BYTES", 12):
             with self.assertRaises(quote_tests.market.OwnerQuoteUnavailable):
                 self.history()
+
+    def test_public_expected_bars_are_reported_without_inventing_rows(self):
+        payload = json.loads(self.payload())
+        payload["regularMarket"]["expectedBars"] = 9
+        payload["totalExpectedBars"] = 20
+        self.provider(json.dumps(payload))
+        observed = self.history()
+        self.assertEqual(observed["sourceExpectedBars"], 9)
+        self.assertEqual(observed["barCount"], 1)
+        self.assertEqual(len(observed["bars"]), 1)
+        for invalid in (True, -1, "9"):
+            payload["regularMarket"]["expectedBars"] = invalid
+            self.provider(json.dumps(payload))
+            with self.assertRaises(quote_tests.market.OwnerQuoteUnavailable):
+                self.history()
+        del payload["regularMarket"]["expectedBars"]
+        self.provider(json.dumps(payload))
+        self.assertIsNone(self.history()["sourceExpectedBars"])

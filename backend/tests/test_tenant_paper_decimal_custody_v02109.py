@@ -9,6 +9,9 @@ import unittest
 from unittest.mock import patch
 from uuid import uuid4
 
+from cryptography.fernet import Fernet
+
+from engine import tenant_paper_decimal_archive as archive
 from engine import tenant_paper_decimal_atomic_rehearsal as ledger
 from engine import tenant_paper_decimal_custody as custody
 from engine import tenant_paper_decimal_recovery as recovery
@@ -43,9 +46,10 @@ class DecimalCustodyTests(unittest.TestCase):
             replacement_key=self.replacement, **self.keys)
 
     def rotate(self, receipt, **kwargs):
+        options = {"retain_claim": lambda _expected, claim: claim} | kwargs
         return self.store.rotate(
             self.path, expected_receipt=receipt, journal_key=self.journal,
-            replacement_key=self.replacement, anchor_key=self.anchor, **kwargs)
+            replacement_key=self.replacement, anchor_key=self.anchor, **options)
 
     def inspect(self, record, key):
         return recovery.inspect_decimal_recovery(
@@ -181,5 +185,109 @@ class DecimalCustodyTests(unittest.TestCase):
         receipt = self.store.publish(pending, expected_receipt=self.genesis)
         with self.assertRaises(recovery.DecimalRecoveryDenied):
             self.store.rotate(self.path, expected_receipt=receipt, journal_key=self.journal,
-                              replacement_key=self.replacement, anchor_key=os.urandom(32))
+                              replacement_key=self.replacement, anchor_key=os.urandom(32),
+                              retain_claim=lambda _expected, claim: claim)
         self.assertEqual(self.store.read(trusted_receipt=receipt), (pending, receipt, False))
+
+    def recover_witness(self, snapshot, receipt, *, journal_key=None):
+        return custody.DecimalCustody.recover(
+            self.store_path, snapshot, trusted_receipt=receipt, custody_key=self.custody,
+            operator_key=self.operator, ledger_path=self.path,
+            journal_key=self.journal if journal_key is None else journal_key,
+            anchor_key=self.anchor)
+
+    def test_lost_witness_requires_exact_independent_copy_and_surviving_ledger(self):
+        snapshot = self.store.backup(expected_receipt=self.genesis)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.recover_witness(snapshot, self.genesis)
+        self.store_path.unlink()
+        self.path.rename(self.old)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.recover_witness(snapshot, self.genesis)
+        self.assertFalse(self.store_path.exists())
+        self.old.rename(self.path)
+        reopened = self.recover_witness(snapshot, self.genesis)
+        self.assertEqual(reopened.read(trusted_receipt=self.genesis),
+                         (self.active, self.genesis, False))
+        self.assertEqual(reopened.path.stat().st_mode & 0o777, 0o600)
+
+    def test_recovered_witness_never_replays_claim_or_recovers_a_stale_copy(self):
+        pending = self.prepare()
+        receipt = self.store.publish(pending, expected_receipt=self.genesis)
+        unclaimed = self.store.backup(expected_receipt=receipt)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.rotate(receipt, _interrupt="after_claim")
+        _, claim, _ = self.store.read(trusted_receipt=receipt)
+        claimed = self.store.backup(expected_receipt=claim)
+        self.store_path.unlink()
+        for snapshot, pin in ((unclaimed, receipt), (unclaimed, claim), (claimed, receipt)):
+            with self.subTest(pin=pin), self.assertRaises(recovery.DecimalRecoveryDenied):
+                self.recover_witness(snapshot, pin)
+        self.store = self.recover_witness(claimed, claim)
+        self.assertEqual(self.store.read(trusted_receipt=claim), (pending, claim, True))
+        self.assertEqual(self.inspect(pending, self.journal), "AMBIGUOUS_OLD_STATE")
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.rotate(claim)
+
+    def test_lost_ledger_restore_uses_latest_active_witness_and_exact_archive(self):
+        archive_key = Fernet.generate_key()
+        old = archive.seal_decimal_archive(
+            self.path, record=self.active, trusted_tip=recovery.evidence_tip(self.active),
+            archive_key=archive_key, **self.keys)
+        pending = self.prepare()
+        receipt = self.store.publish(pending, expected_receipt=self.genesis)
+        claim = self.rotate(receipt)
+        keys = self.keys | {"journal_key": self.replacement}
+        active = recovery.approve_decimal_promotion(
+            self.path, record=pending, trusted_tip=recovery.evidence_tip(pending), **keys)
+        tip = self.store.publish(active, expected_receipt=claim)
+        token = archive.seal_decimal_archive(
+            self.path, record=active, trusted_tip=recovery.evidence_tip(active),
+            archive_key=archive_key, **keys)
+        self.path.unlink()
+
+        def restore(ciphertext, approval_record, expected_receipt, **kwargs):
+            approval = archive.approve_decimal_restore(
+                ciphertext, self.path, record=approval_record,
+                trusted_tip=recovery.evidence_tip(approval_record), operator_key=self.operator)
+            return self.store.restore_ledger(
+                ciphertext, self.path, approval=approval, expected_receipt=expected_receipt,
+                journal_key=self.replacement, anchor_key=self.anchor, archive_key=archive_key,
+                **kwargs)
+
+        for ciphertext, approval_record, expected_receipt in (
+                (old, self.active, self.genesis), (token, active, claim), (old, active, tip)):
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                restore(ciphertext, approval_record, expected_receipt)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            restore(token, active, tip, _interrupt_before_publish=True)
+        self.assertFalse(self.path.exists())
+        self.assertEqual(restore(token, active, tip), self.path)
+        self.assertEqual(self.inspect(active, self.replacement), "PINNED_ACTIVE")
+        before = self.path.read_bytes()
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            restore(token, active, tip)
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_lost_external_claim_acknowledgment_stops_before_ledger_write(self):
+        pending = self.prepare()
+        receipt = self.store.publish(pending, expected_receipt=self.genesis)
+        prior = self.path.read_bytes()
+        receipt_path = self.store_path.with_name("retained-receipt")
+
+        def retain_then_lose_reply(expected, claim):
+            self.assertEqual(expected, receipt)
+            with receipt_path.open("x") as file:
+                file.write(claim["mac"])
+                file.flush()
+                os.fsync(file.fileno())
+            raise ConnectionError
+
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.rotate(receipt, retain_claim=retain_then_lose_reply)
+        _, claim, claimed = self.store.read(trusted_receipt=receipt)
+        self.assertTrue(claimed)
+        self.assertEqual(receipt_path.read_text(), claim["mac"])
+        self.assertEqual(self.path.read_bytes(), prior)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.rotate(claim)

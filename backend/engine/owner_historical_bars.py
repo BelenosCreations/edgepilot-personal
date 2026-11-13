@@ -95,6 +95,9 @@ def normalize_bars(payload, *, symbol, instrument_type, period, received_at):
     rows = regular.get("bars")
     if not isinstance(rows, list) or not 1 <= len(rows) <= _MAX_BARS:
         raise HistoryUnavailable("Historical source bars unavailable")
+    expected = regular.get("expectedBars")
+    if expected is not None and (type(expected) is not int or not 0 <= expected < 2**53):
+        raise HistoryUnavailable("Source expected bar count unavailable")
     leading = payload.get("leadingFill")
     leading_end = None
     if leading is not None:
@@ -134,6 +137,7 @@ def normalize_bars(payload, *, symbol, instrument_type, period, received_at):
         "expectedSourcePath": "historicdata v2",
         "symbol": symbol, "assetClass": instrument_type, "period": period,
         "observedAt": received.isoformat(), "bars": out, "barCount": len(out),
+        "sourceExpectedBars": expected,
         # The adapter is not wired to a verified source or a specific owner.
         "providerRequestAuthenticated": False,
         "accountScopeVerified": False,
