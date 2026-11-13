@@ -1,3 +1,11 @@
+## v0.2.109 — 2026-11-13 — Separate custody prototype and owner history
+
+Starting checkpoint independently verified. Main `1bb56da071c604a9762346281fc7e20c67c6d2cb`, push Actions `43439900557` and exact-SHA automatic Render deployment `dep-dbrhjmajnfac739h5vug` succeeded. The service health endpoint returned HTTP 200. No open PRs at baseline.
+
+Added an offline operator-side signed custody journal with exact-tip compare-and-swap publication and single-use rotation claims. Local synthetic tests exercised an actual process exit after claiming rotation. With provider permission treated as a development assumption, the read-only owner dashboard now requests one-week or one-month Public bars for a stock, ETF or crypto symbol. The endpoint preserves account and session boundaries and displays source data for the session. See [custody and owner history](DECIMAL_CUSTODY_AND_OWNER_HISTORY_V02109.md).
+
+**Next.** Extend authenticated encrypted restore audits to synthetic tenant account status and revoked scope, historical loss stops and request digest continuity. Verify independent custody operations and recovery when either resource is lost. Verify owner-device historical access when targeted acceptance is appropriate. Preserve production execution gates and existing Render infrastructure.
+
 ## v0.2.108 — 2026-11-13 — Offline Decimal recovery and provider rights
 
 Starting checkpoint independently verified. GitHub main `5b0d6715c4ce3cab3b517e0041e46cc4aa1737d6` and push Actions `43437012015` succeeded. GitHub deployment `7766851410` identifies the exact main commit, with successful Render deployment `dep-dbrhanp42hec73blgb40` and HTTP 200 from the service health endpoint. No PRs were open at baseline.

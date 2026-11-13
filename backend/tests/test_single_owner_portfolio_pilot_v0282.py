@@ -49,7 +49,10 @@ class FakePublic:
     def response(data):
         class Response:
             status_code=200
+            content=json.dumps(data).encode()
             def json(self): return data
+            def iter_content(self, *, chunk_size): yield self.content
+            def close(self): pass
         return Response()
     def post(self,url,*,json,timeout):
         assert url==public.BASE+public.AUTH_PATH
@@ -58,7 +61,7 @@ class FakePublic:
         assert timeout==public.TIMEOUT
         self.calls.append(("POST","TOKEN"))
         return self.response({"accessToken":TOKEN})
-    def get(self,url,*,headers,timeout):
+    def get(self,url,*,headers,timeout,**options):
         assert headers.get("Authorization")=="Bearer "+TOKEN
         assert timeout==public.TIMEOUT
         if url==public.BASE+public.LIST_PATH:
@@ -76,7 +79,13 @@ class FakePublic:
                     "currentValue":"210.35"
                 }]
             })
-        raise AssertionError("Only allowed Public account/portfolio endpoints")
+        if url==public.BASE+"/userapigateway/historicdata/EQUITY/SPY/WEEK?tradingSessionToggle=REGULAR_HOURS":
+            assert options=={"allow_redirects":False,"stream":True}
+            self.calls.append(("GET","HISTORY"))
+            return self.response({"symbol":"SPY","period":"WEEK","regularMarket":{"bars":[{
+                "timestamp":"2026-10-01T13:30:00Z","open":"101.01","high":"102.00",
+                "low":"100.00","close":"101.50","volume":100}]}})
+        raise AssertionError("Only allowlisted Public read endpoints")
 fake=FakePublic()
 app.tenant_public_reader.http=fake
 
@@ -121,6 +130,18 @@ assert portfolio.json=={
     "accountId":aid,"balance":"210.35",
     "holdings":[{"symbol":"SPY","quantity":"0.5","currentValue":"210.35"}],
     "readOnly":True,"ordersEnabled":False,"transfersEnabled":False}
+history_path="/api/identity/public/read/accounts/"+aid+"/market-history"
+history_request={"symbol":"SPY","type":"EQUITY","period":"WEEK"}
+assert post(legacy,history_path,history_request).status_code==401
+assert post(a,history_path,history_request).status_code==403
+history=post(a,history_path,history_request,csrf)
+assert history.status_code==200,history.get_data(as_text=True)
+assert history.headers["Cache-Control"]=="no-store"
+assert history.json["accountId"]==aid
+assert history.json["bars"][0]["close"]=="101.50"
+assert history.json["readOnly"] is True
+assert history.json["dataPersisted"] is False
+assert post(a,history_path,{**history_request,"period":"ALL"},csrf).status_code==404
 assert all(route not in str(fake.calls) for route in ("ORDER","TRANSFER","EXECUTE"))
 assert get(a,"/api/identity/accounts/"+aid+"/monitor/preview").status_code==404
 assert a.put("/api/identity/accounts/"+aid+"/monitor/watchlist",
@@ -139,6 +160,7 @@ after=get(a,"/api/identity/accounts")
 assert after.status_code==200
 assert after.json["soloOwnerPortfolioAvailable"] is False
 assert get(a,"/api/identity/public/read/accounts/"+aid+"/portfolio").status_code==404
+assert post(a,history_path,history_request,csrf).status_code==404
 assert len(fake.calls)==post_count
 assert get(legacy,"/api/session").status_code==200
 with sqlite3.connect(app.DB) as db:

@@ -24,7 +24,7 @@ class OwnerRelativeSpreadTests(unittest.TestCase):
         self.assertIn("Fresh at receipt does not mean live now.", PAGE)
         self.assertIn("cacheRightsVerified !== false", JS)
         self.assertIn("paperFillEligible !== false", JS)
-        self.assertEqual(JS.count('"/api/identity/public/read/accounts/" +'), 2)
+        self.assertEqual(JS.count('"/api/identity/public/read/accounts/" +'), 3)
         for banned in ("localStorage", "sessionStorage", "indexedDB",
                        "setInterval(", "setTimeout(", "innerHTML"):
             self.assertNotIn(banned, JS)
@@ -36,7 +36,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const js = fs.readFileSync(process.argv[1], 'utf8');
 const begin = js.indexOf('  const readSourcePrice = raw => {');
-const end = js.indexOf('  el("quoteSymbol").addEventListener("input", clearQuote);', begin);
+const end = js.indexOf('  function clearMarketResearch() {', begin);
 assert.ok(begin > 0 && end > begin);
 const functions = Function('quotePricePattern', js.slice(begin, end) +
   '\nreturn {readSourceTime,quotedRelativeSpread,validateQuote};')(

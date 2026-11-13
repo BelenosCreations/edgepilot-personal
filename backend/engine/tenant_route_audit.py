@@ -36,6 +36,7 @@ IDENTITY_ROUTES=frozenset((
     ("GET","/api/identity/public/read/accounts/<account_id>/portfolio"),
     # v0.2.90: manual, independently authenticated, source-only owner quote.
     ("POST","/api/identity/public/read/accounts/<account_id>/quote"),
+    ("POST","/api/identity/public/read/accounts/<account_id>/market-history"),
 ))
 HTTP={"get":"GET","post":"POST","put":"PUT","delete":"DELETE",
       "patch":"PATCH"}

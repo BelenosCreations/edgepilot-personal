@@ -701,6 +701,26 @@ def identity_owner_manual_quote(account_id):
         return fail('Verified source quote unavailable',404)
 
 
+@app.post('/api/identity/public/read/accounts/<account_id>/market-history')
+def identity_owner_market_history(account_id):
+    if (tenant_public_reader is None or not solo_owner_portfolio_enabled or
+            not solo_owner_portfolio.active_for_owner(TENANT_DB,g.edge_identity)):
+        return fail('Not found',404)
+    body=request.get_json(silent=True)
+    if not isinstance(body,dict) or set(body)!={'symbol','type','period'}:
+        return fail('Choose one history symbol, category and period',400)
+    try:
+        token=request.cookies.get(identity_auth.COOKIE_NAME,'')
+        result=owner_market_quotes.OwnerMarketQuotes(tenant_public_reader).history(
+            token,account_id,symbol=body['symbol'],instrument_type=body['type'],
+            period=body['period'])
+        if not solo_owner_portfolio.active_for_owner(TENANT_DB,g.edge_identity):
+            return fail('Not found',404)
+        return result
+    except owner_market_quotes.OwnerQuoteUnavailable:
+        return fail('Verified Public history unavailable',404)
+
+
 @app.get('/api/identity/session')
 def identity_session():
     token=request.cookies.get(identity_auth.COOKIE_NAME,'')

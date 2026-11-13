@@ -1,13 +1,13 @@
-"""Manual, ephemeral Public market observation for one authenticated linked account.
+"""Manual Public quotes and price history for an authenticated linked account.
 
-NO persistence, market-rights assumption, order, paper fill, transfer, cache,
-broker-account reuse, automation or background polling. The app route must
-recheck its sole-owner gate before AND after this provider request.
+The route rechecks its sole-owner gate before and after each ephemeral read.
 """
 from __future__ import annotations
 
 import hashlib
 import hmac
+import json
+from contextlib import closing
 import re
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -15,7 +15,7 @@ from urllib.parse import quote
 
 import requests
 
-from . import tenant_foundation, tenant_public_live_readonly as public
+from . import owner_historical_bars, tenant_foundation, tenant_public_live_readonly as public
 
 _TYPES = frozenset({"EQUITY", "CRYPTO"})
 _SYMBOL = re.compile(r"^[A-Za-z0-9.^_-]{1,30}$")
@@ -23,7 +23,7 @@ _PRICE = re.compile(r"^(?:0|[1-9]\d{0,11})(?:\.\d{1,12})?$")
 
 
 class OwnerQuoteUnavailable(RuntimeError):
-    """Sanitized source or account denial. Never include broker response."""
+    """Sanitized market-data or account denial."""
 
 
 def _now(clock):
@@ -120,6 +120,10 @@ def _entry(data, symbol, kind, received):
     }
 
 
+OWNER_HISTORY_PERIODS = frozenset(("WEEK", "MONTH"))
+_MAX_HISTORY_BYTES = 4 * 1024 * 1024
+
+
 class OwnerMarketQuotes:
     def __init__(self, reader, *, clock=None):
         if not isinstance(reader, public.TenantPublicReadOnly):
@@ -132,6 +136,67 @@ class OwnerMarketQuotes:
                 or not isinstance(instrument_type, str)
                 or instrument_type not in _TYPES):
             raise OwnerQuoteUnavailable("Choose a supported Public symbol and type")
+
+        def fetch(reader, token, provider_id):
+            response = reader.http.post(
+                public.BASE + "/userapigateway/marketdata/" +
+                quote(provider_id, safe="") + "/quotes",
+                json={"instruments":[{"symbol":symbol,"type":instrument_type}]},
+                headers={"Authorization":"Bearer "+token,
+                         "Accept":"application/json",
+                         "Content-Type":"application/json"},
+                timeout=public.TIMEOUT,
+            )
+            return reader._get_json(response)
+
+        def normalize(payload, received):
+            return _entry(payload, symbol, instrument_type, received)
+
+        return self._scoped_read(identity_token, internal_account_id, fetch, normalize)
+
+    def history(self, identity_token, internal_account_id, *, symbol, instrument_type, period):
+        if (not isinstance(symbol, str) or not _SYMBOL.fullmatch(symbol)
+                or not isinstance(instrument_type, str) or instrument_type not in _TYPES
+                or not isinstance(period, str) or period not in OWNER_HISTORY_PERIODS):
+            raise OwnerQuoteUnavailable("Choose a supported Public symbol and period")
+
+        def fetch(reader, token, _provider_id):
+            endpoint = "/userapigateway/historicdata/{}/{}/{}".format(
+                instrument_type, quote(symbol, safe=""), period)
+            # Public's historical endpoint is token-scoped and has no
+            # account parameter. The selected local link is verified separately.
+            if instrument_type == "EQUITY" and period == "WEEK":
+                endpoint += "?tradingSessionToggle=REGULAR_HOURS"
+            with closing(reader.http.get(
+                    public.BASE + endpoint,
+                    headers={"Authorization": "Bearer " + token, "Accept": "application/json"},
+                    timeout=public.TIMEOUT, allow_redirects=False, stream=True)) as response:
+                if response.status_code != 200:
+                    raise OwnerQuoteUnavailable("Verified Public history unavailable")
+                payload = bytearray()
+                for chunk in response.iter_content(chunk_size=65536):
+                    if len(payload) + len(chunk) > _MAX_HISTORY_BYTES:
+                        raise OwnerQuoteUnavailable("Verified Public history unavailable")
+                    payload.extend(chunk)
+            # Keep fractional crypto volume exact when Public sends JSON numbers.
+            return json.loads(payload, parse_float=Decimal)
+
+        def normalize(payload, received):
+            checked = owner_historical_bars.normalize_bars(
+                payload, symbol=symbol, instrument_type=instrument_type,
+                period=period, received_at=received)
+            return {
+                "provider": "Public API", "source": "Get bars v2",
+                "symbol": symbol, "assetClass": instrument_type, "period": period,
+                "receivedAt": checked["observedAt"], "barCount": checked["barCount"],
+                "bars": checked["bars"], "readOnly": True, "dataPersisted": False,
+                "ordersEnabled": False, "transfersEnabled": False,
+                "paperFillEligible": False,
+            }
+
+        return self._scoped_read(identity_token, internal_account_id, fetch, normalize)
+
+    def _scoped_read(self, identity_token, internal_account_id, fetch, normalize):
         reader = self.reader
         try:
             owner = reader._principal(identity_token)
@@ -154,20 +219,9 @@ class OwnerMarketQuotes:
             token = reader._token(identity_token, connection)
             if provider_id not in {a["accountId"] for a in reader._accounts(token)}:
                 raise OwnerQuoteUnavailable("Linked account unavailable")
-            response = reader.http.post(
-                public.BASE + "/userapigateway/marketdata/" +
-                quote(provider_id, safe="") + "/quotes",
-                json={"instruments":[{"symbol":symbol,"type":instrument_type}]},
-                headers={"Authorization":"Bearer "+token,
-                         "Accept":"application/json",
-                         "Content-Type":"application/json"},
-                timeout=public.TIMEOUT,
-            )
-            # The server clock is used for receipt and staleness; never
-            # accept client-asserted provider provenance or timestamps.
+            payload = fetch(reader, token, provider_id)
             received = _now(self.clock)
-            observation = _entry(reader._get_json(response),
-                                 symbol, instrument_type, received)
+            observation = normalize(payload, received)
             if reader._principal(identity_token) != owner:
                 raise OwnerQuoteUnavailable("Session changed")
             with tenant_foundation._open(reader.path) as db:
@@ -190,5 +244,5 @@ class OwnerMarketQuotes:
         except OwnerQuoteUnavailable:
             raise
         except (public.PublicReadUnavailable, public.tenant_public_vault.TenantVaultDenied,
-                requests.RequestException, ValueError, TypeError, KeyError):
-            raise OwnerQuoteUnavailable("Verified Public quote unavailable") from None
+                requests.RequestException, ValueError, TypeError, KeyError, RecursionError):
+            raise OwnerQuoteUnavailable("Verified Public market data unavailable") from None

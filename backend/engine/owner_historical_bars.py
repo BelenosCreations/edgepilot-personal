@@ -1,9 +1,6 @@
-"""Offline-only Public historical-bar response validation, not a source/rights proof.
+"""Validate Public historical-bar payload structure and observed timestamps.
 
-Never imported by app.py, never executes network requests, opens a database or
-enables historical caching, autonomous decisions, trades or paper fills.
-Public's personal API documents historicdata v2, but current retention, data
-redistribution and account-level entitlement must be verified separately.
+Source authentication and linked-account verification belong to the caller.
 """
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -17,6 +14,7 @@ class HistoryUnavailable(ValueError):
 _SYMBOL = re.compile(r"[A-Z0-9.^_-]{1,30}", re.ASCII)
 _PRICE = re.compile(r"(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,12})?", re.ASCII)
 _VOLUME = re.compile(r"(?:0|[1-9][0-9]{0,18})", re.ASCII)
+_CRYPTO_VOLUME = re.compile(r"(?:0|[1-9][0-9]{0,18})(?:\.[0-9]{1,18})?", re.ASCII)
 _TYPES = frozenset(("EQUITY", "CRYPTO"))
 _PERIODS = frozenset(("DAY", "WEEK", "MONTH", "QUARTER", "HALF_YEAR",
                       "YEAR", "FIVE_YEARS", "TEN_YEARS", "ALL", "YTD",
@@ -59,14 +57,19 @@ def _price(value):
     return amount
 
 
-def _volume(value):
+def _volume(value, *, crypto=False):
     if isinstance(value, bool):
         raise HistoryUnavailable("Source volume unavailable")
     if isinstance(value, int):
         if value < 0 or value > 9999999999999999999:
             raise HistoryUnavailable("Source volume unavailable")
         return str(value)
-    if isinstance(value, str) and _VOLUME.fullmatch(value):
+    if crypto and isinstance(value, Decimal):
+        if not value.is_finite() or not -18 <= value.as_tuple().exponent <= 18:
+            raise HistoryUnavailable("Source volume unavailable")
+        value = format(value, "f")
+    pattern = _CRYPTO_VOLUME if crypto else _VOLUME
+    if isinstance(value, str) and pattern.fullmatch(value):
         return value
     raise HistoryUnavailable("Source volume unavailable")
 
@@ -92,6 +95,15 @@ def normalize_bars(payload, *, symbol, instrument_type, period, received_at):
     rows = regular.get("bars")
     if not isinstance(rows, list) or not 1 <= len(rows) <= _MAX_BARS:
         raise HistoryUnavailable("Historical source bars unavailable")
+    leading = payload.get("leadingFill")
+    leading_end = None
+    if leading is not None:
+        if not isinstance(leading, dict):
+            raise HistoryUnavailable("Malformed chart lead-in")
+        leading_start = _timestamp(leading.get("startTimestamp"), received)
+        leading_end = _timestamp(leading.get("endTimestamp"), received)
+        if leading_start > leading_end:
+            raise HistoryUnavailable("Malformed chart lead-in")
     out = []
     previous = None
     for row in rows:
@@ -106,13 +118,17 @@ def normalize_bars(payload, *, symbol, instrument_type, period, received_at):
                 or prices["low"] > min(prices["open"], prices["close"])
                 or prices["low"] > prices["high"]):
             raise HistoryUnavailable("Source OHLC relationships invalid")
-        volume = _volume(row.get("volume"))
+        volume = _volume(row.get("volume"), crypto=instrument_type == "CRYPTO")
+        previous = when
+        if leading_end is not None and when <= leading_end:
+            continue
         out.append({
             "timestamp": when.isoformat(),
             **{key: row[key] for key in ("open", "high", "low", "close")},
             "volume": volume,
         })
-        previous = when
+    if not out:
+        raise HistoryUnavailable("Historical source bars unavailable")
     return {
         "providerLabel": "Public API (unverified source payload)",
         "expectedSourcePath": "historicdata v2",
