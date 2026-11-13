@@ -4,10 +4,14 @@
   let ownerSession = null;
   let revision = 0;
   let busy = false;
+  // Ephemeral, selected-account-only comparison: never sent to EdgePilot or Public.
+  let snapshotBalance = null;
+  let snapshotAccount = null;
 
   const accountIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
   const symbolPattern = /^[A-Za-z0-9.^_-]{1,30}$/;
   const moneyPattern = /^\d+(?:\.\d{1,2})?$/;
+  const manualUSDPattern = /^(?:0|[1-9]\d{0,11})(?:\.\d{1,2})?$/;
   const unitsPattern = /^-?\d+(?:\.\d{1,18})?$/;
   const quoteSymbolPattern = /^[A-Z0-9.^_-]{1,30}$/;
   const quotePricePattern = /^(?:0|[1-9]\d{0,11})(?:\.\d{1,12})?$/;
@@ -22,6 +26,17 @@
     const [whole, fractional = ""] = raw.split(".");
     return "$" + whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",") +
       "." + (fractional + "00").slice(0, 2);
+  };
+  const cents = raw => {
+    if (typeof raw !== "string" || !manualUSDPattern.test(raw))
+      throw new Error("Enter the Public app amount in USD with up to two decimals");
+    const [whole, part = ""] = raw.split(".");
+    return BigInt(whole) * 100n + BigInt((part + "00").slice(0, 2));
+  };
+  const amountFromCents = raw => {
+    const positive = raw < 0n ? -raw : raw;
+    return money(String(positive / 100n) + "." +
+      String(positive % 100n).padStart(2, "0"));
   };
   const quantity = raw => {
     if (typeof raw !== "string" || raw.length > 64 || !unitsPattern.test(raw))
@@ -56,6 +71,12 @@
   function clearSnapshot() {
     revision += 1;
     clearQuote();
+    snapshotBalance = null;
+    snapshotAccount = null;
+    el("publicAppValue").value = "";
+    el("compareValues").disabled = true;
+    el("reconcileResult").textContent =
+      "Retrieve a snapshot before comparing the same account in your Public app.";
     el("portfolioValue").textContent = "Not loaded";
     el("portfolioPositions").textContent = "Not loaded";
     el("positions").replaceChildren();
@@ -88,7 +109,7 @@
         value:money(position.currentValue)
       };
     });
-    return {value, positions};
+    return {value, positions, rawBalance:data.balance};
   }
   async function refreshAccounts() {
     const stamp = ++revision;
@@ -197,12 +218,46 @@
     el("positions").replaceChildren(...rows);
     el("portfolioValue").textContent = snapshot.value;
     el("portfolioPositions").textContent = String(snapshot.positions.length);
+    snapshotBalance = snapshot.rawBalance;
+    snapshotAccount = id;
+    el("compareValues").disabled = false;
     el("intro").textContent = "Public-reported account snapshot for the selected verified account.";
     el("snapshotTime").textContent =
       "Retrieved " + new Date().toLocaleString() +
       " on this device; not a market quote timestamp. Read-only, no orders or transfers.";
     setStatus("Read-only Public portfolio retrieved. No trade or bank action occurred.");
   }));
+  // Manual user-entered Public-app reference is kept in this page only.
+  // A matching number is not independent reconciliation of account scope/time.
+  el("publicAppValue").addEventListener("input", () => {
+    el("reconcileResult").textContent =
+      "Not compared. Check the same Public account at approximately the same time.";
+  });
+  el("compareValues").addEventListener("click", () => {
+    if (!ownerSession || snapshotBalance === null ||
+        snapshotAccount !== el("accountChoice").value ||
+        !accountIdPattern.test(snapshotAccount)) {
+      el("reconcileResult").textContent =
+        "No valid snapshot for this account. Retrieve a fresh snapshot.";
+      return;
+    }
+    const entry = el("publicAppValue").value.trim();
+    if (!manualUSDPattern.test(entry)) {
+      el("reconcileResult").textContent =
+        "Enter a nonnegative Public app amount in USD, for example 123.45 (no commas).";
+      return;
+    }
+    const difference = cents(snapshotBalance) - cents(entry);
+    const result = difference === 0n ?
+      "Values are numerically equal to the cent." :
+      "Difference: " + amountFromCents(difference) + " (" +
+        (difference > 0n ? "EdgePilot snapshot higher" :
+          "Public app entry higher") + ").";
+    el("reconcileResult").textContent = result +
+      " Manual display comparison only; not independently verified. " +
+      "Confirm the same Public account, balance definition and time. " +
+      "Amounts are not submitted or saved.";
+  });
   // One intentional POST; no timers, bulk quote retrieval, client caching,
   // paper fills, account aggregation or execution capabilities.
   const readSourcePrice = raw => {

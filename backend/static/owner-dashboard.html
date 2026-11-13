@@ -79,6 +79,16 @@ label{display:block;font-weight:600;font-size:.9rem;margin-top:12px}
       </div>
       <p id="snapshotTime" class="muted small">No snapshot loaded. Values are not automatically refreshed.</p>
       <p class="small muted">This is a single selected Public brokerage account, not your total net worth or a historical performance chart. Retrieving a snapshot uses the current provider response; no scheduled requests are made.</p>
+      <section aria-labelledby="reconcileHeading">
+        <h2 id="reconcileHeading">Compare with the Public app (manual)</h2>
+        <p class="muted small">Open the same account in Public immediately after retrieving the snapshot above. Enter Public's displayed USD account value. This comparison happens only in your browser; it is not an independent provider reconciliation, and balance definitions or times may differ.</p>
+        <label for="publicAppValue">Public app displayed account value (USD)</label>
+        <input id="publicAppValue" type="text" inputmode="decimal" autocomplete="off" spellcheck="false"
+          maxlength="18" placeholder="e.g. 123.45" aria-label="Public app displayed account value in USD"
+          style="width:100%;background:#101e32;color:#edf5fb;border:1px solid #4d8390;border-radius:9px;padding:12px;min-height:45px;font:inherit">
+        <p><button id="compareValues" type="button" disabled>Compare displayed values</button></p>
+        <p id="reconcileResult" class="muted small" role="status" aria-live="polite">Retrieve a snapshot before comparing the same account in your Public app.</p>
+      </section>
     </section>
     <section class="panel">
       <h2>Open positions</h2>
