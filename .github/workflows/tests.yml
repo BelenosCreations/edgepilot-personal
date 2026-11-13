@@ -35,3 +35,4 @@ jobs:
         run: |
           node --check backend/static/assets/app.js
           node --check backend/static/assets/identity.js
+          node --check backend/static/assets/owner-dashboard.js

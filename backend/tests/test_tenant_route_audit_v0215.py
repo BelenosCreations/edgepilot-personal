@@ -15,7 +15,7 @@ class TenantBoundaryAuditTests(unittest.TestCase):
 
     def test_current_legacy_api_worker_are_explicitly_cutover_blockers(self):
         audit=tenant_route_audit.inspect_sources(self.app,self.worker)
-        self.assertEqual(audit["identityRoutesReviewed"],25)
+        self.assertEqual(audit["identityRoutesReviewed"],26)
         self.assertTrue(audit["tenantSessionControlsDefaultOff"])
         self.assertIn("permanent_admin_invites.issue(",self.app)
         self.assertIn("EDGE_PERMANENT_OWNER_INVITES_ENABLED",self.app)
