@@ -187,6 +187,9 @@
           setStatus("Quote response could not be verified by the browser. " +
             "No unverified price was displayed.", true);
         }
+      } else if (context === "history") {
+        setStatus(error.status ? "Public history request unavailable (HTTP " + error.status + ")." :
+          "Public history response could not be verified.", true);
       } else {
         setStatus("Read-only request unavailable. No trading or transfer was attempted.", true);
       }
@@ -385,8 +388,9 @@
     const symbol = el("quoteSymbol").value.trim().toUpperCase();
     const type = el("quoteType").value;
     const period = el("historyPeriod").value;
-    if (!ownerSession || !accountIdPattern.test(id) || !quoteSymbolPattern.test(symbol))
-      throw new Error("Choose a valid Public symbol and account");
+    if (!ownerSession || !accountIdPattern.test(id) || !quoteSymbolPattern.test(symbol) ||
+        !["EQUITY", "CRYPTO"].includes(type) || !["WEEK", "MONTH"].includes(period))
+      throw new Error("Choose a valid Public symbol, account and period");
     clearHistory();
     const current = historyRevision;
     try {
@@ -423,17 +427,19 @@
       });
       el("historyRows").replaceChildren(...rows);
       el("historyTable").hidden = false;
-      el("historyEvidence").textContent = "Public API · " + symbol + " · " +
-        data.barCount + " displayed bars" +
+      const scope = period === "WEEK" ? "One week" : "One month";
+      el("historyEvidence").textContent = "Public API · " + symbol + " · " + scope + " · " +
+        data.barCount + (data.barCount === 1 ? " displayed bar" : " displayed bars") +
         (expected == null ? "" : " · " + expected + " expected by Public") +
         " · received " + received;
       setStatus("Public price history retrieved.");
     } catch (error) {
+      if (current !== historyRevision && error.status !== 401) return;
       if (current === historyRevision)
         el("historyEvidence").textContent = "Public history unavailable for this request.";
       throw error;
     }
-  }));
+  }, "history"));
   el("loadQuote").addEventListener("click", () => run(async () => {
     const id = el("accountChoice").value;
     const symbol = el("quoteSymbol").value.trim().toUpperCase();

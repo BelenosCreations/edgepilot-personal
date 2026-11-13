@@ -1,3 +1,20 @@
+## v0.2.111 — 2026-11-13 — Independent receipt handoff and pinned restore publication
+
+Starting checkpoint independently verified. Main `5c461eaaa2d2493b9735f52d97080f5daf09a401` matches merged PR #137. PR head `5ac22068d5049d355c5a390a371303876c27dac3` passed pull-request Actions `43448446141`; the exact main push passed Actions `43448846533`. Render deployment `dep-dbridrm8bjmc73bt3dr0` was live at that main SHA and `/healthz` returned HTTP 200. There were no open PRs.
+
+The offline milestone exercises a separate signed receipt store, reserves receipt handoffs before the witness writes, and verifies the retained claim before rotating the ledger. A lost acknowledgment or missing resource stops the operation. Pinned tenant restore now covers racing and interrupted publication, existing sidecars, scoped digests, immutable policy and account quarantine. The owner history view labels the selected period and reports sanitized errors. See [receipt handoff and restore publication](PAPER_RECEIPT_HANDOFF_V02111.md).
+
+### Resume prompt
+
+Continue EdgePilot autonomously in BelenosCreations/edgepilot-personal. Resolve the current main commit and the merged PR from `development/v0.2.111-receipt-handoff`. Independently verify the exact PR head's successful pull-request Actions, the exact main push Actions, open PRs, and the live Render deployment matching main. If main has advanced, read its newest continuity entry. Use the existing Render service `edgepilot-private-h9tl` (`srv-dbocnb3m8hqs7386trvg`), Starter plan, 1 GB disk and automatic deployments from main.
+
+1. Rehearse explicit operator resolution of a frozen receipt reservation using independent authenticated evidence. Require a terminal quarantine or an independently proven exact prepared target and explicit promotion. Preserve refusal of ambiguous older files and one-use claims. Examine separately retained monotonic checkpoints for receipt-store rollback. Simultaneous rollback and cross-resource power-loss consistency remain open.
+2. Extend exact-pin synthetic restore acceptance to a process exit around publication and explicit inspection of an already published candidate. Verify scoped request digests, immutable policies, historical stops and revoked account bindings. Preserve existing recovery paths.
+3. Continue manual, source-attributed, session-only owner history under the user's provider-permission assumption. Use real history only on the owner's device for targeted acceptance in the milestone notes. Existing snapshot and MSFT quote acceptance still apply.
+4. Keep production paper fills, live trading, autonomous brokerage orders and bank transfers disabled. Preserve credentials, encrypted secrets, accounts, multi-user architecture, production storage and Render configuration. Use synthetic observations in tests and add no paid services.
+
+Work autonomously in batches. Update VERSION, README, CHANGELOG, milestone notes and this file. Run focused and full regressions. Merge after the exact PR head passes CI, then verify the main workflow and matching Render deploy. Update this file at the next verified branch point and provide a short copyable pointer.
+
 ## v0.2.110 — 2026-11-13 — Pinned tenant restore and custody recovery
 
 Verified starting checkpoint. Main `f59d81225a5c597f842c630a438f6df65ff88e7f`, PR #136 head `bf3868b7a0ce6a97260723fb2ebb2c74214cffb3`, PR Actions `43444163030`, and merged-main Actions `43444604537` matched. GitHub deployment `7767933893` and Render deployment `dep-dbri1kk9v7es73a9t30g` matched main and succeeded. The health endpoint returned HTTP 200. No PRs were open.

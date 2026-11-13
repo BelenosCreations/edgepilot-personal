@@ -38,6 +38,7 @@ _REQUIRED_TABLES = frozenset({
     "tenant_identity_sessions", "tenant_worker_leases",
     "tenant_runtime_status",
 })
+_SIDECARS = ("-journal", "-wal", "-shm")
 _INVALIDATE_RESTORED = (
     "tenant_identity_sessions", "tenant_passkey_challenges",
     "tenant_signup_invites", "tenant_worker_leases",
@@ -234,6 +235,8 @@ def _restore(token, archive_key, destination_path, *, magic, policies):
     except (OSError, ValueError, shadow_storage.MemoryStorageError):
         raise OfflineBackupDenied("Synthetic restore destination unavailable") from None
 
+    if policies is not None and any(os.path.lexists(str(target) + suffix) for suffix in _SIDECARS):
+        raise OfflineBackupDenied("Synthetic restore destination unavailable")
     stage = None
     try:
         # mkstemp creates a private 0600 regular file using O_EXCL. Do not
@@ -282,6 +285,8 @@ def _restore(token, archive_key, destination_path, *, magic, policies):
             os.fsync(checked.fileno())
         # Atomic link is no-replace, including if the target appeared during
         # validation. Never use os.replace or unlink an existing destination.
+        if policies is not None and any(os.path.lexists(str(target) + suffix) for suffix in _SIDECARS):
+            raise OfflineBackupDenied("Synthetic restore destination unavailable")
         os.link(stage, target)
         return target
     except Exception:
@@ -290,7 +295,7 @@ def _restore(token, archive_key, destination_path, *, magic, policies):
         # Success removes the staging name; failure removes only our staging
         # name and SQLite sidecars, never an unrelated destination path.
         if stage is not None:
-            for suffix in ("", "-journal", "-wal", "-shm"):
+            for suffix in ("", *_SIDECARS):
                 try:
                     Path(str(stage) + suffix).unlink(missing_ok=True)
                 except OSError:
