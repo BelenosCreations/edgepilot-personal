@@ -1,3 +1,11 @@
+## CURRENT development — v0.2.96 owner quote relative-spread research, November 12, 2026 (America/New_York)
+
+**Verified base:** v0.2.95 main `2addc778425b2852677988ef4b0d6d6e5dc6c45c`, GitHub Actions #43359984066 passed, existing Render `edgepilot-private-h9tl` deployment `dep-dbr8avu8bjmc73bgecgg` confirmed LIVE at that exact commit. Service remains Starter with the same 1 GB disk. Earlier owner comparison and real MSFT Public quote acceptance are complete and preserved; do not repeat absent regression.
+
+**v0.2.96 scope:** Show exact-decimal derived *relative* bid–ask spread, in basis points relative to the source midpoint, only where existing source quote receipt freshness is independently verified and both bid/ask timestamps are provided. Reject invalid timezone or calendar timestamps in browser. Do not add a history feed, account cache, storage, automatic requests, float arithmetic, broker execution, production paper fill or extra paid infrastructure. See OWNER_RELATIVE_SPREAD_V0296.md.
+
+**Next:** Verify the PR CI, merge into main only after success, verify post-merge GitHub Actions and Render live at exact main SHA. Continue source-permission research, independent dashboard functionality and dormant tenant-scoped synthetic paper risk/restore work. Market data retention permission and production backup/restore sign-off remain outstanding. All live orders, autonomous orders and bank transfers must remain disabled.
+
 ## CURRENT development — v0.2.95 atomic offline paper recovery, November 12, 2026 (America/New_York)
 
 **Verified previous milestone:** v0.2.94 PR #121 merged at main `9e9860b4cbcc1b3faf02c0bdad143595a10d2ad6`; PR CI passed, post-merge GitHub Actions run #43358994486 passed. Existing Render `edgepilot-private-h9tl` auto-deployed `dep-dbr86rojo6nc73eqk0q0` LIVE on that exact SHA. Existing Starter plan, 1 GB disk, encrypted accounts/recovery and multi-user architecture unchanged. Owner acceptance is already complete: same-account value matched official Public app to a cent, real MSFT quote retrieval worked, and last-vs-two-sided freshness was classified. Do not ask to repeat without a specific regression reason. No private amounts retained. Quote rights beyond actual read were not established.

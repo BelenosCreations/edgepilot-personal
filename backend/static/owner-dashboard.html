@@ -110,9 +110,10 @@ label{display:block;font-weight:600;font-size:.9rem;margin-top:12px}
         <div class="tile"><small>Bid (if supplied)</small><div class="metric" id="quoteBid">Not loaded</div></div>
         <div class="tile"><small>Ask (if supplied)</small><div class="metric" id="quoteAsk">Not loaded</div></div>
         <div class="tile"><small>Derived bid–ask spread</small><div class="metric" id="quoteSpread">Not loaded</div></div>
+        <div class="tile"><small>Relative spread (midpoint basis points)</small><div class="metric" id="quoteRelativeSpread">Not loaded</div></div>
       </div>
       <p id="quoteEvidence" class="muted small" aria-live="polite">No quote requested. Provider timestamps, not device retrieval time, determine observation age.</p>
-      <p class="muted small">Bid–ask spread is computed from Public-reported prices only when both sides have provider timestamps fresh at EdgePilot receipt. It is a reference difference in quoted price units, not a fee, expected return or fillable price. Fresh at receipt does not mean live now.</p>
+      <p class="muted small">Bid–ask spread is computed from Public-reported prices only when both sides have provider timestamps fresh at EdgePilot receipt. The absolute value is in quoted price units; the relative value divides the source difference by the source midpoint and expresses it in basis points (1 bp = 0.01%). Neither is a fee, expected return, liquidity guarantee or fillable price. Both are unavailable for stale, untimed, missing or crossed books. Fresh at receipt does not mean live now.</p>
       <p class="alert small">Quotes can be stale, unavailable or outside market hours. Provider data permissions have not been verified for persistent caching or paper execution. No price or performance is manufactured when a source fails.</p>
     </section>
     <section class="panel">
