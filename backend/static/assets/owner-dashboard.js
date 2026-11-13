@@ -66,6 +66,7 @@
     el("quoteBid").textContent = "Not loaded";
     el("quoteAsk").textContent = "Not loaded";
     el("quoteSpread").textContent = "Not loaded";
+    el("quoteRelativeSpread").textContent = "Not loaded";
     el("quoteEvidence").textContent =
       "No quote requested. Provider timestamps, not device retrieval time, determine whether observations are current.";
   }
@@ -278,9 +279,19 @@
     return raw;
   };
   const readSourceTime = raw => {
-    if (typeof raw !== "string" || raw.length > 40 ||
-        !/^\d{4}-\d{2}-\d{2}T/.test(raw) ||
-        !Number.isFinite(Date.parse(raw)))
+    // The server only emits timezone-aware UTC observations. Do not allow a
+    // device-local interpretation or Date.parse normalization of bad dates.
+    const match = typeof raw === "string" && raw.length <= 40 ?
+      /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,6})?(?:Z|\+00:00)$/.exec(raw) :
+      null;
+    if (!match) throw new Error("Unverified quote timestamp");
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    if (year < 1970 || month < 1 || month > 12 || day < 1 ||
+        day > new Date(Date.UTC(year, month, 0)).getUTCDate() ||
+        Number(match[4]) > 23 || Number(match[5]) > 59 ||
+        Number(match[6]) > 59 || !Number.isFinite(Date.parse(raw)))
       throw new Error("Unverified quote timestamp");
     return raw;
   };
@@ -301,6 +312,27 @@
       .padStart(12, "0").replace(/0+$/, "");
     return String(delta / 1000000000000n) +
       (fraction ? "." + fraction : "") + " price units";
+  };
+  // Research-only percentage scale: (ask - bid) / midpoint * 10,000.
+  // The hundredths-of-a-basis-point display is rounded using BigInt; source
+  // prices are never rounded to a float or represented as executable quotes.
+  const quotedRelativeSpread = (bid, ask, twoSidedFresh) => {
+    if (!twoSidedFresh || bid === "Not provided by Public" ||
+        ask === "Not provided by Public") return "Unavailable";
+    const units = raw => {
+      const [whole, fraction = ""] = raw.split(".");
+      return BigInt(whole) * 1000000000000n +
+        BigInt((fraction + "000000000000").slice(0, 12));
+    };
+    const bidUnits = units(bid);
+    const askUnits = units(ask);
+    if (bidUnits <= 0n || bidUnits > askUnits)
+      throw new Error("Invalid source spread refused");
+    const denominator = askUnits + bidUnits;
+    const hundredthsOfBp =
+      ((askUnits - bidUnits) * 2000000n + denominator / 2n) / denominator;
+    return String(hundredthsOfBp / 100n) + "." +
+      String(hundredthsOfBp % 100n).padStart(2, "0") + " bps";
   };
   function validateQuote(data, id, symbol, type) {
     if (!data || data.accountId !== id || data.symbol !== symbol ||
@@ -325,7 +357,8 @@
         askAt === "timestamp unavailable"))
       throw new Error("Untimed source book cannot be called fresh");
     const spread = quotedSpread(bid, ask, data.twoSidedFresh);
-    return {last,bid,ask,lastAt,received,bidAt,askAt,spread,
+    const relativeSpread = quotedRelativeSpread(bid, ask, data.twoSidedFresh);
+    return {last,bid,ask,lastAt,received,bidAt,askAt,spread,relativeSpread,
             lastFresh:data.lastFresh,twoSidedFresh:data.twoSidedFresh};
   }
   el("quoteSymbol").addEventListener("input", clearQuote);
@@ -353,6 +386,7 @@
     el("quoteBid").textContent = q.bid;
     el("quoteAsk").textContent = q.ask;
     el("quoteSpread").textContent = q.spread;
+    el("quoteRelativeSpread").textContent = q.relativeSpread;
     el("quoteEvidence").textContent =
       "Public API • " + type + " " + symbol +
       " • last quote timestamp " + q.lastAt +
@@ -364,7 +398,7 @@
         "both sides timestamped within window AT RECEIPT" :
         "stale, untimed or incomplete at receipt") +
       ". Fresh at receipt is not a live/current price guarantee. " +
-      "Source-reported reference only; derived spread is not a fill or performance estimate; no paper fills.";
+      "Source-reported reference only; absolute and midpoint-relative spreads are not fill or performance estimates; no paper fills.";
     setStatus("Public quote retrieved for research. No order, paper fill or transfer occurred.");
   }, "quote"));
   el("signOut").addEventListener("click", () => run(async () => {
