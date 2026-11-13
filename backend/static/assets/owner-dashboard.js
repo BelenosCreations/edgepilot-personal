@@ -403,6 +403,9 @@
           data.bars.length < 1 || data.bars.length > 5000)
         throw new Error("Unverified Public history");
       const received = readSourceTime(data.receivedAt);
+      const expected = data.sourceExpectedBars;
+      if (expected != null && (!Number.isSafeInteger(expected) || expected < 0))
+        throw new Error("Unverified Public history coverage");
       const volumePattern = type === "CRYPTO" ? /^\d{1,19}(?:\.\d{1,18})?$/ : /^\d{1,19}$/;
       const rows = data.bars.slice().reverse().map(bar => {
         const when = readSourceTime(bar.timestamp);
@@ -421,7 +424,9 @@
       el("historyRows").replaceChildren(...rows);
       el("historyTable").hidden = false;
       el("historyEvidence").textContent = "Public API · " + symbol + " · " +
-        data.barCount + " source bars · received " + received;
+        data.barCount + " displayed bars" +
+        (expected == null ? "" : " · " + expected + " expected by Public") +
+        " · received " + received;
       setStatus("Public price history retrieved.");
     } catch (error) {
       if (current === historyRevision)

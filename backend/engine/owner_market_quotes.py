@@ -189,6 +189,7 @@ class OwnerMarketQuotes:
                 "provider": "Public API", "source": "Get bars v2",
                 "symbol": symbol, "assetClass": instrument_type, "period": period,
                 "receivedAt": checked["observedAt"], "barCount": checked["barCount"],
+                "sourceExpectedBars": checked["sourceExpectedBars"],
                 "bars": checked["bars"], "readOnly": True, "dataPersisted": False,
                 "ordersEnabled": False, "transfersEnabled": False,
                 "paperFillEligible": False,

@@ -1,3 +1,20 @@
+## v0.2.110 — 2026-11-13 — Pinned tenant restore and custody recovery
+
+Verified starting checkpoint. Main `f59d81225a5c597f842c630a438f6df65ff88e7f`, PR #136 head `bf3868b7a0ce6a97260723fb2ebb2c74214cffb3`, PR Actions `43444163030`, and merged-main Actions `43444604537` matched. GitHub deployment `7767933893` and Render deployment `dep-dbri1kk9v7es73a9t30g` matched main and succeeded. The health endpoint returned HTTP 200. No PRs were open.
+
+The milestone adds pinned tenant archive audits with exact request digests, immutable policies, fractional accounting, preserved revocation and a sticky historical loss stop. Separate Decimal witness recovery exercises either resource disappearing and ambiguous rotation claims. Owner history shows Public's expected regular-series bar count when present. See [restore, custody and targeted owner acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md).
+
+### Resume prompt
+
+Continue EdgePilot autonomously in BelenosCreations/edgepilot-personal from the verified v0.2.110 checkpoint. Resolve the exact commit from GitHub main and the merge commit of the PR from `development/v0.2.110-restore-audit`. Verify the PR head's successful pull-request workflow, the exact main push workflow, open PRs, and the live Render deployment matching main. If main has advanced, inspect its continuity entry before choosing the development base. Use the existing Render service `edgepilot-private-h9tl` (`srv-dbocnb3m8hqs7386trvg`), Starter plan, 1 GB disk and automatic deployment from main. Leave Render configuration alone.
+
+1. Advance the offline custody protocol by testing independently operated receipt storage and failure at the receipt handoff, including a lost acknowledgment or loss of one resource while the handoff is in progress. Require independent monotonic evidence for the latest state. An older database or an ambiguous write must never be automatically accepted or retried. Combined rollback and cross-resource power-loss consistency remain open.
+2. Extend synthetic tenant restore tests at the exact archive pin to cover concurrent or interrupted publication, preservation of scoped idempotency evidence, immutable policy and historical stop semantics. Keep restored account bindings quarantined and preserve existing recovery paths.
+3. Continue source-attributed, session-only owner research under the user's instruction to assume provider permission. Use real history only for targeted owner-device acceptance as described in the milestone notes. The prior owner snapshot and MSFT quote acceptance still apply.
+4. Keep production paper fills, live trading, autonomous brokerage orders and bank transfers disabled. Preserve credentials, encrypted secrets, accounts, multi-user architecture and production storage. Use synthetic observations for tests and add no paid services.
+
+Work autonomously in batches. Update VERSION, README, CHANGELOG, milestone notes and this continuity entry. Run focused and full regressions, merge only after exact-head CI succeeds, and verify the post-merge workflow and the matching Render deployment. At the next verified branch point put the full resume instructions in this file and provide a short copyable pointer and plain-language summary.
+
 ## v0.2.109 — 2026-11-13 — Separate custody prototype and owner history
 
 Starting checkpoint independently verified. Main `1bb56da071c604a9762346281fc7e20c67c6d2cb`, push Actions `43439900557` and exact-SHA automatic Render deployment `dep-dbrhjmajnfac739h5vug` succeeded. The service health endpoint returned HTTP 200. No open PRs at baseline.
