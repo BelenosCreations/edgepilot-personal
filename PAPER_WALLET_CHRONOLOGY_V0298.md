@@ -1,0 +1,7 @@
+# v0.2.98 — Synthetic paper wallet/event chronology (offline only)
+
+A hardened offline encrypted-backup auditor now requires every dormant tenant paper wallet's `opened_at` to be a strict, calendar-valid, timezone-aware UTC timestamp. Paper assumed-fill events must not predate their wallet's opening or regress in creation time relative to **earlier appended events from the same user and linked account**. Events across accounts are checked independently; interleaved synthetic records remain valid. Source observation must still be at or before event creation.
+
+New disposable /dev/shm two-user/three-account regression cases tamper with impossible dates, naive/local times, a wallet opening after an assumed fill, and a nonmonotonic same-account event sequence. Both the auditor and offline encrypted sealing must refuse malformed fixtures. Repaired fixtures seal again. This checks internally consistent synthetic bookkeeping only, not actual provider timestamp authenticity or source/quote storage rights.
+
+The production web app does not import the paper ledger or auditor. This version introduces no production schema migration, no running paper simulation, no live or autonomous orders, no transfers, no new paid resources and no changes to the existing Render disk, identities, Public connections, secrets or owner acceptance records. Production encrypted backup/restore, crash residue cleanup and key-rotation operator approval remain outstanding. Follow the original per-account isolation and restored-credential quarantine policy.

@@ -286,6 +286,58 @@ class PaperRecoveryRehearsal(unittest.TestCase):
         self.assertNotIn("tenant_paper_ledger", app)
         self.assertNotIn("/api/identity/paper/fill", app)
 
+    def test_wallet_opening_timestamp_and_event_order_fail_closed(self):
+        # All fixtures remain synthetic in /dev/shm; the existing backup
+        # verifier must also refuse inconsistent encrypted source sealing.
+        self.assertEqual(self.check()["verifiedAssumedFills"], 3)
+        with sqlite3.connect(self.path) as db:
+            original = db.execute("""SELECT opened_at FROM tenant_paper_wallets
+                WHERE user_id=? AND account_id=?""",
+                (self.owner, self.primary)).fetchone()[0]
+        for tampered in (
+            "not-a-time", "2026-11-13T04:00:00",
+            "2026-11-12T23:00:00-05:00",
+            "2026-02-30T12:00:00Z", "9999-12-31T23:59:59Z",
+        ):
+            with self.subTest(opened_at=tampered):
+                with sqlite3.connect(self.path) as db:
+                    db.execute("""UPDATE tenant_paper_wallets
+                        SET opened_at=? WHERE user_id=? AND account_id=?""",
+                        (tampered, self.owner, self.primary))
+                try:
+                    with self.assertRaises(audit.PaperRecoveryDenied):
+                        self.check()
+                    with self.assertRaises(tenant_backup_rehearsal.OfflineBackupDenied):
+                        tenant_backup_rehearsal.sealed_snapshot(self.path, self.key)
+                finally:
+                    with sqlite3.connect(self.path) as db:
+                        db.execute("""UPDATE tenant_paper_wallets
+                            SET opened_at=? WHERE user_id=? AND account_id=?""",
+                            (original, self.owner, self.primary))
+
+        with sqlite3.connect(self.path) as db:
+            rows = db.execute("""SELECT rowid,created_at FROM tenant_paper_events
+                WHERE user_id=? AND account_id=? ORDER BY rowid""",
+                (self.owner, self.primary)).fetchall()
+        self.assertEqual(len(rows), 2)
+        # Later creation of the first append must not become earlier than a
+        # subsequent append. Other accounts' independent event times do not
+        # impose a global ordering.
+        with sqlite3.connect(self.path) as db:
+            db.execute("UPDATE tenant_paper_events SET created_at=? WHERE rowid=?",
+                       ("9999-12-31T23:59:59Z", rows[0][0]))
+        try:
+            with self.assertRaises(audit.PaperRecoveryDenied):
+                self.check()
+            with self.assertRaises(tenant_backup_rehearsal.OfflineBackupDenied):
+                tenant_backup_rehearsal.sealed_snapshot(self.path, self.key)
+        finally:
+            with sqlite3.connect(self.path) as db:
+                db.execute("UPDATE tenant_paper_events SET created_at=? WHERE rowid=?",
+                           (rows[0][1], rows[0][0]))
+        self.assertEqual(self.check()["verifiedAssumedFills"], 3)
+        self.assertTrue(tenant_backup_rehearsal.sealed_snapshot(self.path, self.key))
+
 
 if __name__ == "__main__":
     unittest.main()
