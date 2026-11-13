@@ -1,3 +1,11 @@
+## CURRENT development — v0.2.89 paper-ledger encrypted recovery preflight, November 12, 2026
+
+**Verified starting checkpoint:** `main` v0.2.88 `3c1c8db4b21000425912242083feb286754702a5`, PR #115 merged; post-merge GitHub Actions run `43345843142` succeeded. The preexisting Render Starter service `edgepilot-private-h9tl` deployed that exact SHA live with the same 1 GB attached disk; separate free passkey staging was not altered.
+
+**Work in this milestone:** New offline paper recovery auditor checks per-account assumed-fill arithmetic and final wallet/position continuity; synthetic-only encrypted backup/restore checks these tables on sealing and recovery. Tests exercise isolated synthetic owner/member/multiple-account round trip, full quarantine of restored connections, malformed event/position state, and partial schema. Existing v0.2.88 paper ledger stays unimported by app.py, dormant and unexposed. Verify PR CI, merge only on green, then verify merged-main CI and Render without any secret, flag, disk or data mutation.
+
+**Next:** Source-attributed research *without fabricated prices*, owner dashboard safe states and physical-device verification; licensed provider cache/analysis rights before any persistent evidence; independent authenticated paper-only endpoints only after production encrypted recovery and operator rollback gates. Ledger history verified by this milestone is not cryptographically source-signed nor a production backup product. Preserve all multi-user, vault and recovery architecture. No paid services, live trading, autonomous orders, bank transfers or additional enrollments.
+
 ## CURRENT development — v0.2.88 dormant tenant paper ledger, November 12, 2026
 
 **Verified foundation:** `main` v0.2.87 `5a086bc93781a96fb94500e676754b34d1c1c428`, PR #114 and merged-main GitHub Actions run `43343900691` both passed. This added no-side-effect, fully offline market provenance/risk-budget paper preview; owner dashboard remains read-only. Earlier owner snapshot was received from Public but still needs official account-value reconciliation. Never claim a paper order UI is already functional.
