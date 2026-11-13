@@ -63,6 +63,7 @@ class DenyByDefaultPublic:
             return self._reply({"accounts":[{"accountId":ref,"accountType":"BROKERAGE"}]})
         if url==ro.BASE+f"/userapigateway/trading/{ref}/portfolio/v2":
             return self._reply({
+                "accountId":ref,
                 "totalAccountValue":"101.00" if ref==ACCOUNT_A else "202.00",
                 "positions":[{
                     "instrument":{"symbol":"SPY" if ref==ACCOUNT_A else "QQQ"},

@@ -5,6 +5,21 @@
   let identityViewGeneration = 0;
   let knownPasskeyCount = null;
   const el = id => document.getElementById(id);
+  // Preserve the exact USD cents returned by the sanitized server. Avoid
+  // floating-point rounding when displaying brokerage-reported money.
+  function portfolioUsd(value) {
+    if (typeof value !== "string" || !/^\d+(?:\.\d{1,2})?$/.test(value) ||
+        value.length > 40) throw new Error("Invalid read-only portfolio amount");
+    const parts = value.split(".");
+    return "$" + parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",") +
+      "." + ((parts[1] || "") + "00").slice(0, 2);
+  }
+  function portfolioUnits(value) {
+    if (typeof value !== "string" ||
+        !/^-?\d+(?:\.\d{1,18})?$/.test(value) ||
+        value.length > 64) throw new Error("Invalid read-only position quantity");
+    return value;
+  }
   const status = (message, error = false) => {
     const box = el("status");
     box.textContent = message;
@@ -384,24 +399,50 @@
         button.textContent = "View read-only portfolio";
         button.addEventListener("click", () => action(async () => {
           const requestGeneration = identityViewGeneration;
+          const holdings = el("holdings");
+          // Never leave an older successful balance visible after a new
+          // request fails or a linked account is switched.
+          holdings.replaceChildren();
+          el("portfolioSummary").textContent = "Retrieving a fresh read-only Public account snapshot…";
           const portfolio = await api("/public/read/accounts/" + encodeURIComponent(id) + "/portfolio");
           if (requestGeneration !== identityViewGeneration) return;
           if (portfolio.readOnly !== true || portfolio.ordersEnabled !== false ||
               portfolio.transfersEnabled !== false || portfolio.accountId !== id ||
-              !Array.isArray(portfolio.holdings)) {
+              !Array.isArray(portfolio.holdings) || portfolio.holdings.length > 100) {
             throw new Error("Portfolio response rejected");
           }
-          el("portfolioSummary").textContent = String(account.label || "Public account") +
-            " · Public-reported value: " + String(portfolio.balance) +
-            " · read-only, no orders or transfers";
-          const holdings = el("holdings");
-          holdings.replaceChildren();
-          for (const position of portfolio.holdings) {
+          const total = portfolioUsd(portfolio.balance);
+          // Validate the complete snapshot before displaying any position.
+          const positions = portfolio.holdings.map(position => {
+            if (!position || typeof position.symbol !== "string" ||
+                !/^[A-Za-z0-9.^_-]{1,30}$/.test(position.symbol)) {
+              throw new Error("Invalid read-only position");
+            }
+            return {
+              symbol:position.symbol,
+              quantity:portfolioUnits(position.quantity),
+              currentValue:portfolioUsd(position.currentValue)
+            };
+          });
+          if (requestGeneration !== identityViewGeneration) return;
+          for (const position of positions) {
             const item = document.createElement("li");
-            item.textContent = String(position.symbol) + " · " + String(position.quantity) +
-              " shares · value " + String(position.currentValue);
+            // Units can mean stocks, crypto, bond face value, or contracts;
+            // never label every position as "shares".
+            item.textContent = position.symbol + " · quantity " + position.quantity +
+              " units · current value " + position.currentValue;
             holdings.appendChild(item);
           }
+          if (!positions.length) {
+            const item = document.createElement("li");
+            item.textContent = "Public reported no open positions; the account value may include cash.";
+            holdings.appendChild(item);
+          }
+          const retrieved = new Date().toLocaleString();
+          el("portfolioSummary").textContent = String(account.label || "Public account") +
+            " · Public-reported total value: " + total +
+            " · retrieved " + retrieved +
+            " (device time; not a market quote timestamp) · read-only";
         }));
         li.appendChild(button);
         if (data.discoveryOnlyPilot === true) {

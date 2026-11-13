@@ -75,6 +75,7 @@ class FakePublic:
                 self.after_portfolio=None
                 callback()
             return self.reply({
+                "accountId":account,
                 "totalAccountValue":"1234.56" if account==ACCOUNT_A else "987.65",
                 "positions":[{"instrument":{"symbol":"SPY" if account==ACCOUNT_A else "QQQ"},
                               "currentValue":"321.00","quantity":"2"}]})
@@ -148,6 +149,46 @@ class UserPublicReadOnlyUnitTests(unittest.TestCase):
             for _,path,_ in self.fake.calls))
         self.assertFalse(any("/orders" in path or "/transfer" in path
                              for _,path,_ in self.fake.calls))
+
+    def test_portfolio_rejects_wrong_or_missing_provider_account_id(self):
+        owner=self.sessions[0]
+        link=self.adapter.link_verified(owner["token"],owner["csrf"],
+            self.connections[0],ACCOUNT_A,"Owner")
+        upstream_get=self.fake.get
+        for response in (
+            {"accountId":ACCOUNT_B,"totalAccountValue":"100.00",
+             "positions":[]},
+            {"totalAccountValue":"100.00","positions":[]},
+            {"accountId":"../other","totalAccountValue":"100.00",
+             "positions":[]},
+        ):
+            with self.subTest(response_fields=sorted(response)):
+                def fake_wrong_account(url,*,headers,timeout):
+                    if url.endswith("/portfolio/v2"):
+                        return FakePublic.reply(response)
+                    return upstream_get(url,headers=headers,timeout=timeout)
+                self.fake.get=fake_wrong_account
+                with self.assertRaises(ro.PublicReadUnavailable):
+                    self.adapter.portfolio(owner["token"],link["accountId"])
+        self.fake.get=upstream_get
+        accepted=self.adapter.portfolio(owner["token"],link["accountId"])
+        self.assertEqual(accepted["balance"],"1234.56")
+
+    def test_position_quantity_is_finite_numeric_and_fractional(self):
+        for source,expected in (
+            ("1","1"),("0.5","0.5"),("0.00000001","0.00000001"),
+            ("-3.25","-3.25"),(0,"0"),("2E-2","0.02"),
+        ):
+            with self.subTest(source=source):
+                self.assertEqual(ro._quantity(source),expected)
+        for source in (
+            None,True,False,[],{},float("nan"),float("inf"),
+            "-Inf","NaN","1e100000","1e-100000","1,500",
+            "1 share","9"*65,
+        ):
+            with self.subTest(source=str(source)[:30]):
+                with self.assertRaises(ro.PublicReadUnavailable):
+                    ro._quantity(source)
 
     def test_rotation_mid_discovery_blocks_stale_results(self):
         a=self.sessions[0]
