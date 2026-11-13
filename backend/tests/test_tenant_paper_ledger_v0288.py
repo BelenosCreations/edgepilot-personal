@@ -215,5 +215,21 @@ class TenantPaperLedgerTests(unittest.TestCase):
         self.assertNotIn("/api/identity/paper/fill", app)
 
 
+    def test_legacy_global_db_rejected_before_any_paper_table_is_added(self):
+        legacy = str(Path(self.tmp.name) / "old-global.db")
+        with sqlite3.connect(legacy) as db:
+            db.execute("CREATE TABLE settings(k TEXT PRIMARY KEY, v TEXT)")
+            db.execute("INSERT INTO settings VALUES('account_id','KEEP')")
+        with self.assertRaises(paper.PaperLedgerDenied):
+            paper.prepare(legacy)
+        with sqlite3.connect(legacy) as db:
+            names = {r[0] for r in db.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+            preserved = db.execute(
+                "SELECT v FROM settings WHERE k='account_id'").fetchone()[0]
+        self.assertEqual(names, {"settings"})
+        self.assertEqual(preserved, "KEEP")
+
+
 if __name__=="__main__":
     unittest.main()
