@@ -6,6 +6,7 @@ market licensing, broker transactions, or production restore readiness.
 """
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_DOWN, ROUND_UP
 import re
 import sqlite3
@@ -17,6 +18,9 @@ PAPER_TABLES = frozenset({
 _ASSETS = frozenset({"stock", "etf", "crypto"})
 _MAX = Decimal("1000000000")
 _SHA = re.compile(r"^[0-9a-f]{64}$")
+_UTC_EVENT_TIME = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|\+00:00)$"
+)
 
 
 class PaperRecoveryDenied(ValueError):
@@ -46,6 +50,22 @@ def _canonical_uuid(raw):
         return isinstance(raw, str) and str(uuid.UUID(raw)) == raw
     except (ValueError, TypeError, AttributeError):
         return False
+
+
+def _event_time(value):
+    """Check chronology of synthetic events; does not authenticate a source."""
+    if (not isinstance(value, str) or len(value) > 40
+            or not _UTC_EVENT_TIME.fullmatch(value)):
+        raise PaperRecoveryDenied("Synthetic paper ledger integrity unavailable")
+    try:
+        result = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if result.tzinfo is None or result.utcoffset() != timedelta(0):
+            raise ValueError
+        return result
+    except (ValueError, TypeError, OverflowError):
+        raise PaperRecoveryDenied(
+            "Synthetic paper ledger integrity unavailable"
+        ) from None
 
 
 def audit_tenant_paper_ledger(db):
@@ -82,13 +102,14 @@ def audit_tenant_paper_ledger(db):
         events = db.execute("""SELECT user_id,account_id,request_id,
             request_sha256,side,asset_class,symbol,quantity,quote_price,
             estimated_friction,signed_cash_change_cents,cash_after_cents,
-            provider,observed_at FROM tenant_paper_events ORDER BY rowid"""
+            provider,observed_at,created_at FROM tenant_paper_events ORDER BY rowid"""
         ).fetchall()
         if len(events) > 50000:
             raise PaperRecoveryDenied(deny)
         for row in events:
             (user, account, request_id, digest, side, asset, symbol,
-             quantity, price, friction, delta, after, provider, observed) = row
+             quantity, price, friction, delta, after, provider, observed,
+             created) = row
             wallet = expected.get((user, account))
             if (wallet is None or not _canonical_uuid(request_id)
                     or not isinstance(digest, str) or not _SHA.fullmatch(digest)
@@ -99,6 +120,11 @@ def audit_tenant_paper_ledger(db):
                     or not isinstance(provider, str) or not provider.strip()
                     or not isinstance(observed, str) or not observed.strip()
                     or type(delta) is not int or type(after) is not int):
+                raise PaperRecoveryDenied(deny)
+            # Both the source observation and local paper event must be
+            # independently parseable UTC timestamps. A recovered event
+            # cannot predate the observation it purports to have used.
+            if _event_time(observed) > _event_time(created):
                 raise PaperRecoveryDenied(deny)
             qty = _decimal(quantity, positive=True)
             px = _decimal(price, positive=True)
