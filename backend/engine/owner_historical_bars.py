@@ -80,7 +80,8 @@ def normalize_bars(payload, *, symbol, instrument_type, period, received_at):
     """
     received = _utc(received_at, "Receipt time")
     if (not isinstance(symbol, str) or not _SYMBOL.fullmatch(symbol)
-            or instrument_type not in _TYPES or period not in _PERIODS):
+            or not isinstance(instrument_type, str) or instrument_type not in _TYPES
+            or not isinstance(period, str) or period not in _PERIODS):
         raise HistoryUnavailable("Unrecognized request context")
     if (not isinstance(payload, dict) or payload.get("symbol") != symbol
             or payload.get("period") != period):
