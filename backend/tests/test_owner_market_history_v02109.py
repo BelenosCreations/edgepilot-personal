@@ -152,3 +152,14 @@ class OwnerMarketHistoryTests(unittest.TestCase):
         with self.assertRaises(quote_tests.market.OwnerQuoteUnavailable):
             self.history()
         self.assertEqual(len(self.history_calls), 1)
+
+    def test_history_is_discarded_when_connection_ciphertext_changes(self):
+        def replace():
+            with sqlite3.connect(self.path) as db:
+                db.execute("UPDATE tenant_connections SET credential_ciphertext=? WHERE connection_id=?",
+                           (b"replacement-synthetic-ciphertext", self.connection_a))
+
+        self.provider(self.payload(), during=replace)
+        with self.assertRaises(quote_tests.market.OwnerQuoteUnavailable):
+            self.history()
+        self.assertEqual(len(self.history_calls), 1)

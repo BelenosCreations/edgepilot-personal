@@ -1,3 +1,15 @@
+## v0.2.117 — 2026-11-13 America/New_York — Reviewed checkpoint staging cleanup
+
+**Added** — Operator-selected cleanup of an orphan checkpoint staging link after exact signed receipt and inode verification.
+
+**Changed** — The offline recovery publisher holds a staging-directory lock through publication and unlink.
+
+**Fixed** — Cleanup refuses an active publisher and preserves unrelated staging files and the verified checkpoint.
+
+**Tests** — 111 focused tests and all 876 local tests passed. Regressions cover concurrent publication, staging cleanup, explicit tenant re-enrollment, and in-flight Public history invalidation.
+
+**Limitations** — Combined rollback and cross-resource power loss remain open. Real Public history acceptance is pending on the owner's device. Production execution remains disabled.
+
 ## v0.2.116 — 2026-11-13 America/New_York — Interrupted checkpoint publication
 
 **Added** — Read-only inspection of a recovered promotion checkpoint against the exact signed export, witness and prepared ledger.

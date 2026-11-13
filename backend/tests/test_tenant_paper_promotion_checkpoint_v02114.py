@@ -1,7 +1,9 @@
 """Exercise independently retained promotion evidence under synthetic rollback."""
+from concurrent.futures import ThreadPoolExecutor
 import os
 from pathlib import Path
 import tempfile
+from threading import Barrier
 import unittest
 from unittest.mock import patch
 
@@ -244,7 +246,7 @@ class PromotionCheckpointTests(unittest.TestCase):
             {"receipt": tip, "additionalLinkPresent": True})
         stages = self.checkpoint_path.parent.glob(".edgepilot-checkpoint-*/checkpoint.db")
         linked, = [path for path in stages if path.samefile(self.checkpoint_path)]
-        linked.unlink()
+        self.cleanup_stage(linked, exported, tip)
         self.assertEqual(self.checkpoint.latest(), tip)
         self.assertEqual(self.checkpoint_path.read_bytes(), before)
         self.assertEqual(self.checkpoint.inspect_recovered(
@@ -297,3 +299,79 @@ class PromotionCheckpointTests(unittest.TestCase):
         before = stage.read_bytes()
         self.assertEqual(self.recover_checkpoint(exported, tip).latest(), tip)
         self.assertEqual(stage.read_bytes(), before)
+
+    def cleanup_stage(self, stage, exported, tip):
+        self.checkpoint.cleanup_recovered_stage(
+            stage, exported, trusted_receipt=tip, **self.recovery_evidence())
+
+    def test_concurrent_checkpoint_recovery_has_one_exclusive_winner(self):
+        self.prepare_checkpoint()
+        tip = self.promote()
+        exported = self.checkpoint.export(expected_receipt=tip)
+        self.checkpoint_path.unlink()
+        start = Barrier(2, timeout=5)
+
+        def recover():
+            start.wait()
+            return self.recover_checkpoint(exported, tip)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            attempts = [pool.submit(recover) for _ in range(2)]
+        winners = [job.result() for job in attempts if job.exception() is None]
+        self.assertEqual(len(winners), 1)
+        self.assertEqual(winners[0].latest(), tip)
+        self.assertEqual(sum(isinstance(job.exception(), recovery.DecimalRecoveryDenied)
+                             for job in attempts), 1)
+        self.assertEqual(list(self.checkpoint_path.parent.glob(".edgepilot-checkpoint-*")), [])
+
+    def test_cleanup_refuses_active_publisher_even_at_exact_link(self):
+        self.prepare_checkpoint()
+        tip = self.promote()
+        exported = self.checkpoint.export(expected_receipt=tip)
+        self.checkpoint_path.unlink()
+        link = os.link
+
+        def while_publishing(stage, target, **options):
+            link(stage, target, **options)
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                self.cleanup_stage(stage, exported, tip)
+            self.assertTrue(stage.samefile(target))
+
+        with patch.object(receipts.os, "link", side_effect=while_publishing):
+            self.assertEqual(self.recover_checkpoint(exported, tip).latest(), tip)
+
+    def test_cleanup_requires_reviewed_inode_and_exact_export(self):
+        self.prepare_checkpoint()
+        tip = self.promote()
+        exported = self.checkpoint.export(expected_receipt=tip)
+        original = self.checkpoint_path.stat()
+        with tempfile.TemporaryDirectory(prefix=".edgepilot-checkpoint-",
+                                         dir=self.checkpoint_path.parent) as folder:
+            stage = Path(folder) / "checkpoint.db"
+            stage.write_bytes(self.checkpoint_path.read_bytes())
+            stage.chmod(0o600)
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                self.cleanup_stage(stage, exported, tip)
+            self.assertTrue(stage.exists())
+            stage.unlink()
+            stage.symlink_to(self.checkpoint_path)
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                self.cleanup_stage(stage, exported, tip)
+            self.assertTrue(stage.is_symlink())
+            stage.unlink()
+            os.link(self.checkpoint_path, stage)
+            before = self.checkpoint_path.read_bytes()
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                self.cleanup_stage(stage, {**exported, "mac": "0" * 64}, tip)
+            self.assertTrue(stage.samefile(self.checkpoint_path))
+            extra = stage.with_name("another.db")
+            os.link(stage, extra)
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                self.cleanup_stage(stage, exported, tip)
+            self.assertTrue(extra.samefile(self.checkpoint_path))
+            extra.unlink()
+            self.cleanup_stage(stage, exported, tip)
+            self.assertFalse(stage.exists())
+            self.assertTrue(os.path.samestat(original, self.checkpoint_path.stat()))
+            self.assertEqual(self.checkpoint_path.read_bytes(), before)
+            self.assertEqual(self.checkpoint.latest(), tip)
