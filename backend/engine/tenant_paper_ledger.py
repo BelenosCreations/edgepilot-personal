@@ -78,6 +78,17 @@ def _scope(db, principal_user_id, account_id):
 def prepare(path):
     """Additive, explicitly called schema on an existing tenant database only."""
     with tenant_foundation._open(path) as db:
+        # SQLite permits declarations referencing nonexistent tables. Refuse
+        # an accidental legacy/global database before adding ANY paper table.
+        try:
+            version = db.execute(
+                "SELECT schema_version FROM tenant_schema_meta WHERE id=1"
+            ).fetchone()
+            db.execute("SELECT account_id FROM tenant_accounts LIMIT 0")
+        except sqlite3.DatabaseError:
+            raise PaperLedgerDenied("Prepared private tenant schema required") from None
+        if version is None or version["schema_version"] != 1:
+            raise PaperLedgerDenied("Prepared private tenant schema required")
         # FK references existing tenant_accounts and cannot be substituted for
         # the legacy global-token account database or its broker-fill ledger.
         db.executescript("""
