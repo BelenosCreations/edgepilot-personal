@@ -130,9 +130,13 @@ class PromotionCheckpointTests(unittest.TestCase):
     def recover_checkpoint(self, exported, tip):
         return receipts.DecimalPromotionCheckpoint.recover(
             self.checkpoint_path, exported, trusted_receipt=tip,
-            checkpoint_key=self.checkpoint_key, receipts=self.pins, witness=self.store,
-            ledger_path=self.path, reserved_receipt=self.prepared, prepared_receipt=self.claim,
-            operator_record=self.promotion, journal_key=self.replacement, anchor_key=self.anchor)
+            checkpoint_key=self.checkpoint_key, **self.recovery_evidence())
+
+    def recovery_evidence(self):
+        return dict(receipts=self.pins, witness=self.store, ledger_path=self.path,
+                    reserved_receipt=self.prepared, prepared_receipt=self.claim,
+                    operator_record=self.promotion, journal_key=self.replacement,
+                    anchor_key=self.anchor)
 
     def test_lost_checkpoint_recovers_at_exact_signed_export_only(self):
         self.prepare_checkpoint()
@@ -207,3 +211,89 @@ class PromotionCheckpointTests(unittest.TestCase):
             self.recover_checkpoint(prepared_export, self.claim)
         self.assertEqual(self.path.read_bytes(), before)
         self.assertFalse(self.checkpoint_path.exists())
+
+    def test_process_exit_before_and_after_checkpoint_publication(self):
+        self.prepare_checkpoint()
+        tip = self.promote()
+        exported = self.checkpoint.export(expected_receipt=tip)
+        self.checkpoint_path.unlink()
+        link = os.link
+        for publish in (False, True):
+            def stop_at_link(*args, **kwargs):
+                if publish:
+                    link(*args, **kwargs)
+                os._exit(95)
+
+            pid = os.fork()
+            if pid == 0:
+                try:
+                    with patch.object(receipts.os, "link", side_effect=stop_at_link):
+                        self.recover_checkpoint(exported, tip)
+                finally:
+                    os._exit(96)
+            _, status = os.waitpid(pid, 0)
+            self.assertEqual(os.waitstatus_to_exitcode(status), 95)
+            self.assertEqual(self.checkpoint_path.exists(), publish)
+        before = self.checkpoint_path.read_bytes()
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.recover_checkpoint(exported, tip)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.checkpoint.latest()  # The extra staging link still needs operator review.
+        self.assertEqual(self.checkpoint.inspect_recovered(
+            exported, trusted_receipt=tip, **self.recovery_evidence()),
+            {"receipt": tip, "additionalLinkPresent": True})
+        stages = self.checkpoint_path.parent.glob(".edgepilot-checkpoint-*/checkpoint.db")
+        linked, = [path for path in stages if path.samefile(self.checkpoint_path)]
+        linked.unlink()
+        self.assertEqual(self.checkpoint.latest(), tip)
+        self.assertEqual(self.checkpoint_path.read_bytes(), before)
+        self.assertEqual(self.checkpoint.inspect_recovered(
+            exported, trusted_receipt=tip, **self.recovery_evidence()),
+            {"receipt": tip, "additionalLinkPresent": False})
+
+    def test_partial_checkpoint_and_sidecar_require_explicit_resolution(self):
+        self.prepare_checkpoint()
+        tip = self.promote()
+        exported = self.checkpoint.export(expected_receipt=tip)
+        self.checkpoint_path.write_bytes(b"interrupted legacy checkpoint")
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.checkpoint.inspect_recovered(
+                exported, trusted_receipt=tip, **self.recovery_evidence())
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.recover_checkpoint(exported, tip)
+        self.assertEqual(self.checkpoint_path.read_bytes(), b"interrupted legacy checkpoint")
+        fresh = self.checkpoint_path.with_name("reviewed-recovery.db")
+        sidecar = fresh.with_name(fresh.name + "-journal")
+        sidecar.write_bytes(b"prior evidence")
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            receipts.DecimalPromotionCheckpoint.recover(
+                fresh, exported, trusted_receipt=tip, checkpoint_key=self.checkpoint_key,
+                **self.recovery_evidence())
+        self.assertFalse(fresh.exists())
+        self.assertEqual(sidecar.read_bytes(), b"prior evidence")
+        sidecar.unlink()
+        rebuilt = receipts.DecimalPromotionCheckpoint.recover(
+            fresh, exported, trusted_receipt=tip, checkpoint_key=self.checkpoint_key,
+            **self.recovery_evidence())
+        self.assertEqual(rebuilt.latest(), tip)
+
+    def test_process_exit_during_staging_keeps_partial_file_off_destination(self):
+        self.prepare_checkpoint()
+        tip = self.promote()
+        exported = self.checkpoint.export(expected_receipt=tip)
+        self.checkpoint_path.unlink()
+        pid = os.fork()
+        if pid == 0:
+            try:
+                with patch.object(receipts.DecimalReceiptStore, "_save",
+                                  side_effect=lambda *a, **k: os._exit(95)):
+                    self.recover_checkpoint(exported, tip)
+            finally:
+                os._exit(96)
+        _, status = os.waitpid(pid, 0)
+        self.assertEqual(os.waitstatus_to_exitcode(status), 95)
+        self.assertFalse(self.checkpoint_path.exists())
+        stage, = self.checkpoint_path.parent.glob(".edgepilot-checkpoint-*/checkpoint.db")
+        before = stage.read_bytes()
+        self.assertEqual(self.recover_checkpoint(exported, tip).latest(), tip)
+        self.assertEqual(stage.read_bytes(), before)
