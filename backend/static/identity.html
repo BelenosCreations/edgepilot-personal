@@ -32,6 +32,11 @@
     .columns { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
     ul { padding-left:22px; overflow-wrap:anywhere; }
     small { display:block; color:#b8c7d5; margin-top:10px; line-height:1.5; }
+    .owner-overview-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:14px 0; }
+    .owner-overview-grid > div { background:#1a2e42; border-radius:10px; padding:14px; min-width:0; }
+    .owner-overview-grid .metric-label { display:block; font-size:.82rem; color:#b8c7d5; margin-bottom:7px; }
+    .owner-overview-grid strong { display:block; font-size:1.5rem; overflow-wrap:anywhere; }
+    .owner-overview-grid .meta { font-size:.82rem; color:#b8c7d5; }
     @media (max-width:640px) { .columns { grid-template-columns:1fr; } .panel { padding:16px; } }
   </style>
   <script src="/assets/identity.js" defer></script>
@@ -80,6 +85,17 @@
         <button id="signOut" type="button">Sign out</button>
         <small id="passkeyInfo">Your device's credential provider handles fingerprint, face or screen-lock verification. EdgePilot does not store biometric templates.</small>
       </div>
+      <section id="ownerOverviewPane" class="panel" hidden aria-label="Read-only owner portfolio overview">
+        <h2>My Public portfolio</h2>
+        <p id="ownerOverviewStatus" class="muted" role="status" aria-live="polite">Choose View read-only portfolio below to load a fresh account snapshot.</p>
+        <div class="owner-overview-grid">
+          <div><span class="metric-label">Selected account value</span><strong id="ownerOverviewValue">Not loaded</strong></div>
+          <div><span class="metric-label">Open positions</span><strong id="ownerOverviewPositions">Not loaded</strong></div>
+        </div>
+        <p id="ownerOverviewDetail" class="muted">No portfolio request has been made in this session.</p>
+        <p><a href="#portfolioPane">Go to linked Public accounts</a></p>
+        <small>Balances are read-only snapshots for the selected account, not combined balances or profit/loss. No automatic refresh, broker orders, or bank transfers. Nothing is saved to browser storage.</small>
+      </section>
       <section id="familyInvitationsPane" class="panel" hidden>
         <h2>Invite a family member</h2>
         <p class="muted">Only your independently authenticated EdgePilot owner account can invite someone. New members create their own EdgePilot login and connect their own Public account; your original dashboard and brokerage connection stay separate.</p>
