@@ -1,3 +1,11 @@
+## CURRENT development — v0.2.99 offline realized paper loss-stop preflight, November 12, 2026 (America/New_York)
+
+**Verified base:** v0.2.98 main `72455d35ad02027c195cbccf4684d92f71bdbeac`, exact-head PR #125 Actions #43366420941 passed; merged-main Actions #43366653601 passed. Existing Render Starter service `edgepilot-private-h9tl` with its original 1 GB disk deployed `dep-dbr97ne7bikc73en1h10` LIVE on the same SHA. Previous owner same-account Public value match and real MSFT quote retrieval are complete; no rerun needed for these synthetic changes.
+
+**v0.2.99 scope:** Offline-only /dev/shm read-only per-account replay of synthetic realized P&L and historical worst cumulative loss, identifying when an explicitly supplied loss stop *would have* tripped. No production enforcement or quote marking, no live API import, no new schema or stop latch. Full paper recovery audit, account scope, cross-account isolation, encrypted recovery and no-overwrite rollback preserved. No paper fills activated, real trading, bank transfers, new providers or paid resources. See PAPER_REALIZED_LOSS_STOP_V0299.md.
+
+**Next:** Verify exact-head PR Actions, merge, post-merge main CI and matched Render live status. Before actual paper loss-stop activation, design an operator-reviewed durable, account-scoped latched policy with atomic write enforcement, identity-derived session and licensed data provenance. Continue offline backup key rotation, crash cleanup, rollback safety and responsible market research without assuming rights. Do not repeat completed owner acceptance absent a targeted regression.
+
 ## CURRENT development — v0.2.98 dormant paper wallet/event chronology, November 12, 2026 (America/New_York)
 
 **Verified base:** v0.2.97 main `7d8f9b07544cd1a4ab022b26b28b6c31ba629405`, push Actions #43364227347 passed, Render existing service `edgepilot-private-h9tl` deployment `dep-dbr8tb8jo6nc73erc860` LIVE at the same commit, original Starter/1 GB disk. Owner-reported same-account value match and real MSFT quote retrieval are already accepted and must not be repeated for offline changes.
