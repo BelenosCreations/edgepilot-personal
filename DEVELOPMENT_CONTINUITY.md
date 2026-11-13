@@ -1,3 +1,32 @@
+# Current EdgePilot development handoff
+
+Use this section for the next development session. The entries below record prior milestones.
+
+## Copyable resume instruction
+
+Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on main in BelenosCreations/edgepilot-personal, independently verify the GitHub and Render checkpoint, and follow the next steps and restrictions in that file.
+
+## Verification and checkpoint
+
+- Before editing, verify current GitHub main, the relevant exact-head PR CI, exact main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.112 from the merged PR for `development/v0.2.112-receipt-resolution`. A later verified main checkpoint takes precedence.
+- Verified v0.2.111 baseline. PR #138 head `ec06bb976fc43bf4ed75a35ea41733606fdc8706` passed [Actions #43455233953](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43455233953). Main `4396e5ac8e617c4fcace5a9b862830f5f943a294` passed [Actions #43455621664](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43455621664), matched live Render deployment `dep-dbrj0mgjo6nc73f86ivg`, and returned HTTP 200 from /healthz.
+- v0.2.112 adds explicitly signed terminal quarantine for a frozen receipt and read-only inspection of an exact-pin restore interrupted after linking. See [milestone notes](PAPER_QUARANTINE_AND_PUBLICATION_V02112.md).
+
+## Next safe development batch
+
+1. Rehearse an operator-reviewed exact prepared-target resolution, including signed checkpoint evidence, independently retained receipt ancestry and explicit promotion. A stale or ambiguous old ledger cannot authorize resuming or replaying an interrupted write. Keep terminal quarantine available. Combined rollback and cross-resource power-loss consistency remain open.
+2. Exercise manual, verified cleanup of a second staging link after exact-pin publication. Compare inode identity, preserve the reviewed destination and refuse unexpected, unrelated or still-active files. Keep all restored account bindings quarantined.
+3. Continue source-attributed and session-only Public research under the user's instruction to assume provider permission. Use real history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance). Earlier snapshot and MSFT quote acceptance still apply.
+
+## Restrictions and workflow
+
+- Keep production paper fills, live trading, autonomous brokerage orders and bank transfers disabled. Preserve accounts, credentials, encrypted secrets, multi-user architecture, production storage and existing recovery. Use fabricated observations only in synthetic tests.
+- Retain Render service `edgepilot-private-h9tl` (`srv-dbocnb3m8hqs7386trvg`), Starter, the existing 1 GB disk, and automatic deployment from main. Add no paid services or configuration changes.
+- Work autonomously in substantial batches. Update VERSION, README, CHANGELOG, milestone notes and this handoff. Run focused and full tests. Merge only after exact-head PR CI succeeds, then independently verify merged-main CI, exact Render deploy and health.
+- At the next logical checkpoint, refresh this top section in place. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
+
+## Historical checkpoints
+
 ## v0.2.111 — 2026-11-13 — Independent receipt handoff and pinned restore publication
 
 Starting checkpoint independently verified. Main `5c461eaaa2d2493b9735f52d97080f5daf09a401` matches merged PR #137. PR head `5ac22068d5049d355c5a390a371303876c27dac3` passed pull-request Actions `43448446141`; the exact main push passed Actions `43448846533`. Render deployment `dep-dbridrm8bjmc73bt3dr0` was live at that main SHA and `/healthz` returned HTTP 200. There were no open PRs.

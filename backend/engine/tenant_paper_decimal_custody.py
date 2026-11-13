@@ -1,5 +1,5 @@
 """Single-lineage offline custody for synthetic Decimal recovery evidence."""
-from contextlib import contextmanager, closing, nullcontext
+from contextlib import contextmanager, closing, nullcontext, ExitStack
 import hmac
 import json
 import os
@@ -270,6 +270,21 @@ class DecimalCustody:
                 recovery._deny()
         return current, receipt
 
+    @staticmethod
+    @contextmanager
+    def _hold_original(path):
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        try:
+            original = os.fstat(fd)
+
+            def unchanged():
+                current = Path(path).lstat()
+                return (original.st_dev, original.st_ino) == (current.st_dev, current.st_ino)
+
+            yield unchanged
+        finally:
+            os.close(fd)
+
     def rotate(self, path, *, expected_receipt, journal_key, replacement_key,
                anchor_key, retain_claim, _interrupt=None, _claim_guard=nullcontext):
         """Consume a claim and require independent retention before changing the ledger.
@@ -281,28 +296,34 @@ class DecimalCustody:
         recovery._keys(self.custody_key, self.operator_key, journal_key, replacement_key, anchor_key)
         if not callable(retain_claim):
             recovery._deny()
-        with self._open(write=True) as db:
-            current, receipt = self._rotation_plan(
-                db, expected_receipt, journal_key, replacement_key, anchor_key)
-            claim = self._append(db, receipt, "rotation_claim", current["mac"])
-            db.commit()
-        try:
-            confirmed = retain_claim(receipt.copy(), claim.copy())
-        except Exception:
-            recovery._deny()
-        if confirmed != claim:
-            recovery._deny()
-        if _interrupt == "after_claim":
-            recovery._deny()
-        # The independent receipt guard, when supplied, takes its lock first.
-        # Then recheck the witness: quarantine may have won the race.
-        with _claim_guard(claim), self._open(write=True) as db:
-            self._read(db, claim, exact=True)
-            recovery.execute_prepared_decimal_rotation(
-                path, record=current, trusted_tip=recovery.evidence_tip(current),
-                journal_key=journal_key, replacement_key=replacement_key,
-                anchor_key=anchor_key, operator_key=self.operator_key,
-                _interrupt_before_commit=_interrupt == "before_ledger_commit")
-            if _interrupt == "after_ledger_commit":
+        with ExitStack() as originals:
+            with self._open(write=True) as db:
+                current, receipt = self._rotation_plan(
+                    db, expected_receipt, journal_key, replacement_key, anchor_key)
+                ledger_path = recovery._source(path)
+                same_ledger = originals.enter_context(self._hold_original(ledger_path))
+                same_witness = originals.enter_context(self._hold_original(self.path))
+                claim = self._append(db, receipt, "rotation_claim", current["mac"])
+                db.commit()
+            try:
+                confirmed = retain_claim(receipt.copy(), claim.copy())
+            except Exception:
                 recovery._deny()
-            return claim
+            if confirmed != claim:
+                recovery._deny()
+            if _interrupt == "after_claim":
+                recovery._deny()
+            # The independent receipt guard, when supplied, takes its lock first.
+            # Then recheck the witness: quarantine may have won the race.
+            with _claim_guard(claim), self._open(write=True) as db:
+                self._read(db, claim, exact=True)
+                if not same_ledger() or not same_witness():
+                    recovery._deny()
+                recovery.execute_prepared_decimal_rotation(
+                    ledger_path, record=current, trusted_tip=recovery.evidence_tip(current),
+                    journal_key=journal_key, replacement_key=replacement_key,
+                    anchor_key=anchor_key, operator_key=self.operator_key,
+                    _interrupt_before_commit=_interrupt == "before_ledger_commit")
+                if _interrupt == "after_ledger_commit":
+                    recovery._deny()
+                return claim

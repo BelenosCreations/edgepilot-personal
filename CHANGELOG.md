@@ -1,3 +1,15 @@
+## v0.2.112 — 2026-11-13 America/New_York — Terminal quarantine and interrupted restore inspection
+
+**Added** — Explicit signed terminal quarantine of a frozen receipt reservation, including exact readback after a lost response. Read-only inspection of an exact-pin synthetic tenant restore interrupted after the final link.
+
+**Changed** — Rotation verifies that the original ledger and witness still occupy their paths after the receipt handoff.
+
+**Fixed** — A restored candidate with changed archived request digests is refused. An interrupted restore candidate cannot be overwritten by replaying publication.
+
+**Tests** — Four new regression cases cover stale and forged quarantine evidence, lost acknowledgment, file replacement, and process exit after publication. The full regression covers 846 tests.
+
+**Limitations** — Prepared-target promotion through a frozen reservation, combined rollback protection, cross-resource power-loss consistency and real owner-device history acceptance remain open. Production execution remains disabled.
+
 ## v0.2.111 — 2026-11-13 America/New_York — Independent receipt handoff and pinned restore publication
 
 **Added** — Separate authenticated receipt storage for offline synthetic Decimal custody. It reserves the expected tip before a witness write and retains the next verified receipt through a serialized handoff.

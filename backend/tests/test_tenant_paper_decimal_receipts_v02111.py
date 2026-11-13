@@ -203,3 +203,67 @@ class IndependentReceiptTests(unittest.TestCase):
         with self.assertRaises(recovery.DecimalRecoveryDenied):
             self.pins.latest()
         self.assert_no_retry()
+
+    def freeze_after_claim(self):
+        with patch.object(self.pins, "_retain_claim", side_effect=ConnectionError):
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                self.rotate()
+        record, claim, consumed = self.store.read(trusted_receipt=self.prepared)
+        self.assertTrue(consumed)
+        hold = recovery.quarantine_decimal_recovery(
+            record=record, trusted_tip=recovery.evidence_tip(record),
+            operator_key=self.operator, reason="AMBIGUOUS_OLD_STATE")
+        return claim, hold
+
+    def resolve(self, observed, record, *, reserved=None):
+        return self.pins.quarantine_frozen(
+            self.store, reserved_receipt=self.prepared if reserved is None else reserved,
+            observed_receipt=observed, operator_record=record)
+
+    def test_frozen_handoff_needs_exact_receipts_and_signed_quarantine(self):
+        claim, hold = self.freeze_after_claim()
+        for observed, record, reserved in (
+                (self.prepared, hold, self.prepared),
+                (claim, hold, self.genesis),
+                (claim, self.pending, self.prepared),
+                (claim, {**hold, "quarantineReason": "INTEGRITY_FAILURE"}, self.prepared)):
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                self.resolve(observed, record, reserved=reserved)
+        tip = self.resolve(claim, hold)
+        self.assertEqual(self.pins.latest(), tip)
+        self.assertEqual(self.store.read(trusted_receipt=tip)[0], hold)
+        self.assertEqual(self.path.read_bytes(), self.before)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.resolve(tip, hold)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.rotate()
+
+    def test_quarantine_lost_reply_can_only_retain_exact_terminal_record(self):
+        claim, hold = self.freeze_after_claim()
+        with patch.object(self.pins, "_save", side_effect=OSError):
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                self.resolve(claim, hold)
+        terminal, tip, _ = self.store.read(trusted_receipt=claim)
+        self.assertEqual(terminal, hold)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.pins.latest()
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.resolve(claim, hold)
+        self.assertEqual(self.resolve(tip, hold), tip)
+        self.assertEqual(self.pins.latest(), tip)
+        self.assertEqual(self.path.read_bytes(), self.before)
+
+    def test_recreated_ledger_during_receipt_handoff_cannot_be_rotated(self):
+        old_path = self.path.with_suffix(".saved")
+        retain = self.pins._retain_claim
+
+        def replace_ledger(expected, claim):
+            result = retain(expected, claim)
+            self.path.rename(old_path)
+            shutil.copy2(old_path, self.path)
+            return result
+
+        with patch.object(self.pins, "_retain_claim", side_effect=replace_ledger):
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                self.rotate()
+        self.assert_no_retry()

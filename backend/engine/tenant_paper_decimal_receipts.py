@@ -141,6 +141,37 @@ class DecimalReceiptStore:
             db.commit()
             return tip
 
+    def quarantine_frozen(self, witness, *, reserved_receipt, observed_receipt,
+                          operator_record):
+        """Resolve a frozen handoff with explicitly signed terminal quarantine.
+
+        The operator supplies both receipts from independent review. This can
+        publish a new quarantine or retain an already-published quarantine
+        after a lost reply. It never resumes the interrupted operation.
+        """
+        self._verify_separation(witness)
+        with self._open() as db, witness._open(write=True) as journal:
+            reserved = self._read(db, pending=True)
+            if reserved != reserved_receipt:
+                recovery._deny()
+            # Verify the reserved ancestor and require the separately reviewed
+            # observed tip to be the exact current witness state.
+            witness._read(journal, reserved, exact=False)
+            record, tip, claimed = witness._read(journal, observed_receipt, exact=True)
+            witness._verify_record(operator_record)
+            if operator_record["status"] != "QUARANTINED":
+                recovery._deny()
+            if record["status"] == "QUARANTINED":
+                if record != operator_record:
+                    recovery._deny()
+            else:
+                custody._check_transition(record, operator_record, claimed)
+                tip = witness._append(journal, tip, "record", operator_record)
+                journal.commit()
+            self._save(db, tip, pending=False)
+            db.commit()
+            return tip
+
     def _retain_claim(self, expected, claim):
         with self._open() as db:
             current = self._read(db, pending=True)
