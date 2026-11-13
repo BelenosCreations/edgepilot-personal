@@ -172,6 +172,50 @@ class DecimalReceiptStore:
             db.commit()
             return tip
 
+    def promote_frozen(self, witness, path, *, reserved_receipt, prepared_receipt,
+                       operator_record, journal_key, anchor_key):
+        """Retain an explicitly approved prepared target without writing the ledger.
+
+        Both receipts come from independent review. An exact committed promotion
+        can be acknowledged after a lost reply, with the same target reaudited.
+        """
+        self._verify_separation(witness, journal_key, anchor_key)
+        with self._open() as db, witness._open(write=True) as journal:
+            reserved = self._read(db, pending=True)
+            if reserved != reserved_receipt:
+                recovery._deny()
+            witness._read(journal, reserved, exact=False)
+            record, tip, claimed = witness._read(journal, prepared_receipt, exact=False)
+            if prepared_receipt["number"] not in (reserved["number"], reserved["number"] + 1):
+                recovery._deny()
+            witness._verify_record(operator_record)
+            if operator_record["status"] != "ACTIVE":
+                recovery._deny()
+            publish = tip == prepared_receipt
+            if publish:
+                custody._check_transition(record, operator_record, claimed)
+            elif tip["number"] != prepared_receipt["number"] + 1 or record != operator_record:
+                recovery._deny()
+
+            source = recovery._source(path)
+            with (witness._hold_original(source) as same_ledger,
+                  witness._hold_original(witness.path) as same_witness,
+                  recovery._fixture(source) as candidate):
+                recovery._require_checkpoint(candidate, journal_key, anchor_key,
+                                             operator_record["current"])
+                if not same_ledger() or not same_witness():
+                    recovery._deny()
+                if publish:
+                    tip = witness._append(journal, tip, "record", operator_record)
+                    journal.commit()
+                with witness._open(write=False) as readback:
+                    witness._read(readback, tip, exact=True)
+                    if not same_ledger() or not same_witness():
+                        recovery._deny()
+                    self._save(db, tip, pending=False)
+                    db.commit()
+                return tip
+
     def _retain_claim(self, expected, claim):
         with self._open() as db:
             current = self._read(db, pending=True)

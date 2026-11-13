@@ -13,9 +13,10 @@ that was revoked after the snapshot. No real provider reconnect is possible.
 """
 from __future__ import annotations
 
-from contextlib import closing
+from contextlib import closing, ExitStack
 from dataclasses import astuple
 from datetime import datetime, timezone
+import fcntl
 import hashlib
 import hmac
 import json
@@ -41,6 +42,7 @@ _REQUIRED_TABLES = frozenset({
     "tenant_runtime_status",
 })
 _SIDECARS = ("-journal", "-wal", "-shm")
+_STAGE_PREFIX = ".edgepilot-synthetic-restore-"
 _INVALIDATE_RESTORED = (
     "tenant_identity_sessions", "tenant_passkey_challenges",
     "tenant_signup_invites", "tenant_worker_leases",
@@ -232,45 +234,98 @@ def _decrypt(token, archive_key, magic):
     return payload[len(magic):]
 
 
+def _publication_info(path):
+    source, _ = shadow_storage.require_isolated_source(path)
+    info = path.lstat()
+    if (source != path or not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+            or stat.S_IMODE(info.st_mode) != 0o600 or info.st_nlink not in (1, 2)
+            or any(os.path.lexists(str(path) + suffix) for suffix in _SIDECARS)):
+        raise OfflineBackupDenied("Synthetic restore candidate unavailable")
+    return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns,
+            info.st_ctime_ns, info.st_nlink)
+
+
+def _audit_publication(candidate, raw, policies):
+    with closing(sqlite3.connect(":memory:")) as archived:
+        archived.deserialize(raw)
+        archived.execute("PRAGMA trusted_schema=OFF")
+        _check_contents(archived, require_quiescent=True, policies=policies)
+        candidate.execute("PRAGMA trusted_schema=OFF")
+        tables = _check_contents(candidate, require_quiescent=True, policies=policies)
+        schema = "SELECT name,type,tbl_name,sql FROM sqlite_master ORDER BY name"
+        if (archived.execute(schema).fetchall() != candidate.execute(schema).fetchall()
+                or _paper_data_digest(archived) != _paper_data_digest(candidate)
+                or not _quarantine_preserved(archived, candidate)
+                or any(candidate.execute("SELECT 1 FROM " + name + " LIMIT 1").fetchone()
+                       for name in _INVALIDATE_RESTORED if name in tables)
+                or ("tenant_passkey_credentials" in tables and candidate.execute(
+                    "SELECT 1 FROM tenant_passkey_credentials WHERE revoked_at IS NULL LIMIT 1"
+                ).fetchone())):
+            raise OfflineBackupDenied("Synthetic restore candidate differs from archive")
+
+
 def inspect_pinned_paper_publication(token, archive_key, destination_path, *, policies, trusted_pin):
     """Audit a candidate after interrupted publication without changing any file."""
     checked = _require_paper_pin(token, policies, trusted_pin)
     raw = _decrypt(token, archive_key, _PAPER_MAGIC)
     try:
         target = Path(destination_path)
-        source, _ = shadow_storage.require_isolated_source(target)
-        info = source.lstat()
-        if (source != target or info.st_uid != os.getuid()
-                or stat.S_IMODE(info.st_mode) != 0o600 or info.st_nlink not in (1, 2)
-                or any(os.path.lexists(str(source) + suffix) for suffix in _SIDECARS)):
-            raise OfflineBackupDenied("Synthetic restore candidate unavailable")
-        uri = "file:" + quote(str(source), safe="/") + "?mode=ro"
-        with closing(sqlite3.connect(":memory:")) as archived:
-            archived.deserialize(raw)
-            archived.execute("PRAGMA trusted_schema=OFF")
-            _check_contents(archived, require_quiescent=True, policies=checked)
-            with closing(sqlite3.connect(uri, uri=True)) as candidate:
-                candidate.execute("PRAGMA trusted_schema=OFF")
-                candidate.execute("BEGIN")
-                tables = _check_contents(candidate, require_quiescent=True, policies=checked)
-                schema = "SELECT name,type,tbl_name,sql FROM sqlite_master ORDER BY name"
-                if (archived.execute(schema).fetchall() != candidate.execute(schema).fetchall()
-                        or _paper_data_digest(archived) != _paper_data_digest(candidate)
-                        or not _quarantine_preserved(archived, candidate)
-                        or any(candidate.execute("SELECT 1 FROM " + name + " LIMIT 1").fetchone()
-                               for name in _INVALIDATE_RESTORED if name in tables)
-                        or ("tenant_passkey_credentials" in tables and candidate.execute(
-                            "SELECT 1 FROM tenant_passkey_credentials WHERE revoked_at IS NULL LIMIT 1"
-                        ).fetchone())):
-                    raise OfflineBackupDenied("Synthetic restore candidate differs from archive")
-        after = source.lstat()
-        if ((info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns, info.st_nlink)
-                != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns,
-                    after.st_ctime_ns, after.st_nlink)):
-            raise OfflineBackupDenied("Synthetic restore candidate changed during inspection")
-        return {"quarantineVerified": True, "additionalLinkPresent": info.st_nlink == 2}
+        info = _publication_info(target)
+        uri = "file:" + quote(str(target), safe="/") + "?mode=ro"
+        with closing(sqlite3.connect(uri, uri=True)) as candidate:
+            candidate.execute("BEGIN")
+            _audit_publication(candidate, raw, checked)
+            if _publication_info(target) != info:
+                raise OfflineBackupDenied("Synthetic restore candidate changed during inspection")
+        return {"quarantineVerified": True, "additionalLinkPresent": info[-1] == 2}
     except (OSError, sqlite3.Error, ValueError, shadow_storage.MemoryStorageError):
         raise OfflineBackupDenied("Synthetic restore candidate unavailable") from None
+
+
+def cleanup_pinned_paper_staging_link(token, archive_key, destination_path, staging_path, *,
+                                    policies, trusted_pin):
+    """Explicitly remove one reviewed orphan staging name from a private fixture."""
+    checked = _require_paper_pin(token, policies, trusted_pin)
+    raw = _decrypt(token, archive_key, _PAPER_MAGIC)
+    try:
+        target, stage = Path(destination_path), Path(staging_path)
+        if (stage == target or stage.parent != target.parent
+                or not stage.name.startswith(_STAGE_PREFIX) or stage.suffix != ".db"):
+            raise OfflineBackupDenied("Synthetic restore staging link unavailable")
+        with ExitStack() as handles:
+            parent_fd = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            handles.callback(os.close, parent_fd)
+            parent = os.fstat(parent_fd)
+            if parent.st_uid != os.getuid() or stat.S_IMODE(parent.st_mode) != 0o700:
+                raise OfflineBackupDenied("Private synthetic restore directory required")
+            info = _publication_info(target)
+            if info[-1] != 2 or _publication_info(stage) != info:
+                raise OfflineBackupDenied("Synthetic restore staging link unavailable")
+            stage_fd = os.open(stage.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent_fd)
+            handles.callback(os.close, stage_fd)
+            held = os.fstat(stage_fd)
+            if (held.st_dev, held.st_ino) != info[:2]:
+                raise OfflineBackupDenied("Synthetic restore staging link changed")
+            fcntl.flock(stage_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            # SQLite header read/write versions must both indicate rollback mode.
+            # Opening a detached WAL database read/write can create sidecars.
+            if os.pread(stage_fd, 2, 18) != b"\x01\x01":
+                raise OfflineBackupDenied("Synthetic restore journaling unavailable")
+            uri = "file:" + quote(str(target), safe="/") + "?mode=rw"
+            candidate = handles.enter_context(closing(sqlite3.connect(uri, uri=True, timeout=0)))
+            candidate.execute("BEGIN EXCLUSIVE")
+            candidate.execute("PRAGMA query_only=ON")
+            if candidate.execute("PRAGMA journal_mode").fetchone() != ("delete",):
+                raise OfflineBackupDenied("Synthetic restore journaling unavailable")
+            _audit_publication(candidate, raw, checked)
+            if (_publication_info(target) != info or _publication_info(stage) != info
+                    or not os.path.samestat(parent, target.parent.stat())
+                    or not os.path.samestat(held, os.stat(stage.name, dir_fd=parent_fd,
+                                                          follow_symlinks=False))):
+                raise OfflineBackupDenied("Synthetic restore staging link changed")
+            os.unlink(stage.name, dir_fd=parent_fd)
+    except (OSError, sqlite3.Error, ValueError, shadow_storage.MemoryStorageError):
+        raise OfflineBackupDenied("Synthetic restore staging link unavailable") from None
 
 
 def _quarantine_preserved(archived, candidate):
@@ -307,15 +362,15 @@ def _restore(token, archive_key, destination_path, *, magic, policies):
     if policies is not None and any(os.path.lexists(str(target) + suffix) for suffix in _SIDECARS):
         raise OfflineBackupDenied("Synthetic restore destination unavailable")
     stage = None
+    fd = None
     try:
         # mkstemp creates a private 0600 regular file using O_EXCL. Do not
         # create the caller's destination until the synthetic archive has
         # passed all audits and revoked its restored credentials and sessions.
-        fd, name = tempfile.mkstemp(
-            prefix=".edgepilot-synthetic-restore-", suffix=".db",
-            dir=str(parent))
+        fd, name = tempfile.mkstemp(prefix=_STAGE_PREFIX, suffix=".db", dir=str(parent))
         stage = Path(name)
-        with os.fdopen(fd, "wb") as writer:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        with os.fdopen(fd, "wb", closefd=False) as writer:
             writer.write(raw)
             writer.flush()
             os.fsync(writer.fileno())
@@ -369,3 +424,5 @@ def _restore(token, archive_key, destination_path, *, magic, policies):
                     Path(str(stage) + suffix).unlink(missing_ok=True)
                 except OSError:
                     pass
+        if fd is not None:
+            os.close(fd)

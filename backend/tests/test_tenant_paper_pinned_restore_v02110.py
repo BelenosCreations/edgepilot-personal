@@ -2,6 +2,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from datetime import datetime, timezone
+import fcntl
 import os
 import sqlite3
 from threading import Barrier
@@ -194,9 +195,7 @@ class PinnedPaperRestoreTests(unittest.TestCase):
                 self.assertFalse(self.destination.exists())
                 sidecar.unlink()
 
-    def test_process_exit_after_link_requires_exact_read_only_inspection(self):
-        self.prepare()
-        token, pin = self.seal()
+    def orphan_stage(self, token, pin):
         link = os.link
 
         def link_then_exit(source, destination):
@@ -216,6 +215,12 @@ class PinnedPaperRestoreTests(unittest.TestCase):
         stages = list(self.destination.parent.glob(".edgepilot-synthetic-restore-*"))
         self.assertEqual(len(stages), 1)
         self.assertTrue(self.destination.samefile(stages[0]))
+        return stages[0]
+
+    def test_process_exit_after_link_requires_exact_read_only_inspection(self):
+        self.prepare()
+        token, pin = self.seal()
+        stage = self.orphan_stage(token, pin)
         before = self.destination.read_bytes()
 
         def inspect():
@@ -227,8 +232,100 @@ class PinnedPaperRestoreTests(unittest.TestCase):
         self.assertEqual(self.destination.read_bytes(), before)
         with self.assertRaises(backup.OfflineBackupDenied):
             self.restore(token, pin)
-        self.assertTrue(stages[0].exists())
+        self.assertTrue(stage.exists())
         with closing(sqlite3.connect(self.destination)) as db, db:
             db.execute("UPDATE tenant_paper_events SET request_sha256=?", ("a" * 64,))
         with self.assertRaises(backup.OfflineBackupDenied):
             inspect()
+
+    def cleanup(self, token, pin, stage):
+        backup.cleanup_pinned_paper_staging_link(
+            token, self.archive_key, self.destination, stage, policies=self.policies,
+            trusted_pin=pin)
+
+    def test_manual_cleanup_preserves_exact_quarantined_destination(self):
+        self.prepare()
+        token, pin = self.seal()
+        stage = self.orphan_stage(token, pin)
+        before = self.destination.read_bytes()
+        identity = self.destination.stat()
+        self.cleanup(token, pin, stage)
+        self.assertFalse(stage.exists())
+        self.assertTrue(os.path.samestat(identity, self.destination.stat()))
+        self.assertEqual(self.destination.read_bytes(), before)
+        self.assertEqual(backup.inspect_pinned_paper_publication(
+            token, self.archive_key, self.destination, policies=self.policies, trusted_pin=pin),
+            {"quarantineVerified": True, "additionalLinkPresent": False})
+        with self.assertRaises(backup.OfflineBackupDenied):
+            self.cleanup(token, pin, stage)
+        for user, account in self.policies:
+            with self.assertRaises(ledger.PaperLedgerDenied):
+                ledger.snapshot(self.destination, principal_user_id=user, account_id=account)
+
+    def test_cleanup_refuses_unrelated_symlink_or_unexpected_third_link(self):
+        self.prepare()
+        token, pin = self.seal()
+        stage = self.orphan_stage(token, pin)
+        unrelated = stage.with_name(".edgepilot-synthetic-restore-unrelated.db")
+        unrelated.write_bytes(b"unrelated data")
+        unrelated.chmod(0o600)
+        symlink = stage.with_name(".edgepilot-synthetic-restore-symlink.db")
+        symlink.symlink_to(self.destination)
+        for candidate in (unrelated, symlink, self.destination):
+            with self.assertRaises(backup.OfflineBackupDenied):
+                self.cleanup(token, pin, candidate)
+        self.assertEqual(unrelated.read_bytes(), b"unrelated data")
+        self.assertTrue(symlink.is_symlink())
+        third = stage.with_name("unrelated-link.db")
+        os.link(stage, third)
+        with self.assertRaises(backup.OfflineBackupDenied):
+            self.cleanup(token, pin, stage)
+        self.assertTrue(stage.samefile(third))
+        self.assertTrue(stage.samefile(self.destination))
+
+    def test_cleanup_refuses_active_publication_sqlite_and_sidecars(self):
+        self.prepare()
+        token, pin = self.seal()
+        link = os.link
+
+        def while_publishing(source, target):
+            link(source, target)
+            with self.assertRaises(backup.OfflineBackupDenied):
+                self.cleanup(token, pin, source)
+            self.assertTrue(source.samefile(target))
+
+        with patch.object(backup.os, "link", side_effect=while_publishing):
+            self.restore(token, pin)
+        self.assertEqual(self.destination.stat().st_nlink, 1)
+        self.destination.unlink()
+        stage = self.orphan_stage(token, pin)
+        with closing(sqlite3.connect(self.destination)) as db:
+            db.execute("BEGIN")
+            db.execute("SELECT COUNT(*) FROM tenant_accounts").fetchone()
+            with self.assertRaises(backup.OfflineBackupDenied):
+                self.cleanup(token, pin, stage)
+        sidecar = stage.with_name(stage.name + "-journal")
+        sidecar.touch()
+        with self.assertRaises(backup.OfflineBackupDenied):
+            self.cleanup(token, pin, stage)
+        self.assertTrue(sidecar.exists())
+        self.assertTrue(stage.samefile(self.destination))
+
+    def test_cleanup_refuses_changed_destination_after_review(self):
+        self.prepare()
+        token, pin = self.seal()
+        stage = self.orphan_stage(token, pin)
+        audit = backup._audit_publication
+        preserved = self.destination.with_name("reviewed.db")
+
+        def replace_destination(*args):
+            audit(*args)
+            self.destination.rename(preserved)
+            self.destination.write_bytes(b"replacement")
+            self.destination.chmod(0o600)
+
+        with patch.object(backup, "_audit_publication", side_effect=replace_destination):
+            with self.assertRaises(backup.OfflineBackupDenied):
+                self.cleanup(token, pin, stage)
+        self.assertTrue(stage.samefile(preserved))
+        self.assertEqual(self.destination.read_bytes(), b"replacement")

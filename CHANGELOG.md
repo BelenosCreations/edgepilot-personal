@@ -1,3 +1,15 @@
+## v0.2.113 — 2026-11-13 America/New_York — Reviewed synthetic paper recovery
+
+**Added** — Signed approval and independently reviewed receipt ancestry for promotion of an exact prepared ledger. Explicit cleanup of one verified orphan restore staging link.
+
+**Changed** — The offline restore holds the staging lock through publication. Cleanup audits quarantined account bindings and paper history under an exclusive SQLite transaction.
+
+**Fixed** — A lost promotion reply can be resolved after rechecking the exact target. Old ledgers, active publishers, sidecars and unrelated staging names are refused.
+
+**Tests** — 74 focused tests and all 854 local tests passed. Eight new regressions cover signed promotion, process exit, stale evidence, cleanup safety and regular-session Public history selection.
+
+**Limitations** — Combined rollback, cross-resource power loss, and real owner-device history acceptance remain open. Production execution remains disabled.
+
 ## v0.2.112 — 2026-11-13 America/New_York — Terminal quarantine and interrupted restore inspection
 
 **Added** — Explicit signed terminal quarantine of a frozen receipt reservation, including exact readback after a lost response. Read-only inspection of an exact-pin synthetic tenant restore interrupted after the final link.
