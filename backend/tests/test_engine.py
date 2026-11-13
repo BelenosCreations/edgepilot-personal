@@ -42,8 +42,14 @@ class RiskTests(unittest.TestCase):
         with self.assertRaises(risk.RiskBlocked):risk.buying_capacity(**self.args(fresh=False))
     def test_below_allocation_fails_closed(self):
         with self.assertRaises(risk.RiskBlocked):risk.buying_capacity(**self.args(public_equity='90'))
-    def test_protection_100_pct(self):
-        x=risk.buying_capacity(**self.args(protected_pct='100'));self.assertEqual(x['remainingToRisk'],'0.00')
+    def test_protection_100_pct_is_not_selectable(self):
+        # The supported protected-balance setting is 0..99%; a 100% value
+        # stops allocation and must not silently become a selectable profile.
+        with self.assertRaises(risk.RiskBlocked):
+            risk.buying_capacity(**self.args(protected_pct='100'))
+        at_99=risk.buying_capacity(**self.args(protected_pct='99'))
+        self.assertEqual(at_99['protectedValue'],'99.00')
+        self.assertEqual(at_99['remainingToRisk'],'0.00')
     def test_sale_prompt_blocks(self):
         with self.assertRaises(risk.RiskBlocked):risk.buying_capacity(**self.args(pending_external_sale=True))
 
