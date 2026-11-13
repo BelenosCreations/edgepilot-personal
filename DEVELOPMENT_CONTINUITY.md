@@ -1,3 +1,9 @@
+## v0.2.101 — 2026-11-13 — Inactive attested synthetic stop-latch recovery
+
+Verified source baseline for this branch was v0.2.100 main `a97717b1b88d394dda45bee18e65d7ca461fdfcb`, GitHub Actions `43368671340` successful, and Render live deploy `dep-dbr9gn67bikc73enajs0` at the matching SHA. New `tenant_paper_latch_attestation.py` is not imported by the Flask app or dormant paper-fill writer. It audits the entire isolated /dev/shm synthetic journal, emits an independent externally authenticated checkpoint across all scopes, detects rollback against the latest trusted pin, and rehearses transactional HMAC journal-key rotation with explicit epoch increment, failure injection and old-key refusal. See `PAPER_ATTESTED_LATCH_RECOVERY_V02101.md` and `backend/tests/test_tenant_paper_latch_attestation_v02101.py`.
+
+**Safety:** This does not activate paper fills or real trades, orders, transfers, licensed market-data retention, autonomous workers or any additional service. An external monotonic pin store and crash-atomic pin promotion remain missing; key retirement and older backups require operator review. Further milestones should design a single-transaction integration with authenticated identity, paper positions, cash, protected balance and exact-cent loss stops, then separately prove licensed data and durable recovery before requesting activation.
+
 ## CURRENT development — v0.2.100 synthetic paper loss-stop latch atomicity, November 12, 2026 (America/New_York)
 
 **Verified starting point:** v0.2.99 main `bf5ec2bc11973d796d8f9c583d9044818313a539` identical to supplied checkpoint, merged-main Actions #43367286446 succeeded, existing Render Starter/1 GB persistent disk service `edgepilot-private-h9tl` deployment `dep-dbr9aiijnfac73977sl0` LIVE at that exact SHA. Prior same-account Public value acceptance and real MSFT quote acceptance are already complete.
