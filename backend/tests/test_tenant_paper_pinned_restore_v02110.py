@@ -198,7 +198,7 @@ class PinnedPaperRestoreTests(unittest.TestCase):
                 self.assertFalse(self.destination.exists())
                 sidecar.unlink()
 
-    def orphan_stage(self, token, pin):
+    def orphan_stage(self, token, pin, policies=None):
         link = os.link
 
         def link_then_exit(source, destination):
@@ -209,7 +209,7 @@ class PinnedPaperRestoreTests(unittest.TestCase):
         if pid == 0:
             try:
                 with patch.object(backup.os, "link", side_effect=link_then_exit):
-                    self.restore(token, pin)
+                    self.restore(token, pin, policies)
             finally:
                 os._exit(82)
         _, status = os.waitpid(pid, 0)
@@ -615,10 +615,35 @@ class PinnedPaperRestoreTests(unittest.TestCase):
             with self.assertRaises(backup.OfflineBackupDenied):
                 self.restore(token, pin, policies)
             self.assertFalse(self.destination.exists())
-        self.assertEqual(self.restore(second_token, second_pin, second_policies), self.destination)
-        self.assertEqual(backup.inspect_pinned_paper_publication(
-            second_token, self.archive_key, self.destination, policies=second_policies,
-            trusted_pin=second_pin), {"quarantineVerified": True, "additionalLinkPresent": False})
+        stage = self.orphan_stage(second_token, second_pin, second_policies)
+        published = self.destination.read_bytes()
+        published_inode = self.destination.stat()
+
+        def inspect(token, pin, policies):
+            return backup.inspect_pinned_paper_publication(
+                token, self.archive_key, self.destination, policies=policies, trusted_pin=pin)
+
+        def cleanup(token, pin, policies):
+            backup.cleanup_pinned_paper_staging_link(
+                token, self.archive_key, self.destination, stage, policies=policies, trusted_pin=pin)
+
+        for operation in (inspect, cleanup):
+            for token, pin, policies in ((first_token, second_pin, self.policies),
+                                         (first_token, first_pin, self.policies),
+                                         (second_token, first_pin, second_policies)):
+                with self.subTest(operation=operation.__name__, pin=pin):
+                    with self.assertRaises(backup.OfflineBackupDenied):
+                        operation(token, pin, policies)
+                    self.assertTrue(stage.samefile(self.destination))
+                    self.assertEqual(self.destination.read_bytes(), published)
+        self.assertEqual(inspect(second_token, second_pin, second_policies),
+                         {"quarantineVerified": True, "additionalLinkPresent": True})
+        cleanup(second_token, second_pin, second_policies)
+        self.assertFalse(stage.exists())
+        self.assertTrue(os.path.samestat(published_inode, self.destination.stat()))
+        self.assertEqual(self.destination.read_bytes(), published)
+        self.assertEqual(inspect(second_token, second_pin, second_policies),
+                         {"quarantineVerified": True, "additionalLinkPresent": False})
         with closing(sqlite3.connect(self.destination)) as db:
             self.assertEqual(backup._paper_data_digest(db), prior_digest)
             self.assertEqual(db.execute(request_query, (shared_id,)).fetchall(), request_rows)

@@ -1,5 +1,5 @@
 """Independent receipt storage for the offline synthetic Decimal rehearsal."""
-from contextlib import closing, contextmanager, ExitStack
+from contextlib import closing, contextmanager, ExitStack, nullcontext
 import fcntl
 import hmac
 import os
@@ -18,6 +18,7 @@ from . import tenant_paper_decimal_recovery as recovery
 _PROTOCOL = "EDGEPILOT-SYNTHETIC-DECIMAL-RECEIPT-v1"
 _PROMOTION_PROTOCOL = "EDGEPILOT-SYNTHETIC-DECIMAL-PROMOTION-CHECKPOINT-v1"
 _EXPORT_PROTOCOL = "EDGEPILOT-SYNTHETIC-DECIMAL-PROMOTION-EXPORT-v1"
+_RECOVERY_PROTOCOL = "EDGEPILOT-SYNTHETIC-DECIMAL-RECOVERY-RECEIPT-v1"
 _SIDECARS = ("-journal", "-wal", "-shm")
 _CHECKPOINT_STAGE_PREFIX = ".edgepilot-checkpoint-"
 _SCHEMA = """CREATE TABLE retained_receipt (
@@ -299,15 +300,61 @@ class DecimalReceiptStore:
                 ciphertext, destination, approval=approval, expected_receipt=receipt,
                 journal_key=journal_key, anchor_key=anchor_key, archive_key=archive_key)
 
-    def recover_witness(self, witness, snapshot, *, ledger_path, journal_key, anchor_key):
-        """Rebuild a witness at the retained receipt and refuse ambiguous old ledgers."""
+    def recover_witness(self, witness, snapshot, *, ledger_path, journal_key, anchor_key,
+                        recovery_receipt=None):
+        """Rebuild a witness at the retained receipt, with an optional independent pin."""
         self._verify_separation(witness, journal_key, anchor_key)
-        with self._pin() as receipt:
+        external = nullcontext()
+        if recovery_receipt is not None:
+            recovery_receipt._verify_separation(self, witness, journal_key, anchor_key)
+            external = recovery_receipt._store._pin()
+        with external as independently_retained, self._pin(independently_retained) as receipt:
             return custody.DecimalCustody.recover(
                 witness.path, snapshot, trusted_receipt=receipt,
                 custody_key=witness.custody_key, operator_key=witness.operator_key,
                 ledger_path=ledger_path, journal_key=journal_key, anchor_key=anchor_key,
                 _require_prepared_target=True)
+
+
+class DecimalRecoveryReceipt:
+    """Offline monotonic witness receipt under separate operator custody."""
+
+    def __init__(self, path, *, receipt_key):
+        self._store = DecimalReceiptStore(path, receipt_key=receipt_key,
+                                         _protocol=_RECOVERY_PROTOCOL)
+
+    def _verify_separation(self, receipts, witness, *keys):
+        self._store._verify_separation(witness, receipts.key, *keys)
+        if self._store.path.parent == receipts.path.parent:
+            recovery._deny()
+
+    @classmethod
+    def create(cls, path, *, receipt_key, receipts, witness, reviewed_receipt):
+        """Provision against an explicitly reviewed tip held by both local resources."""
+        retained = cls(path, receipt_key=receipt_key)
+        retained._verify_separation(receipts, witness)
+        with receipts._pin(reviewed_receipt) as receipt, witness._open(write=False) as journal:
+            if receipt != reviewed_receipt:
+                recovery._deny()
+            witness._read(journal, receipt, exact=True)
+            retained._store._initialize(receipt)
+        return retained
+
+    def retain(self, receipts, witness, *, expected_receipt, reviewed_receipt):
+        """Advance to the exact reviewed descendant retained by both local resources."""
+        self._verify_separation(receipts, witness)
+        with (self._store._open() as db, receipts._pin(reviewed_receipt) as receipt,
+              witness._open(write=False) as journal):
+            current = self._store._read(db, pending=False)
+            if (current != expected_receipt or receipt != reviewed_receipt
+                    or receipt["number"] < current["number"]):
+                recovery._deny()
+            witness._read(journal, current, exact=False)
+            witness._read(journal, receipt, exact=True)
+            if receipt != current:
+                self._store._save(db, receipt, pending=False)
+                db.commit()
+            return receipt
 
 
 class DecimalPromotionCheckpoint:

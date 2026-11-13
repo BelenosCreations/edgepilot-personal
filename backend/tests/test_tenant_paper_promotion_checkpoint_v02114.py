@@ -91,6 +91,87 @@ class PromotionCheckpointTests(unittest.TestCase):
         self.assertEqual(self.promote(), tip)
         self.assertEqual(self.path.read_bytes(), prepared_ledger)
 
+    def test_independent_receipt_retains_terminal_quarantine_across_checkpoint_loss(self):
+        self.prepare_checkpoint()
+        active_tip = self.promote()
+        active_snapshot = self.store.backup(expected_receipt=active_tip)
+        active_receipts = self.pin_path.read_bytes()
+        active_export = self.checkpoint.export(expected_receipt=active_tip)
+        folder = tempfile.TemporaryDirectory(prefix="decimal-independent-recovery-")
+        self.addCleanup(folder.cleanup)
+        retained = receipts.DecimalRecoveryReceipt.create(
+            Path(folder.name) / "recovery.db", receipt_key=os.urandom(32),
+            receipts=self.pins, witness=self.store, reviewed_receipt=active_tip)
+        quarantine = recovery.quarantine_decimal_recovery(
+            record=self.promotion, trusted_tip=recovery.evidence_tip(self.promotion),
+            operator_key=self.operator, reason="COMPROMISED_KEY")
+        terminal_tip = self.pins.publish(self.store, quarantine)
+        terminal_snapshot = self.store.backup(expected_receipt=terminal_tip)
+        terminal_receipts = self.pin_path.read_bytes()
+        self.assertEqual(retained.retain(
+            self.pins, self.store, expected_receipt=active_tip, reviewed_receipt=terminal_tip),
+            terminal_tip)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            retained.retain(self.pins, self.store, expected_receipt=active_tip,
+                            reviewed_receipt=terminal_tip)
+        self.checkpoint_path.unlink()
+
+        # Roll both local resources back to the same authentic active receipt.
+        self.pin_path.write_bytes(active_receipts)
+        self.store_path.write_bytes(active_snapshot)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            retained.retain(self.pins, self.store, expected_receipt=terminal_tip,
+                            reviewed_receipt=active_tip)
+        self.store_path.unlink()
+
+        def rebuild(snapshot):
+            return self.pins.recover_witness(
+                self.store, snapshot, ledger_path=self.path, journal_key=self.replacement,
+                anchor_key=self.anchor, recovery_receipt=retained)
+
+        for snapshot in (active_snapshot, terminal_snapshot):
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                rebuild(snapshot)
+            self.assertFalse(self.store_path.exists())
+            self.assertEqual(self.pin_path.read_bytes(), active_receipts)
+
+        self.pin_path.write_bytes(terminal_receipts)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            rebuild(active_snapshot)
+        self.assertFalse(self.store_path.exists())
+        self.path.unlink()
+        rebuilt = rebuild(terminal_snapshot)
+        self.assertEqual(rebuilt.read(trusted_receipt=terminal_tip),
+                         (quarantine, terminal_tip, False))
+        self.assertFalse(self.path.exists())
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.recover_checkpoint(active_export, active_tip)
+        self.assertFalse(self.checkpoint_path.exists())
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            rebuilt.publish(self.promotion, expected_receipt=terminal_tip)
+
+    def test_independent_receipt_requires_exact_prepared_ledger(self):
+        self.prepare_checkpoint()
+        tip = self.promote()
+        snapshot = self.store.backup(expected_receipt=tip)
+        folder = tempfile.TemporaryDirectory(prefix="decimal-independent-recovery-")
+        self.addCleanup(folder.cleanup)
+        retained = receipts.DecimalRecoveryReceipt.create(
+            Path(folder.name) / "recovery.db", receipt_key=os.urandom(32),
+            receipts=self.pins, witness=self.store, reviewed_receipt=tip)
+        self.old.write_bytes(self.before)
+        self.old.chmod(0o600)
+        self.store_path.unlink()
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.pins.recover_witness(
+                self.store, snapshot, ledger_path=self.old, journal_key=self.journal,
+                anchor_key=self.anchor, recovery_receipt=retained)
+        self.assertFalse(self.store_path.exists())
+        rebuilt = self.pins.recover_witness(
+            self.store, snapshot, ledger_path=self.path, journal_key=self.replacement,
+            anchor_key=self.anchor, recovery_receipt=retained)
+        self.assertEqual(rebuilt.read(trusted_receipt=tip), (self.promotion, tip, False))
+
     def test_process_exit_at_each_promotion_publication_boundary(self):
         self.prepare_checkpoint()
         resources = (self.pin_path, self.store_path, self.checkpoint_path)
