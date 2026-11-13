@@ -151,7 +151,7 @@
     el("loadQuote").disabled = false;
     setStatus("Verified account found. Select Retrieve read-only snapshot to contact Public.");
   }
-  async function run(action) {
+  async function run(action, context = "read") {
     if (busy) return;
     busy = true;
     el("reloadAccounts").disabled = true;
@@ -164,6 +164,15 @@
       if (error.status === 401) {
         clearIdentity();
         setStatus("Session expired. Sign in again through EdgePilot Accounts.", true);
+      } else if (context === "quote") {
+        if (error.status) {
+          setStatus("Public quote request unavailable (HTTP " + error.status +
+            "). The provider may have denied access, or the returned data may not be verifiable. " +
+            "No quote was displayed and no trading was attempted.", true);
+        } else {
+          setStatus("Quote response could not be verified by the browser. " +
+            "No unverified price was displayed.", true);
+        }
       } else {
         setStatus("Read-only request unavailable. No trading or transfer was attempted.", true);
       }
@@ -269,7 +278,7 @@
   };
   const readSourceTime = raw => {
     if (typeof raw !== "string" || raw.length > 40 ||
-        !/^\\d{4}-\\d{2}-\\d{2}T/.test(raw) ||
+        !/^\d{4}-\d{2}-\d{2}T/.test(raw) ||
         !Number.isFinite(Date.parse(raw)))
       throw new Error("Unverified quote timestamp");
     return raw;
@@ -331,7 +340,7 @@
         "not current or incomplete") +
       ". Source-reported reference only; not executable or eligible for paper fills.";
     setStatus("Public quote retrieved for research. No order, paper fill or transfer occurred.");
-  }));
+  }, "quote"));
   el("signOut").addEventListener("click", () => run(async () => {
     const csrf = ownerSession && ownerSession.csrf;
     try { await api("/api/identity/logout", "POST", csrf); }
