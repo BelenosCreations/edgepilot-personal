@@ -47,8 +47,8 @@ assert.ok(beg>=0 && end>beg);
 const part=js.slice(beg,end);
 const result=Function('moneyPattern','manualUSDPattern',
   part+' return {money,cents,amountFromCents};')(
-    /^\\d+(?:\\.\\d{1,2})?$/,
-    /^(?:0|[1-9]\\d{0,11})(?:\\.\\d{1,2})?$/
+    /^\d+(?:\.\d{1,2})?$/,
+    /^(?:0|[1-9]\d{0,11})(?:\.\d{1,2})?$/
   );
 assert.equal(result.cents('0'),0n);
 assert.equal(result.cents('0.01'),1n);
