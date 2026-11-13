@@ -85,6 +85,12 @@ class FakePublic:
             return self.response({"symbol":"SPY","period":"WEEK","regularMarket":{"bars":[{
                 "timestamp":"2026-10-01T13:30:00Z","open":"101.01","high":"102.00",
                 "low":"100.00","close":"101.50","volume":100}]}})
+        if url==public.BASE+"/userapigateway/historicdata/EQUITY/SPY/MONTH":
+            assert options=={"allow_redirects":False,"stream":True}
+            self.calls.append(("GET","MONTH_HISTORY"))
+            return self.response({"symbol":"SPY","period":"MONTH","regularMarket":{"bars":[{
+                "timestamp":"2026-09-01T13:30:00Z","open":"98.01","high":"99.00",
+                "low":"98.00","close":"98.50","volume":120}]}})
         raise AssertionError("Only allowlisted Public read endpoints")
 fake=FakePublic()
 app.tenant_public_reader.http=fake
@@ -144,6 +150,16 @@ assert history.json["period"]=="WEEK"
 assert history.json["bars"][0]["close"]=="101.50"
 assert history.json["readOnly"] is True
 assert history.json["dataPersisted"] is False
+monthly = post(a, history_path, {**history_request, "period": "MONTH"}, csrf)
+assert monthly.status_code == 200, monthly.get_data(as_text=True)
+assert monthly.headers["Cache-Control"] == "no-store"
+assert monthly.json["provider"] == "Public API"
+assert monthly.json["source"] == "Get bars v2"
+assert monthly.json["period"] == "MONTH"
+assert monthly.json["bars"][0]["close"] == "98.50"
+assert monthly.json["dataPersisted"] is False
+assert fake.calls.count(("GET", "HISTORY")) == 1
+assert fake.calls.count(("GET", "MONTH_HISTORY")) == 1
 invalid_history=post(a,history_path,{**history_request,"period":"ALL"},csrf)
 assert invalid_history.status_code==404
 assert invalid_history.headers["Cache-Control"]=="no-store"

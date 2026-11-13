@@ -1,3 +1,13 @@
+## v0.2.123 — 2026-11-13 America/New_York — Terminal receipt staging cleanup
+
+**Added** — Offline cleanup removes an operator-selected terminal receipt staging link only at the exact independent receipt and signed witness tip, with the same published inode and an inactive publisher.
+
+**Changed** — Terminal publication holds a staging lock and retains both links when destination-directory sync fails. Synthetic tests repeat archive inspection after cleanup errors and verify source attribution and session-only handling for one-week and one-month Public history.
+
+**Tests** — 887 local tests passed, including 106 focused tests.
+
+**Limitations** — Combined rollback, cross-resource power-loss consistency and owner-device Public history acceptance remain open. Production execution remains disabled.
+
 ## v0.2.122 — 2026-11-13 America/New_York — Interrupted recovery publication
 
 **Added** — Offline read-only inspection verifies a published terminal receipt against the independent receipt and signed witness. The response reports whether an additional hard link is present.
