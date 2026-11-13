@@ -138,6 +138,9 @@ history=post(a,history_path,history_request,csrf)
 assert history.status_code==200,history.get_data(as_text=True)
 assert history.headers["Cache-Control"]=="no-store"
 assert history.json["accountId"]==aid
+assert history.json["provider"]=="Public API"
+assert history.json["source"]=="Get bars v2"
+assert history.json["period"]=="WEEK"
 assert history.json["bars"][0]["close"]=="101.50"
 assert history.json["readOnly"] is True
 assert history.json["dataPersisted"] is False

@@ -8,14 +8,14 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 
 ## Verification and checkpoint
 
-- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.121 from the merged PR for `development/v0.2.121-quarantine-readback`. A later verified main checkpoint takes precedence.
-- Verified v0.2.120 baseline. PR #147 head `b39b0e6547ceccd19abdc6fb1f14ef0b2792c0b9` passed [Actions #43485563974](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43485563974). Main `c387055b672d45ca8a1cf32e91ea0ed168148194` passed [Actions #43485946950](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43485946950), matched live Render deployment `dep-dbrlm8h7lnhs73ddjkc0`, and returned HTTP 200 from `/healthz`. No PRs were open.
-- v0.2.121 rehearses explicit terminal receipt readback and repair after interruption, plus second-generation restore cleanup across process exit. See [milestone notes](PAPER_TERMINAL_READBACK_V02121.md).
+- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.122 from the merged PR for `development/v0.2.122-recovery-publication`. A later verified main checkpoint takes precedence.
+- Verified v0.2.121 baseline. PR #148 head `6c4efb01318dcf968e75c8d70d4cdd759d39d01c` passed [Actions #43487420391](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43487420391). Main `a7a6cc4ac518e409cf56ed9970d44864deee9a9f` passed [Actions #43487771808](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43487771808), matched live Render deployment `dep-dbrlrolg1s2s73cnejs0`, and returned HTTP 200 from `/healthz`. No PRs were open.
+- v0.2.122 adds exact terminal receipt inspection after interrupted publication and rehearses directory sync failures during second-generation archive cleanup. See [milestone notes](PAPER_RECOVERY_PUBLICATION_V02122.md).
 
 ## Next safe development batch
 
-1. Rehearse interruption while publishing a rebuilt terminal local receipt. Verify that a partial stage, destination already linked, unrelated staging file or stale signed witness cannot permit an unsafe retry. Preserve terminal quarantine and existing ledger recovery gates.
-2. Rehearse directory-sync failure before and after second-generation restore cleanup unlink. Require exact-pin inspection after an uncertain response. Verify that the old archive and its pin cannot authorize modifications to the newer candidate.
+1. Rehearse explicit cleanup of an operator-selected orphan terminal receipt link. Require the exact independent terminal receipt, matching signed witness, same inode and an inactive publisher. Preserve unrelated staging files and fail closed when the exact evidence is unavailable.
+2. Verify repeat inspection after an ambiguous cleanup result and preserve archive recovery through all existing entry points. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
 3. Continue source-attributed and session-only Public research under the user's instruction to assume provider permission. Use real history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance). Earlier snapshot and MSFT quote acceptance still apply.
 
 ## Restrictions and workflow
@@ -26,6 +26,12 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.121 — 2026-11-13 — Terminal quarantine readback
+
+Starting checkpoint independently verified. PR #147 head `b39b0e6547ceccd19abdc6fb1f14ef0b2792c0b9` passed [Actions #43485563974](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43485563974). Main `c387055b672d45ca8a1cf32e91ea0ed168148194` passed [Actions #43485946950](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43485946950), matched live Render deployment `dep-dbrlm8h7lnhs73ddjkc0`, and returned HTTP 200 from `/healthz`. No PRs were open.
+
+The terminal readback rehearsal preserves signed quarantine and repairs a missing, stale or frozen local receipt with exact independent evidence. See [terminal quarantine readback](PAPER_TERMINAL_READBACK_V02121.md).
 
 ## v0.2.120 — 2026-11-13 — Independent witness recovery receipt
 

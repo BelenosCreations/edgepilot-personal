@@ -172,6 +172,86 @@ class PromotionCheckpointTests(unittest.TestCase):
             anchor_key=self.anchor, recovery_receipt=retained)
         self.assertEqual(rebuilt.read(trusted_receipt=tip), (self.promotion, tip, False))
 
+    def test_terminal_receipt_publication_refuses_unsafe_retry_and_allows_readback(self):
+        self.prepare_checkpoint()
+        active = self.promote()
+        old_witness = self.store.backup(expected_receipt=active)
+        folder = tempfile.TemporaryDirectory(prefix="decimal-terminal-review-")
+        self.addCleanup(folder.cleanup)
+        retained = receipts.DecimalRecoveryReceipt.create(
+            Path(folder.name) / "recovery.db", receipt_key=os.urandom(32),
+            receipts=self.pins, witness=self.store, reviewed_receipt=active)
+        quarantine = recovery.quarantine_decimal_recovery(
+            record=self.promotion, trusted_tip=recovery.evidence_tip(self.promotion),
+            operator_key=self.operator, reason="INTEGRITY_FAILURE")
+        terminal = self.pins.publish(self.store, quarantine)
+        terminal_witness = self.store.backup(expected_receipt=terminal)
+        retained.retain_terminal(self.pins, self.store, expected_receipt=active,
+                                 reviewed_receipt=terminal, operator_record=quarantine)
+        self.pin_path.unlink()
+        evidence = dict(reviewed_receipt=terminal, operator_record=quarantine)
+
+        def repair():
+            return retained.repair_local_terminal(self.pins, self.store, **evidence)
+
+        def inspect():
+            return retained.inspect_local_terminal(self.pins, self.store, **evidence)
+
+        def exit_during_initialize(stage, tip):
+            stage.path.touch(mode=0o600)
+            os._exit(90)
+
+        pid = os.fork()
+        if pid == 0:
+            try:
+                with patch.object(receipts.DecimalReceiptStore, "_initialize", exit_during_initialize):
+                    repair()
+            finally:
+                os._exit(91)
+        _, status = os.waitpid(pid, 0)
+        self.assertEqual(os.waitstatus_to_exitcode(status), 90)
+        self.assertFalse(self.pin_path.exists())
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            inspect()
+        partial, = self.pin_path.parent.glob(".decimal-terminal-receipt-*/receipt.db")
+        unrelated = partial.with_name("unrelated.db")
+        unrelated.write_bytes(b"unrelated fixture")
+
+        self.store_path.write_bytes(old_witness)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            repair()
+        self.assertFalse(self.pin_path.exists())
+        self.store_path.write_bytes(terminal_witness)
+        link = os.link
+
+        def exit_after_link(source, target, **options):
+            link(source, target, **options)
+            os._exit(92)
+
+        pid = os.fork()
+        if pid == 0:
+            try:
+                with patch.object(receipts.os, "link", exit_after_link):
+                    repair()
+            finally:
+                os._exit(93)
+        _, status = os.waitpid(pid, 0)
+        self.assertEqual(os.waitstatus_to_exitcode(status), 92)
+        published = self.pin_path.read_bytes()
+        inode = self.pin_path.stat()
+        self.assertEqual(inspect(), {"receipt": terminal, "additionalLinkPresent": True})
+        self.store_path.write_bytes(old_witness)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            inspect()
+        self.store_path.write_bytes(terminal_witness)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            repair()
+        self.assertTrue(os.path.samestat(self.pin_path.stat(), inode))
+        self.assertEqual(self.pin_path.read_bytes(), published)
+        self.assertEqual(partial.read_bytes(), b"")
+        self.assertEqual(unrelated.read_bytes(), b"unrelated fixture")
+        self.assertEqual(self.store.read(trusted_receipt=terminal), (quarantine, terminal, False))
+
     def test_terminal_readback_after_witness_commit_and_concurrent_review(self):
         self.prepare_checkpoint()
         active_tip = self.promote()
