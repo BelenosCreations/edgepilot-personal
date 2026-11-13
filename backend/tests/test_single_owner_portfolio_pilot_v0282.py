@@ -68,6 +68,7 @@ class FakePublic:
         if url==public.BASE+"/userapigateway/trading/"+BROKER+"/portfolio/v2":
             self.calls.append(("GET","PORTFOLIO"))
             return self.response({
+                "accountId":BROKER,
                 "totalAccountValue":"210.35",
                 "positions":[{
                     "instrument":{"symbol":"SPY"},
