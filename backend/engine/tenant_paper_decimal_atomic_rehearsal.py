@@ -432,6 +432,13 @@ def inspect_decimal_account(path, *, hmac_key, principal_user_id, account_id):
 
 def _checkpoint_data(db, key):
     result=[]
+    accounts={(r["user_id"],r["account_id"]) for r in db.execute(
+        "SELECT user_id,account_id FROM decimal_wallets")}
+    for table in ("decimal_events", "decimal_positions"):
+        observed={(r["user_id"],r["account_id"]) for r in db.execute(
+            "SELECT DISTINCT user_id,account_id FROM " + table)}
+        if not observed.issubset(accounts):
+            _fail()  # Refuse orphan records absent from authenticated inventory.
     for row in db.execute("""SELECT user_id,account_id FROM decimal_wallets
             ORDER BY user_id,account_id"""):
         wallet,*_= _audit(db,key,row["user_id"],row["account_id"])
