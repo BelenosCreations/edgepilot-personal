@@ -39,6 +39,7 @@ class FakeOnly:
         self.omit_bid = False
         self.missing_last_time = False
         self.crossed_book = False
+        self.omit_side_timestamps = False
 
     def post(self, url, *, json, timeout, headers=None):
         self.calls.append(("POST",url))
@@ -76,6 +77,9 @@ class FakeOnly:
             q["bid"]="2.50"
         if self.missing_last_time:
             q.pop("lastTimestamp")
+        if self.omit_side_timestamps:
+            q.pop("bidTimestamp", None)
+            q.pop("askTimestamp", None)
         return FakeReply({"quotes":[q]})
 
     def get(self, url, *, headers, timeout):
@@ -199,6 +203,23 @@ class SyntheticOwnerQuotesTests(unittest.TestCase):
         self.assertFalse(v["lastFresh"])
         self.assertTrue(v["sourceReportedOnly"])
         self.assertFalse(v["paperFillEligible"])
+
+    def test_public_side_prices_without_optional_side_timestamps_remain_undated(self):
+        # Public's documented equity example contains bid/ask prices but can
+        # omit their timestamps. Do not discard an otherwise validated last
+        # price or pretend such a book is fresh/executable.
+        self.fake.omit_side_timestamps = True
+        quote = self.lookup(symbol="MSFT")
+        self.assertEqual(quote["symbol"], "MSFT")
+        self.assertEqual(quote["last"], "2.01")
+        self.assertEqual(quote["bid"], "2.00")
+        self.assertEqual(quote["ask"], "2.02")
+        self.assertIsNone(quote["bidTimestamp"])
+        self.assertIsNone(quote["askTimestamp"])
+        self.assertTrue(quote["lastFresh"])
+        self.assertFalse(quote["twoSidedFresh"])
+        self.assertFalse(quote["paperFillEligible"])
+        self.assertFalse(quote["executable"])
 
     def test_invalid_symbol_type_and_unknown_account_never_contact_marketdata(self):
         for symbol,kind in (("","EQUITY"),("../orders","EQUITY"),
