@@ -631,6 +631,22 @@ class PinnedPaperRestoreTests(unittest.TestCase):
             backup.cleanup_pinned_paper_staging_link(
                 token, self.archive_key, self.destination, stage, policies=policies, trusted_pin=pin)
 
+        audit = backup._audit_publication
+        saved = self.destination.with_suffix(".saved")
+
+        def replace_after_audit(candidate, raw, policies):
+            audit(candidate, raw, policies)
+            self.destination.rename(saved)
+            self.destination.write_bytes(published)
+            self.destination.chmod(0o600)
+
+        with patch.object(backup, "_audit_publication", replace_after_audit):
+            with self.assertRaises(backup.OfflineBackupDenied):
+                inspect(second_token, second_pin, second_policies)
+        saved.replace(self.destination)
+        self.assertEqual(inspect(second_token, second_pin, second_policies),
+                         {"quarantineVerified": True, "additionalLinkPresent": True})
+
         for operation in (inspect, cleanup):
             for token, pin, policies in ((first_token, second_pin, self.policies),
                                          (first_token, first_pin, self.policies),

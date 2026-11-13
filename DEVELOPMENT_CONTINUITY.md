@@ -8,14 +8,14 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 
 ## Verification and checkpoint
 
-- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.124 from the merged PR for `development/v0.2.124-recovery-interruptions`. A later verified main checkpoint takes precedence.
-- Verified v0.2.123 baseline. PR #150 head `cd5f265bf31142a86f08cfe274bb1c2cfd998091` passed [Actions #43491921435](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43491921435). Main `fc91e898969086b8f74bb9d72699c1a11280ca81` passed [Actions #43492301743](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43492301743), matched live Render deployment `dep-dbrm90u1egvs73a3fp6g`, and returned HTTP 200 from `/healthz`. No PRs were open.
-- v0.2.124 covers actual process exit and competing terminal receipt cleanup attempts. Cleanup rechecks both evidence files before unlink. See [milestone notes](PAPER_RECOVERY_INTERRUPTS_V02124.md).
+- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.125 from the merged PR for `development/v0.2.125-publication-evidence`. A later verified main checkpoint takes precedence.
+- Verified v0.2.124 baseline. PR #151 head `75d27dee3d808d1914091c9dba33c18124e6bb56` passed [Actions #43496314485](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43496314485). Main `59d630fe087ee4e7e546606e8479efe03b17501e` passed [Actions #43496668095](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43496668095), matched live Render deployment `dep-dbrmm668bjmc73f9umi0`, and returned HTTP 200 from `/healthz`. Duplicate PR #152 was closed, leaving no open PRs.
+- v0.2.125 rechecks evidence through terminal receipt publication and active checkpoint readback. See [milestone notes](PAPER_PUBLICATION_EVIDENCE_V02125.md).
 
 ## Next safe development batch
 
-1. Rehearse loss or replacement of the independent receipt or signed witness during missing local receipt publication and active checkpoint readback. Verify that interruption leaves any published candidate subject to exact-evidence inspection. Preserve terminal quarantine and earlier recovery paths.
-2. Verify that second-generation archive inspection refuses a changed candidate during its audit. Recheck whether exact archive evidence can safely resume review after interruption. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
+1. Rehearse evidence loss around active checkpoint publication itself, including after the destination link is created. Require explicit inspection before cleaning any retained staging name and preserve terminal quarantine and earlier recovery paths.
+2. Evaluate how cooperating offline operators can hold evidence through publication and cleanup across recovery entry points. Preserve exact archive pins and repeated second-generation readback. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
 3. Continue source-attributed and session-only Public research under the user's instruction to assume provider permission. Use real history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance). Earlier snapshot and MSFT quote acceptance still apply.
 
 ## Restrictions and workflow
@@ -26,6 +26,10 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.124 — 2026-11-13 — Recovery interruptions
+
+Terminal cleanup rechecks independent evidence before unlink. Tests cover process exit, competing cleanup and stale or missing archive pins. See [recovery interruptions](PAPER_RECOVERY_INTERRUPTS_V02124.md).
 
 ## v0.2.123 — 2026-11-13 — Terminal receipt staging cleanup
 
