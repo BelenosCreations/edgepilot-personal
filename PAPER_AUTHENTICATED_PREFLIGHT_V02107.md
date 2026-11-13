@@ -1,0 +1,18 @@
+# Authenticated offline Decimal paper preflight
+
+The preflight connects the dormant tenant ledger and v0.2.106's fractional Decimal transition in a read-only rehearsal. It accepts existing independent identity session and CSRF tokens, a selected account, and a fictional proposal. Its fixture builder exclusively creates a new, marked 0600 database on verified Linux /dev/shm. Use disposable users and synthetic brokerage connection placeholders.
+
+## Transaction and replay
+
+1. Acquire SQLite's write reservation with BEGIN IMMEDIATE on the marked fixture and turn on query-only mode for the connection. The reservation serializes the preflight with tenant revocations and ledger writers. Every outcome rolls back.
+2. Verify the server-issued session and CSRF using the existing identity store query, then check account ownership, active account status, and an unrevoked owner-bound connection in the same transaction. A revocation committed before lock acquisition denies the proposal.
+3. Refuse ledger events with a different provider label. Audit ledger schema, cash, positions, and event arithmetic. Replay append-order realized profit and loss for the requested account and retain the historical minimum. Recheck session expiry and validate observation freshness against the server clock after replay.
+4. Accept the fictional fixture provider label only. The existing observation validator still requires source and receipt timestamps, an open and consistent two-sided market observation, coverage and analysis flags, and the ledger's explicit cache flag. These are fictional assertions used to exercise validation. The result always sets licensedObservationVerified and assumedFillAuthorized to false.
+5. Check the existing request digest in the same account scope. Identical ledger-format retries report current and original balances without projecting a second fill. The old format distinguishes decimal text representations such as 0.5 and 0.50. Reusing the request ID with different recorded inputs is refused. The hypothetical loss threshold is not part of the existing stored digest.
+6. For a new proposal, pass historical realized state, existing position basis, and effective cent-denominated risk caps to the fractional atomic transition. The projected cash change must match the dormant ledger's conservative bid/ask and friction calculation. A historical threshold breach blocks additional buys. A sale of existing holdings can still be projected.
+
+## Limits and next work
+
+The protection, spend, trade and loss values are hypothetical inputs. This projection cannot be carried forward as a write authorization. The existing ledger has no authenticated persistent policy binding or signed event provenance. Its archived records do not retain all inputs required to reconstruct the existing request digest or reverify historical provider rights. An old internally consistent ledger may pass arithmetic checks. The HMAC fixtures and externally held checkpoints from v0.2.106 are not carried over to this preflight.
+
+Before a future writer is considered, independently verify provider rights for the specific observation, asset and proposed persistence/use. Design immutable account policy and idempotency binding for new records, while retaining compatibility with existing event digests. Bind tenant state to externally trusted monotonic evidence and explicitly approve recovery. Verify interrupted external publication, prepared key rotation, compromised-key quarantine and authenticated encrypted restore without production storage. Keep the owner dashboard on its accepted read-only Public path. Production paper fills, live orders, autonomous brokerage actions and bank transfers stay disabled.

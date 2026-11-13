@@ -154,17 +154,9 @@ def open_wallet(path, *, principal_user_id, account_id, initial_paper_cash):
         return {"created": True, "paperOnly": True}
 
 
-def record_paper_fill(path, *, principal_user_id, account_id, request_id,
-                      side, observation, now, quantity, fee_per_unit,
-                      slippage_per_unit, protected_pct, spend_cap, per_trade_cap):
-    """Atomically record an assumed paper fill, NEVER an order or actual fill.
-
-    Quotes are checked again at the time of the simulation. BUY uses the ask
-    plus adverse slippage and fees, rounded UP. SELL uses bid minus friction,
-    rounded DOWN. Cost basis is released conservatively on partial sells.
-    No short selling, leverage, open orders, actual brokerage cash, or
-    fabricated unrealized performance is modelled.
-    """
+def _prepare_fill(request_id, side, observation, now, quantity, fee_per_unit,
+                  slippage_per_unit, protected_pct, spend_cap, per_trade_cap):
+    """Validate source evidence and compute the existing ledger request digest."""
     key = _uuid(request_id)
     if side not in ("BUY", "SELL"):
         raise PaperLedgerDenied("Unsupported paper side")
@@ -196,7 +188,6 @@ def record_paper_fill(path, *, principal_user_id, account_id, request_id,
         change = _cents(net_unit * qty, ROUND_DOWN)
     if change == 0 or abs(change) > _cents(MAX):
         raise PaperLedgerDenied("Paper fill notional outside safe accounting bounds")
-    quote_price = quote.ask if side == "BUY" else quote.bid
     request_record = {
         "requestId": key, "side": side, "asset": quote.asset_class,
         "symbol": quote.symbol, "provider": quote.rights.provider,
@@ -209,6 +200,24 @@ def record_paper_fill(path, *, principal_user_id, account_id, request_id,
     }
     digest = hashlib.sha256(json.dumps(
         request_record, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return key, quote, qty, fee, slip, pct, spending, per_trade, change, digest
+
+
+def record_paper_fill(path, *, principal_user_id, account_id, request_id,
+                      side, observation, now, quantity, fee_per_unit,
+                      slippage_per_unit, protected_pct, spend_cap, per_trade_cap):
+    """Atomically record an assumed paper fill, NEVER an order or actual fill.
+
+    Quotes are checked again at the time of the simulation. BUY uses the ask
+    plus adverse slippage and fees, rounded UP. SELL uses bid minus friction,
+    rounded DOWN. Cost basis is released conservatively on partial sells.
+    No short selling, leverage, open orders, actual brokerage cash, or
+    fabricated unrealized performance is modelled.
+    """
+    key, quote, qty, fee, slip, pct, spending, per_trade, change, digest = _prepare_fill(
+        request_id, side, observation, now, quantity, fee_per_unit,
+        slippage_per_unit, protected_pct, spend_cap, per_trade_cap)
+    quote_price = quote.ask if side == "BUY" else quote.bid
     with tenant_foundation._open(path) as db:
         db.execute("BEGIN IMMEDIATE")
         user, account = _scope(db, principal_user_id, account_id)

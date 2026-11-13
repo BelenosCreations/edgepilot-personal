@@ -41,6 +41,33 @@ def _money(cents):
     return str((Decimal(cents) / 100).quantize(CENT))
 
 
+def _replay_realized(events):
+    """Replay already-audited events in append order."""
+    positions = {}
+    cumulative = 0
+    worst = 0
+    assumed_sales = 0
+    for side, asset, symbol, raw_qty, delta in events:
+        units = Decimal(raw_qty)  # validated in the complete audit
+        key = (asset, symbol)
+        position = positions.setdefault(
+            key, {"qty": Decimal(0), "basis": 0})
+        if side == "BUY":
+            position["qty"] += units
+            position["basis"] -= delta
+        else:
+            held = position["qty"]
+            release = (position["basis"] if units == held else int(
+                (Decimal(position["basis"]) * units / held)
+                .to_integral_value(rounding=ROUND_UP)))
+            position["qty"] -= units
+            position["basis"] -= release
+            cumulative += delta - release
+            worst = min(worst, cumulative)
+            assumed_sales += 1
+    return cumulative, worst, assumed_sales
+
+
 def inspect_realized_paper_loss_stop(
         path, *, principal_user_id, account_id, max_realized_loss):
     """Inspect historical per-account assumed-fill P&L, never place a fill.
@@ -70,28 +97,7 @@ def inspect_realized_paper_loss_stop(
                 signed_cash_change_cents FROM tenant_paper_events
                 WHERE user_id=? AND account_id=? ORDER BY rowid""",
                 (user, account)).fetchall()
-            positions = {}
-            cumulative = 0
-            worst = 0
-            assumed_sales = 0
-            for side, asset, symbol, raw_qty, delta in events:
-                units = Decimal(raw_qty)  # validated in the complete audit
-                key = (asset, symbol)
-                position = positions.setdefault(
-                    key, {"qty": Decimal(0), "basis": 0})
-                if side == "BUY":
-                    position["qty"] += units
-                    position["basis"] -= delta
-                else:
-                    held = position["qty"]
-                    release = (position["basis"] if units == held else int(
-                        (Decimal(position["basis"]) * units / held)
-                        .to_integral_value(rounding=ROUND_UP)))
-                    position["qty"] -= units
-                    position["basis"] -= release
-                    cumulative += delta - release
-                    worst = min(worst, cumulative)
-                    assumed_sales += 1
+            cumulative, worst, assumed_sales = _replay_realized(events)
             return {
                 "paperOnly": True,
                 "actualTradeAllowed": False,

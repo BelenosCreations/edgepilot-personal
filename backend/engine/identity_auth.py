@@ -165,21 +165,28 @@ class IdentityStore:
         if not isinstance(token, str) or not 25 < len(token) < 256:
             return None
         with _db(self.path) as con:
-            row=con.execute("""SELECT s.user_id,s.csrf_hash,u.label,u.role
-                FROM tenant_identity_sessions s
-                JOIN tenant_identities i ON i.user_id=s.user_id
-                JOIN tenant_users u ON u.user_id=s.user_id
-                WHERE s.token_hash=? AND s.expires_at>?
-                AND s.credential_version=i.credential_version
-                AND u.disabled_at IS NULL""",(_digest(token),now)).fetchone()
+            return self._principal_in(con, token, csrf=csrf, now=now)
+
+    @staticmethod
+    def _principal_in(con, token, *, csrf, now):
+        """Resolve a verified session using the caller's SQLite transaction."""
+        if not isinstance(token, str) or not 25 < len(token) < 256:
+            return None
+        row = con.execute("""SELECT s.user_id,s.csrf_hash,u.label,u.role
+            FROM tenant_identity_sessions s
+            JOIN tenant_identities i ON i.user_id=s.user_id
+            JOIN tenant_users u ON u.user_id=s.user_id
+            WHERE s.token_hash=? AND s.expires_at>?
+              AND s.credential_version=i.credential_version
+              AND u.disabled_at IS NULL""", (_digest(token), now)).fetchone()
         if not row:
             return None
         if csrf is not None:
-            if not isinstance(csrf,str) or not 20<len(csrf)<256 or not hmac.compare_digest(
-                row["csrf_hash"],_digest(csrf)
+            if not isinstance(csrf, str) or not 20 < len(csrf) < 256 or not hmac.compare_digest(
+                row["csrf_hash"], _digest(csrf)
             ):
                 return None
-        return {"user_id":row["user_id"],"label":row["label"],"role":row["role"]}
+        return {"user_id": row["user_id"], "label": row["label"], "role": row["role"]}
 
     def rotate_csrf(self, token, now=None):
         now=int(time.time() if now is None else now)
