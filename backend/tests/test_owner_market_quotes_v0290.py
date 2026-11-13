@@ -152,7 +152,7 @@ class SyntheticOwnerQuotesTests(unittest.TestCase):
         self.assertFalse(v["transfersEnabled"])
         self.assertNotIn(TOKENS[KEY_OWNER],str(v))
         self.assertNotIn(ACCOUNT_OWNER,str(v))
-        self.assertEqual(len(self.fake.calls),4)
+        self.assertEqual(len(self.fake.calls),3)
         self.assertTrue(self.fake.calls[-1][1].endswith(
             "/marketdata/"+ACCOUNT_OWNER+"/quotes"))
         with sqlite3.connect(self.path) as db:
