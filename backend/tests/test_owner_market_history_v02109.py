@@ -140,3 +140,9 @@ class OwnerMarketHistoryTests(unittest.TestCase):
         self.assertEqual([bar["volume"] for bar in observed["bars"]], ["1700"])
         self.assertIsNone(observed["sourceExpectedBars"])
         self.assertFalse(observed["dataPersisted"])
+
+    def test_unsupported_history_period_never_requests_provider_bars(self):
+        self.provider(self.payload())
+        with self.assertRaises(quote_tests.market.OwnerQuoteUnavailable):
+            self.history(period="SINCE_PURCHASE")
+        self.assertEqual(self.history_calls, [])

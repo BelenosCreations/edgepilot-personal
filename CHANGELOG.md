@@ -1,3 +1,15 @@
+## v0.2.114 — 2026-11-13 America/New_York — Independent promotion checkpoint
+
+**Added** — A separately keyed checkpoint can retain the exact signed promotion receipt before local retention.
+
+**Changed** — The checkpoint rehearsal reaudits the exact prepared ledger and witness on readback after a process exit or local receipt rollback.
+
+**Fixed** — The checkpoint path refuses stale witness or ledger copies even when a valid old receipt reservation is restored.
+
+**Tests** — 81 focused tests and all 861 local tests passed. Seven regressions cover rollback combinations, process exit between evidence commits, concurrent and interrupted staging unlink, and unsupported Public history periods.
+
+**Limitations** — Simultaneous rollback of all evidence and cross-resource power loss remain open. Real Public history acceptance is pending on the owner's device. Production execution remains disabled.
+
 ## v0.2.113 — 2026-11-13 America/New_York — Reviewed synthetic paper recovery
 
 **Added** — Signed approval and independently reviewed receipt ancestry for promotion of an exact prepared ledger. Explicit cleanup of one verified orphan restore staging link.

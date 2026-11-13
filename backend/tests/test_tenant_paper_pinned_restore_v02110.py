@@ -329,3 +329,57 @@ class PinnedPaperRestoreTests(unittest.TestCase):
                 self.cleanup(token, pin, stage)
         self.assertTrue(stage.samefile(preserved))
         self.assertEqual(self.destination.read_bytes(), b"replacement")
+
+    def assert_cleaned_publication(self, token, pin, stage, identity, before):
+        self.assertFalse(stage.exists())
+        self.assertTrue(os.path.samestat(identity, self.destination.stat()))
+        self.assertEqual(self.destination.read_bytes(), before)
+        self.assertEqual(backup.inspect_pinned_paper_publication(
+            token, self.archive_key, self.destination, policies=self.policies, trusted_pin=pin),
+            {"quarantineVerified": True, "additionalLinkPresent": False})
+
+    def test_concurrent_cleanup_allows_one_unlink(self):
+        self.prepare()
+        token, pin = self.seal()
+        stage = self.orphan_stage(token, pin)
+        identity, before = self.destination.stat(), self.destination.read_bytes()
+        start = Barrier(2, timeout=5)
+
+        def cleanup():
+            start.wait()
+            self.cleanup(token, pin, stage)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            attempts = [pool.submit(cleanup) for _ in range(2)]
+        self.assertEqual(sum(attempt.exception() is None for attempt in attempts), 1)
+        self.assertEqual(sum(isinstance(attempt.exception(), backup.OfflineBackupDenied)
+                             for attempt in attempts), 1)
+        self.assert_cleaned_publication(token, pin, stage, identity, before)
+
+    def test_cleanup_process_exit_before_and_after_unlink(self):
+        self.prepare()
+        token, pin = self.seal()
+        stage = self.orphan_stage(token, pin)
+        identity, before = self.destination.stat(), self.destination.read_bytes()
+        unlink = os.unlink
+        for remove in (False, True):
+            def exit_at_unlink(*args, **kwargs):
+                if remove:
+                    unlink(*args, **kwargs)
+                os._exit(92)
+
+            pid = os.fork()
+            if pid == 0:
+                try:
+                    with patch.object(backup.os, "unlink", side_effect=exit_at_unlink):
+                        self.cleanup(token, pin, stage)
+                finally:
+                    os._exit(93)
+            _, status = os.waitpid(pid, 0)
+            self.assertEqual(os.waitstatus_to_exitcode(status), 92)
+            self.assertEqual(stage.exists(), not remove)
+            self.assertEqual(self.destination.read_bytes(), before)
+            self.assertEqual(backup.inspect_pinned_paper_publication(
+                token, self.archive_key, self.destination, policies=self.policies,
+                trusted_pin=pin)["additionalLinkPresent"], not remove)
+        self.assert_cleaned_publication(token, pin, stage, identity, before)
