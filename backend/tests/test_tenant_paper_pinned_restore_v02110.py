@@ -544,6 +544,7 @@ class PinnedPaperRestoreTests(unittest.TestCase):
 
         with self.assertRaises(tenant_passkeys.PasskeyDenied):
             enroll(fresh, b"synthetic-key-id")
+        passkey_sessions = []
         for session, user, credential in ((fresh, self.owner, b"new-owner-passkey"),
                                           (member, self.member, b"new-member-passkey")):
             self.assertTrue(enroll(session, credential)["registered"])
@@ -554,6 +555,7 @@ class PinnedPaperRestoreTests(unittest.TestCase):
                 issued = restored_passkeys.finish_authentication(
                     request_id, {"id": identifier, "rawId": identifier})
             self.assertEqual(auth.principal(issued["token"], issued["csrf"])["user_id"], user)
+            passkey_sessions.append(issued)
 
         new_invite = signup.issue_invitation()["invitation"]
         self.assertTrue(signup.register(new_invite, "new_member", "synthetic-new-password",
@@ -561,3 +563,80 @@ class PinnedPaperRestoreTests(unittest.TestCase):
         with self.assertRaises(tenant_registration.RegistrationDenied):
             signup.register(invite, "another_member", "synthetic-new-password", "Another member",
                             source="synthetic-restore")
+
+        self.rehearse_second_restore(
+            pin, auth, restored_passkeys, signup, (fresh, member, *passkey_sessions),
+            (invite, new_invite), (owner_account, member_account), (owner_conn, member_conn))
+
+    def rehearse_second_restore(self, first_pin, auth, passkeys, signup, restored_sessions,
+                                earlier_invites, accounts, connections):
+        unused_invite = signup.issue_invitation()["invitation"]
+        challenge = passkeys.begin_authentication()["requestId"]
+        owner_account, member_account = accounts
+        for user, account in ((self.owner, owner_account), (self.member, member_account)):
+            ledger.open_wallet(self.destination, principal_user_id=user, account_id=account,
+                               initial_paper_cash="100.00")
+        ledger.record_paper_fill(
+            self.destination, principal_user_id=self.owner, now=datetime.now(timezone.utc).isoformat(),
+            **self.params(account_id=owner_account, protected_pct="90", per_trade_cap="3"))
+        second_policies = self.policies | dict.fromkeys(
+            [(self.owner, owner_account), (self.member, member_account)],
+            PaperRestorePolicy(90, 1000, 300, 54))
+        first_restore = self.destination
+        with closing(sqlite3.connect(first_restore)) as db:
+            prior_digest = backup._paper_data_digest(db)
+            prior_scope = backup._paper_scope(db)
+            prior_passkeys = dict(db.execute("SELECT credential_id,revoked_at FROM tenant_passkey_credentials"))
+            prior_connections = dict(db.execute("SELECT connection_id,revoked_at FROM tenant_connections"))
+        second_token, second_pin = backup.seal_pinned_paper_fixture(
+            first_restore, self.archive_key, policies=second_policies)
+        self.destination = first_restore.with_name("restored-again.db")
+        with self.assertRaises(backup.OfflineBackupDenied):
+            self.restore(second_token, first_pin, second_policies)
+        self.assertEqual(self.restore(second_token, second_pin, second_policies), self.destination)
+        self.assertEqual(backup.inspect_pinned_paper_publication(
+            second_token, self.archive_key, self.destination, policies=second_policies,
+            trusted_pin=second_pin), {"quarantineVerified": True, "additionalLinkPresent": False})
+        with closing(sqlite3.connect(self.destination)) as db:
+            self.assertEqual(backup._paper_data_digest(db), prior_digest)
+            for before, after in zip(prior_scope, backup._paper_scope(db), strict=True):
+                self.assertEqual(before[:-2], after[:-2])
+                for old, current in zip(before[-2:], after[-2:], strict=True):
+                    self.assertTrue(current)
+                    if old is not None:
+                        self.assertEqual(current, old)
+            for query, original in (
+                    ("SELECT credential_id,revoked_at FROM tenant_passkey_credentials", prior_passkeys),
+                    ("SELECT connection_id,revoked_at FROM tenant_connections", prior_connections)):
+                current = dict(db.execute(query))
+                self.assertEqual(current.keys(), original.keys())
+                for key, value in original.items():
+                    self.assertTrue(current[key])
+                    if value is not None:
+                        self.assertEqual(current[key], value)
+
+        second_auth = identity_auth.IdentityStore(self.destination)
+        for session in restored_sessions:
+            self.assertIsNotNone(auth.principal(session["token"], session["csrf"]))
+        for session in (self.session, self.other_session, *restored_sessions):
+            self.assertIsNone(second_auth.principal(session["token"], session["csrf"]))
+        second_passkeys = tenant_passkeys.TenantPasskeyStore(
+            self.destination, second_auth, rp_id=passkeys.rp_id, expected_origin=passkeys.origin)
+        with patch.object(tenant_passkeys, "_credential_json") as parse:
+            with self.assertRaises(tenant_passkeys.PasskeyDenied):
+                second_passkeys.finish_authentication(challenge, {})
+            parse.assert_not_called()
+        second_signup = tenant_registration.TenantRegistration(self.destination)
+        for denied_invite in (*earlier_invites, unused_invite):
+            with self.assertRaises(tenant_registration.RegistrationDenied):
+                second_signup.register(denied_invite, "another_member", "synthetic-new-password",
+                                       "Another member", source="synthetic-second-restore")
+        second_vault = tenant_public_vault.TenantPublicVault(
+            self.destination, second_auth, credential_key=self.fixture_vault_key)
+        second_scopes = account_scope.AccountScopeStore(self.destination, second_auth)
+        for login, connection in zip(("owner", "member"), connections, strict=True):
+            session = second_auth.authenticate(login, "fixture-password-for-" + login,
+                                               "synthetic-second-restore-" + login)
+            self.assertEqual(second_scopes.list_accounts(session["token"]), [])
+            with self.assertRaises(tenant_public_vault.TenantVaultDenied):
+                second_vault._credential_for_provider_only(session["token"], connection)

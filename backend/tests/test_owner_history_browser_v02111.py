@@ -87,6 +87,15 @@ vm.runInNewContext(fs.readFileSync(process.argv[1], "utf8"), {
   pending.shift().resolve(reply(200, result("MONTH")));
   await month;
   assert.match(el("historyEvidence").textContent, /MSFT · One month/);
+
+  const stale = el("loadHistory").fire("click");
+  el("historyPeriod").value = "WEEK";
+  el("historyPeriod").fire("change");
+  pending.shift().resolve(reply(200, result("MONTH")));
+  await stale;
+  assert.equal(el("historyTable").hidden, true);
+  assert.equal(el("historyRows").children.length, 0);
+
   const denied = el("loadHistory").fire("click");
   pending.shift().resolve(reply(404, {privateDiagnostic: "ignore me"}));
   await denied;
@@ -95,7 +104,7 @@ vm.runInNewContext(fs.readFileSync(process.argv[1], "utf8"), {
   assert.equal(el("status").textContent, "Public history request unavailable (HTTP 404).");
 
   const mismatched = el("loadHistory").fire("click");
-  pending.shift().resolve(reply(200, result("WEEK")));
+  pending.shift().resolve(reply(200, result("MONTH")));
   await mismatched;
   assert.equal(el("historyTable").hidden, true);
   assert.equal(el("status").textContent, "Public history response could not be verified.");
