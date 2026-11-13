@@ -65,6 +65,7 @@
     el("quoteLast").textContent = "Not loaded";
     el("quoteBid").textContent = "Not loaded";
     el("quoteAsk").textContent = "Not loaded";
+    el("quoteSpread").textContent = "Not loaded";
     el("quoteEvidence").textContent =
       "No quote requested. Provider timestamps, not device retrieval time, determine whether observations are current.";
   }
@@ -283,6 +284,24 @@
       throw new Error("Unverified quote timestamp");
     return raw;
   };
+  // Source-derived book difference only. BigInt preserves the Public price's
+  // original decimal precision (up to 12 places) without float roundoff.
+  // No executable spread, return, broker order or persistent quote history.
+  const quotedSpread = (bid, ask, twoSidedFresh) => {
+    if (!twoSidedFresh || bid === "Not provided by Public" ||
+        ask === "Not provided by Public") return "Unavailable";
+    const units = raw => {
+      const [whole, fraction = ""] = raw.split(".");
+      return BigInt(whole) * 1000000000000n +
+        BigInt((fraction + "000000000000").slice(0, 12));
+    };
+    const delta = units(ask) - units(bid);
+    if (delta < 0n) throw new Error("Crossed source quote refused");
+    const fraction = String(delta % 1000000000000n)
+      .padStart(12, "0").replace(/0+$/, "");
+    return String(delta / 1000000000000n) +
+      (fraction ? "." + fraction : "") + " price units";
+  };
   function validateQuote(data, id, symbol, type) {
     if (!data || data.accountId !== id || data.symbol !== symbol ||
         data.assetClass !== type || data.provider !== "Public API" ||
@@ -302,7 +321,11 @@
       "timestamp unavailable" : readSourceTime(data.bidTimestamp);
     const askAt = data.ask === null || data.askTimestamp === null ?
       "timestamp unavailable" : readSourceTime(data.askTimestamp);
-    return {last,bid,ask,lastAt,received,bidAt,askAt,
+    if (data.twoSidedFresh && (bidAt === "timestamp unavailable" ||
+        askAt === "timestamp unavailable"))
+      throw new Error("Untimed source book cannot be called fresh");
+    const spread = quotedSpread(bid, ask, data.twoSidedFresh);
+    return {last,bid,ask,lastAt,received,bidAt,askAt,spread,
             lastFresh:data.lastFresh,twoSidedFresh:data.twoSidedFresh};
   }
   el("quoteSymbol").addEventListener("input", clearQuote);
@@ -329,16 +352,19 @@
     el("quoteLast").textContent = q.last;
     el("quoteBid").textContent = q.bid;
     el("quoteAsk").textContent = q.ask;
+    el("quoteSpread").textContent = q.spread;
     el("quoteEvidence").textContent =
       "Public API • " + type + " " + symbol +
       " • last quote timestamp " + q.lastAt +
       " • bid as of " + q.bidAt + " • ask as of " + q.askAt +
       " • received by EdgePilot " + q.received +
-      " • last observation " + (q.lastFresh ? "within freshness window" :
-        "STALE / not current") +
-      " • two-sided quote " + (q.twoSidedFresh ? "within freshness window" :
-        "not current or incomplete") +
-      ". Source-reported reference only; not executable or eligible for paper fills.";
+      " • last observation " + (q.lastFresh ?
+        "within freshness window AT RECEIPT" : "STALE at receipt") +
+      " • two-sided quote " + (q.twoSidedFresh ?
+        "both sides timestamped within window AT RECEIPT" :
+        "stale, untimed or incomplete at receipt") +
+      ". Fresh at receipt is not a live/current price guarantee. " +
+      "Source-reported reference only; derived spread is not a fill or performance estimate; no paper fills.";
     setStatus("Public quote retrieved for research. No order, paper fill or transfer occurred.");
   }, "quote"));
   el("signOut").addEventListener("click", () => run(async () => {
