@@ -327,12 +327,15 @@ def cleanup_pinned_paper_staging_link(token, archive_key, destination_path, stag
             if candidate.execute("PRAGMA journal_mode").fetchone() != ("delete",):
                 raise OfflineBackupDenied("Synthetic restore journaling unavailable")
             _audit_publication(candidate, raw, checked)
+            # Retain the published name before removing the surviving staging link.
+            os.fsync(parent_fd)
             if (_publication_info(target) != info or _publication_info(stage) != info
                     or not os.path.samestat(parent, target.parent.stat())
                     or not os.path.samestat(held, os.stat(stage.name, dir_fd=parent_fd,
                                                           follow_symlinks=False))):
                 raise OfflineBackupDenied("Synthetic restore staging link changed")
             os.unlink(stage.name, dir_fd=parent_fd)
+            os.fsync(parent_fd)
     except (OSError, sqlite3.Error, ValueError, shadow_storage.MemoryStorageError):
         raise OfflineBackupDenied("Synthetic restore staging link unavailable") from None
 

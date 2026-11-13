@@ -364,28 +364,32 @@ class PinnedPaperRestoreTests(unittest.TestCase):
         token, pin = self.seal()
         stage = self.orphan_stage(token, pin)
         identity, before = self.destination.stat(), self.destination.read_bytes()
-        unlink = os.unlink
         for remove in (False, True):
-            def exit_at_unlink(*args, **kwargs):
-                if remove:
-                    unlink(*args, **kwargs)
-                os._exit(92)
-
-            pid = os.fork()
-            if pid == 0:
-                try:
-                    with patch.object(backup.os, "unlink", side_effect=exit_at_unlink):
-                        self.cleanup(token, pin, stage)
-                finally:
-                    os._exit(93)
-            _, status = os.waitpid(pid, 0)
-            self.assertEqual(os.waitstatus_to_exitcode(status), 92)
+            self.interrupt_cleanup(lambda: self.cleanup(token, pin, stage), remove=remove)
             self.assertEqual(stage.exists(), not remove)
             self.assertEqual(self.destination.read_bytes(), before)
             self.assertEqual(backup.inspect_pinned_paper_publication(
                 token, self.archive_key, self.destination, policies=self.policies,
                 trusted_pin=pin)["additionalLinkPresent"], not remove)
         self.assert_cleaned_publication(token, pin, stage, identity, before)
+
+    def interrupt_cleanup(self, cleanup, *, remove):
+        unlink = os.unlink
+
+        def exit_at_unlink(*args, **kwargs):
+            if remove:
+                unlink(*args, **kwargs)
+            os._exit(92)
+
+        pid = os.fork()
+        if pid == 0:
+            try:
+                with patch.object(backup.os, "unlink", side_effect=exit_at_unlink):
+                    cleanup()
+            finally:
+                os._exit(93)
+        _, status = os.waitpid(pid, 0)
+        self.assertEqual(os.waitstatus_to_exitcode(status), 92)
 
     def test_quarantine_preserves_passkeys_and_unlinked_connection_history(self):
         self.prepare()
@@ -636,9 +640,14 @@ class PinnedPaperRestoreTests(unittest.TestCase):
                         operation(token, pin, policies)
                     self.assertTrue(stage.samefile(self.destination))
                     self.assertEqual(self.destination.read_bytes(), published)
-        self.assertEqual(inspect(second_token, second_pin, second_policies),
-                         {"quarantineVerified": True, "additionalLinkPresent": True})
-        cleanup(second_token, second_pin, second_policies)
+        for remove in (False, True):
+            self.interrupt_cleanup(
+                lambda: cleanup(second_token, second_pin, second_policies), remove=remove)
+            with self.assertRaises(backup.OfflineBackupDenied):
+                cleanup(first_token, first_pin, self.policies)
+            self.assertEqual(stage.exists(), not remove)
+            self.assertEqual(inspect(second_token, second_pin, second_policies),
+                             {"quarantineVerified": True, "additionalLinkPresent": not remove})
         self.assertFalse(stage.exists())
         self.assertTrue(os.path.samestat(published_inode, self.destination.stat()))
         self.assertEqual(self.destination.read_bytes(), published)

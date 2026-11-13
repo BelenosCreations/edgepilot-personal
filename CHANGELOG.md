@@ -1,3 +1,13 @@
+## v0.2.121 — 2026-11-13 America/New_York — Terminal quarantine readback
+
+**Added** — Explicit terminal witness readback can advance the independent receipt after an interrupted local handoff. An exact terminal receipt and matching witness can repair a missing, stale or frozen local receipt.
+
+**Changed** — Second-generation restore cleanup syncs the directory before and after removing the staging link. Public history route coverage verifies that a refused period returns no bars and is marked no-store.
+
+**Tests** — All 884 local tests passed, including 113 focused tests.
+
+**Limitations** — The recovery operations require explicit operator review. Combined rollback, cross-resource power loss and owner-device Public history acceptance remain open. Production execution remains disabled.
+
 ## v0.2.120 — 2026-11-13 America/New_York — Independent witness recovery receipt
 
 **Added** — An offline receipt store can advance to an explicitly reviewed descendant and require an exact match during witness recovery. The terminal quarantine rehearsal covers simultaneous rollback of the witness and its local receipt after the promotion checkpoint is lost.

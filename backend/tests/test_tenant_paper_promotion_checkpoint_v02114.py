@@ -172,6 +172,92 @@ class PromotionCheckpointTests(unittest.TestCase):
             anchor_key=self.anchor, recovery_receipt=retained)
         self.assertEqual(rebuilt.read(trusted_receipt=tip), (self.promotion, tip, False))
 
+    def test_terminal_readback_after_witness_commit_and_concurrent_review(self):
+        self.prepare_checkpoint()
+        active_tip = self.promote()
+        active_local = self.pin_path.read_bytes()
+        folder = tempfile.TemporaryDirectory(prefix="decimal-terminal-receipt-")
+        self.addCleanup(folder.cleanup)
+        retained = receipts.DecimalRecoveryReceipt.create(
+            Path(folder.name) / "recovery.db", receipt_key=os.urandom(32),
+            receipts=self.pins, witness=self.store, reviewed_receipt=active_tip)
+        quarantine = recovery.quarantine_decimal_recovery(
+            record=self.promotion, trusted_tip=recovery.evidence_tip(self.promotion),
+            operator_key=self.operator, reason="AMBIGUOUS_OLD_STATE")
+        different_quarantine = recovery.quarantine_decimal_recovery(
+            record=self.promotion, trusted_tip=recovery.evidence_tip(self.promotion),
+            operator_key=self.operator, reason="INTEGRITY_FAILURE")
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            retained.repair_local_terminal(self.pins, self.store, reviewed_receipt=active_tip,
+                                           operator_record=self.promotion)
+
+        save = self.pins._save
+
+        def interrupt(db, receipt, *, pending):
+            if not pending:
+                os._exit(90)
+            save(db, receipt, pending=pending)
+
+        pid = os.fork()
+        if pid == 0:
+            try:
+                with patch.object(self.pins, "_save", side_effect=interrupt):
+                    self.pins.publish(self.store, quarantine)
+            finally:
+                os._exit(91)
+        _, status = os.waitpid(pid, 0)
+        self.assertEqual(os.waitstatus_to_exitcode(status), 90)
+        record, terminal, _ = self.store.read(trusted_receipt=active_tip)
+        self.assertEqual(record, quarantine)
+        frozen_local = self.pin_path.read_bytes()
+        self.assertEqual(retained._store.latest(), active_tip)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.pins.latest()
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            retained.retain_terminal(self.pins, self.store, expected_receipt=active_tip,
+                                     reviewed_receipt=terminal, operator_record=different_quarantine)
+        start = Barrier(2, timeout=5)
+
+        def retain():
+            start.wait()
+            return retained.retain_terminal(
+                self.pins, self.store, expected_receipt=active_tip,
+                reviewed_receipt=terminal, operator_record=quarantine)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            attempts = [pool.submit(retain) for _ in range(2)]
+        self.assertEqual([attempt.result() for attempt in attempts if attempt.exception() is None],
+                         [terminal])
+        self.assertEqual(sum(isinstance(attempt.exception(), recovery.DecimalRecoveryDenied)
+                             for attempt in attempts), 1)
+        self.assertEqual(self.pin_path.read_bytes(), frozen_local)
+        self.checkpoint_path.unlink()
+        self.path.write_bytes(self.before)
+
+        def repair(record=quarantine):
+            return retained.repair_local_terminal(
+                self.pins, self.store, reviewed_receipt=terminal, operator_record=record)
+
+        for original in (frozen_local, active_local, None):
+            with self.subTest(local="missing" if original is None else "existing"):
+                if original is None:
+                    self.pin_path.unlink()
+                else:
+                    self.pin_path.write_bytes(original)
+                with self.assertRaises(recovery.DecimalRecoveryDenied):
+                    repair(different_quarantine)
+                if original is None:
+                    self.assertFalse(self.pin_path.exists())
+                else:
+                    self.assertEqual(self.pin_path.read_bytes(), original)
+                self.assertEqual(repair(), terminal)
+                self.assertEqual(repair(), terminal)
+                self.assertEqual(self.pins.latest(), terminal)
+                self.assertEqual(self.path.read_bytes(), self.before)
+        self.assertEqual(self.store.read(trusted_receipt=terminal), (quarantine, terminal, False))
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.pins.publish(self.store, self.promotion)
+
     def test_process_exit_at_each_promotion_publication_boundary(self):
         self.prepare_checkpoint()
         resources = (self.pin_path, self.store_path, self.checkpoint_path)

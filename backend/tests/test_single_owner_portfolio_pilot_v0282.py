@@ -141,7 +141,10 @@ assert history.json["accountId"]==aid
 assert history.json["bars"][0]["close"]=="101.50"
 assert history.json["readOnly"] is True
 assert history.json["dataPersisted"] is False
-assert post(a,history_path,{**history_request,"period":"ALL"},csrf).status_code==404
+invalid_history=post(a,history_path,{**history_request,"period":"ALL"},csrf)
+assert invalid_history.status_code==404
+assert invalid_history.headers["Cache-Control"]=="no-store"
+assert "bars" not in invalid_history.json
 assert all(route not in str(fake.calls) for route in ("ORDER","TRANSFER","EXECUTE"))
 assert get(a,"/api/identity/accounts/"+aid+"/monitor/preview").status_code==404
 assert a.put("/api/identity/accounts/"+aid+"/monitor/watchlist",
