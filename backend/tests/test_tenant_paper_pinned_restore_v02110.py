@@ -1,8 +1,11 @@
 """Encrypted recovery of marked synthetic tenant scopes and immutable policies."""
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from datetime import datetime, timezone
 import sqlite3
+from threading import Barrier
 import unittest
+from unittest.mock import patch
 from uuid import uuid4
 
 from cryptography.fernet import Fernet
@@ -130,3 +133,62 @@ class PinnedPaperRestoreTests(unittest.TestCase):
         self.append(self.params(request_id=str(uuid4()), protected_pct="90", per_trade_cap="3"))
         with self.assertRaises(backup.OfflineBackupDenied):
             self.seal()
+
+    def test_concurrent_publishers_have_one_winner_and_preserve_exact_evidence(self):
+        self.prepare()
+        token, pin = self.seal()
+        link = backup.os.link
+        with closing(sqlite3.connect(self.path)) as db:
+            digest = backup._paper_data_digest(db)
+        rendezvous = Barrier(2, timeout=5)
+
+        def publish(source, target):
+            rendezvous.wait()
+            return link(source, target)
+
+        with patch.object(backup.os, "link", side_effect=publish):
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                attempts = [pool.submit(self.restore, token, pin) for _ in range(2)]
+        self.assertEqual([attempt.result() for attempt in attempts if attempt.exception() is None],
+                         [self.destination])
+        self.assertEqual(sum(isinstance(attempt.exception(), backup.OfflineBackupDenied)
+                             for attempt in attempts), 1)
+        with closing(sqlite3.connect(self.destination)) as db:
+            self.assertEqual(backup._paper_data_digest(db), digest)
+            self.assertTrue(all(row[-2] and row[-1] for row in backup._paper_scope(db)))
+        self.assertFalse(list(self.destination.parent.glob(".edgepilot-synthetic-restore-*")))
+
+    def test_interrupted_publication_does_not_reuse_or_overwrite_destination(self):
+        self.prepare()
+        token, pin = self.seal()
+        link = backup.os.link
+
+        def link_then_lose_reply(source, target):
+            link(source, target)
+            raise OSError
+
+        with patch.object(backup.os, "link", side_effect=OSError):
+            with self.assertRaises(backup.OfflineBackupDenied):
+                self.restore(token, pin)
+        self.assertFalse(self.destination.exists())
+        with patch.object(backup.os, "link", side_effect=link_then_lose_reply):
+            with self.assertRaises(backup.OfflineBackupDenied):
+                self.restore(token, pin)
+        published = self.destination.read_bytes()
+        with self.assertRaises(backup.OfflineBackupDenied):
+            self.restore(token, pin)
+        self.assertEqual(self.destination.read_bytes(), published)
+        self.assertFalse(list(self.destination.parent.glob(".edgepilot-synthetic-restore-*")))
+
+    def test_pinned_publication_rejects_existing_sqlite_sidecars(self):
+        self.prepare()
+        token, pin = self.seal()
+        for suffix in backup._SIDECARS:
+            with self.subTest(suffix=suffix):
+                sidecar = self.destination.with_name(self.destination.name + suffix)
+                sidecar.write_bytes(b"prior file")
+                with self.assertRaises(backup.OfflineBackupDenied):
+                    self.restore(token, pin)
+                self.assertEqual(sidecar.read_bytes(), b"prior file")
+                self.assertFalse(self.destination.exists())
+                sidecar.unlink()

@@ -305,9 +305,11 @@ class DecimalRecoveryTests(unittest.TestCase):
         backend = Path(__file__).resolve().parents[1]
         runtime = [backend / "app.py", *sorted((backend / "engine").glob("*.py"))]
         custody = backend / "engine" / "tenant_paper_decimal_custody.py"
-        offline = {Path(recovery.__file__), Path(archive.__file__), custody}
+        receipts = backend / "engine" / "tenant_paper_decimal_receipts.py"
+        offline = {Path(recovery.__file__), Path(archive.__file__), custody, receipts}
         for path in set(runtime) - offline:
             content = path.read_text(encoding="utf-8")
             self.assertNotIn("tenant_paper_decimal_recovery", content)
             self.assertNotIn("tenant_paper_decimal_archive", content)
             self.assertNotIn("tenant_paper_decimal_custody", content)
+            self.assertNotIn("tenant_paper_decimal_receipts", content)

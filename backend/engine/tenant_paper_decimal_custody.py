@@ -1,5 +1,5 @@
 """Single-lineage offline custody for synthetic Decimal recovery evidence."""
-from contextlib import contextmanager, closing
+from contextlib import contextmanager, closing, nullcontext
 import hmac
 import json
 import os
@@ -187,7 +187,7 @@ class DecimalCustody:
 
     @classmethod
     def recover(cls, path, snapshot, *, trusted_receipt, custody_key, operator_key,
-                ledger_path, journal_key, anchor_key):
+                ledger_path, journal_key, anchor_key, _require_prepared_target=False):
         """Rebuild a lost witness using its exact retained copy and the surviving ledger."""
         try:
             recovery._keys(custody_key, operator_key, journal_key, anchor_key)
@@ -214,9 +214,11 @@ class DecimalCustody:
                     # Do not restore an unconsumed rotation permit.
                     recovery._deny()
                 if record["status"] != "QUARANTINED":
-                    recovery.inspect_decimal_recovery(
+                    observed = recovery.inspect_decimal_recovery(
                         ledger_path, record=record, trusted_tip=recovery.evidence_tip(record),
                         journal_key=journal_key, anchor_key=anchor_key, operator_key=operator_key)
+                    if _require_prepared_target and observed == "AMBIGUOUS_OLD_STATE":
+                        recovery._deny()
                 if any(os.path.lexists(str(target.path) + suffix) for suffix in recovery._SIDECARS):
                     recovery._deny()
                 os.link(staged.path, target.path)
@@ -255,8 +257,21 @@ class DecimalCustody:
                 recovery._deny()
             return updated
 
+    def _rotation_plan(self, db, expected_receipt, journal_key, replacement_key, anchor_key):
+        current, receipt, claimed = self._read(db, expected_receipt, exact=True)
+        if current["status"] != "ROTATION_PENDING" or claimed:
+            recovery._deny()
+        for key, pin in ((journal_key, current["current"]),
+                         (replacement_key, current["target"])):
+            key_id = recovery._key_id(key)
+            expected = ledger._mac(anchor_key, recovery._PROTOCOL, "CHECKPOINT",
+                                   [pin["epoch"], key_id, pin["accounts"]])
+            if key_id != pin["journalKeyId"] or not hmac.compare_digest(expected, pin["mac"]):
+                recovery._deny()
+        return current, receipt
+
     def rotate(self, path, *, expected_receipt, journal_key, replacement_key,
-               anchor_key, retain_claim, _interrupt=None):
+               anchor_key, retain_claim, _interrupt=None, _claim_guard=nullcontext):
         """Consume a claim and require independent retention before changing the ledger.
 
         The operator's retain_claim callback must compare-and-swap from the
@@ -267,16 +282,8 @@ class DecimalCustody:
         if not callable(retain_claim):
             recovery._deny()
         with self._open(write=True) as db:
-            current, receipt, claimed = self._read(db, expected_receipt, exact=True)
-            if current["status"] != "ROTATION_PENDING" or claimed:
-                recovery._deny()
-            for key, pin in ((journal_key, current["current"]),
-                             (replacement_key, current["target"])):
-                key_id = recovery._key_id(key)
-                expected = ledger._mac(anchor_key, recovery._PROTOCOL, "CHECKPOINT",
-                                       [pin["epoch"], key_id, pin["accounts"]])
-                if key_id != pin["journalKeyId"] or not hmac.compare_digest(expected, pin["mac"]):
-                    recovery._deny()
+            current, receipt = self._rotation_plan(
+                db, expected_receipt, journal_key, replacement_key, anchor_key)
             claim = self._append(db, receipt, "rotation_claim", current["mac"])
             db.commit()
         try:
@@ -287,9 +294,9 @@ class DecimalCustody:
             recovery._deny()
         if _interrupt == "after_claim":
             recovery._deny()
-        # Recheck the durable claim under the custody lock. Quarantine may
-        # have won the race before this lock. The claim is never cleared.
-        with self._open(write=True) as db:
+        # The independent receipt guard, when supplied, takes its lock first.
+        # Then recheck the witness: quarantine may have won the race.
+        with _claim_guard(claim), self._open(write=True) as db:
             self._read(db, claim, exact=True)
             recovery.execute_prepared_decimal_rotation(
                 path, record=current, trusted_tip=recovery.evidence_tip(current),

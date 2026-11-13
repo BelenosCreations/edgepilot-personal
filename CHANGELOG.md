@@ -1,3 +1,15 @@
+## v0.2.111 — 2026-11-13 America/New_York — Independent receipt handoff and pinned restore publication
+
+**Added** — Separate authenticated receipt storage for offline synthetic Decimal custody. It reserves the expected tip before a witness write and retains the next verified receipt through a serialized handoff.
+
+**Changed** — The owner history panel labels the requested period and reports a sanitized HTTP status or response verification failure. Period changes clear the displayed bars and suppress obsolete results.
+
+**Fixed** — A missing or uncertain receipt acknowledgment blocks the ledger write. The new recovery entry point rejects ambiguous older ledgers. Pinned tenant restore refuses orphaned SQLite sidecars and preserves an already published destination.
+
+**Tests** — Synthetic process exit, missing resources, concurrent writes, stale or tampered evidence, restore publication races and browser response handling. The full local regression covers 842 tests. Exact-head Actions are required before merge.
+
+**Limitations** — Combined rollback, cross-resource power-loss consistency, independent deployment of receipt custody, and real history acceptance on the owner's device remain open.
+
 ## v0.2.110 — 2026-11-13 America/New_York — Pinned tenant restore and separate custody recovery
 
 **Added** — Pinned encrypted restore audits for marked synthetic tenant fixtures, including active and revoked account scope, exact archived request digests, immutable policies, fractional cost basis and historical loss stops. The Decimal custody rehearsal can recover the ledger or witness at an exact independently retained receipt.
