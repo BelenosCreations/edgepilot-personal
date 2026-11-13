@@ -107,6 +107,13 @@ class TenantPaperLedgerTests(unittest.TestCase):
             self.record(request_id=request_id, quantity="3")
         self.assertEqual(self.summary()["remainingPaperCash"], "95.94")
         self.assertEqual(self.summary()["assumedFills"], 1)
+        # An old idempotency key must return current cash, not mislabel
+        # the original historical event balance after a later trade.
+        self.record()
+        later = self.record(request_id=request_id)
+        self.assertEqual(later["paperCash"], "91.88")
+        self.assertEqual(later["originalPaperCashAfter"], "95.94")
+        self.assertEqual(self.summary()["assumedFills"], 2)
 
     def test_hard_protected_cash_and_per_trade_policy(self):
         self.record()
@@ -141,6 +148,11 @@ class TenantPaperLedgerTests(unittest.TestCase):
                     self.record(side="SELL", quantity=quantity)
         with self.assertRaises(paper.PaperLedgerDenied):
             self.record(side="SELL", fee_per_unit="5")
+        extreme = observation()
+        extreme.update({"bid": "999999999", "ask": "999999999",
+                        "last": "999999999"})
+        with self.assertRaises(paper.PaperLedgerDenied):
+            self.record(side="SELL", observation=extreme)
         self.assertEqual(self.summary()["assumedFills"], 1)
 
     def test_market_licensing_freshness_status_and_contract_model(self):
