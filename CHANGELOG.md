@@ -1,3 +1,11 @@
+## v0.2.124 — 2026-11-13 America/New_York — Terminal cleanup evidence
+
+**Changed** — Offline terminal cleanup and inspection recheck the independent receipt and signed witness files after authenticating their contents. Cleanup refuses if either file disappears or changes before unlink.
+
+**Tests** — The local suite covers process exit on each side of unlink, competing cleanup, loss and rollback of individual evidence files, missing second-generation archive evidence, and synthetic Public history access after logout. See [terminal cleanup evidence](PAPER_TERMINAL_CLEANUP_EVIDENCE_V02124.md).
+
+**Limitations** — Combined rollback, cross-resource power loss and real owner-device Public history acceptance remain open. Production execution remains disabled.
+
 ## v0.2.123 — 2026-11-13 America/New_York — Terminal receipt staging cleanup
 
 **Added** — Offline cleanup removes an operator-selected terminal receipt staging link only at the exact independent receipt and signed witness tip, with the same published inode and an inactive publisher.

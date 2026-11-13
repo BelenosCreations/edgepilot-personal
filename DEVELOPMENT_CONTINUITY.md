@@ -8,14 +8,14 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 
 ## Verification and checkpoint
 
-- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.123 from the merged PR for `development/v0.2.123-terminal-receipt-cleanup`. A later verified main checkpoint takes precedence.
-- Verified v0.2.122 baseline. PR #149 head `d92d6c994fc861f854e8855f19e8a3c9a2cbcf97` passed [Actions #43489460201](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43489460201). Main `8cf9b6b3dd07c164e33b53a0e41515c859cd3593` passed [Actions #43489848988](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43489848988), matched live Render deployment `dep-dbrm1p0ae00c73dud630`, and returned HTTP 200 from `/healthz`. No PRs were open.
-- v0.2.123 adds explicit terminal receipt staging cleanup and exact readback after ambiguous cleanup. See [milestone notes](PAPER_TERMINAL_STAGE_CLEANUP_V02123.md).
+- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.124 from the merged PR for `development/v0.2.124-terminal-cleanup-evidence`. A later verified main checkpoint takes precedence.
+- Verified v0.2.123 baseline. PR #150 head `cd5f265bf31142a86f08cfe274bb1c2cfd998091` passed [Actions #43491921435](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43491921435). Main `fc91e898969086b8f74bb9d72699c1a11280ca81` passed [Actions #43492301743](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43492301743), matched live Render deployment `dep-dbrm90u1egvs73a3fp6g`, and returned HTTP 200 from `/healthz`. No PRs were open.
+- v0.2.124 covers process exit and competing terminal cleanup, and refuses evidence loss or rollback detected before unlink. See [milestone notes](PAPER_TERMINAL_CLEANUP_EVIDENCE_V02124.md).
 
 ## Next safe development batch
 
-1. Rehearse actual process exit immediately before and after terminal receipt cleanup unlink, plus competing cleanup attempts against the same selected path. Require exact evidence on repeat inspection and preserve the published inode and unrelated files.
-2. Extend the offline failure matrix to cover loss or rollback of one retained evidence resource during terminal cleanup and a second-generation archive readback. Keep independent evidence mandatory. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
+1. Rehearse an operator recovering a terminal receipt after evidence storage becomes unavailable and is later restored. Include replacement by a separately retained exact copy, refusal of stale substitutes and explicit repeat inspection before cleanup.
+2. Evaluate how cooperating offline operators can hold evidence through publication and cleanup across all recovery entry points. Preserve exact archive pins, prior quarantine and all existing recovery paths. Combined rollback and cross-resource power-loss consistency remain open.
 3. Continue source-attributed and session-only Public research under the user's instruction to assume provider permission. Use real history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance). Earlier snapshot and MSFT quote acceptance still apply.
 
 ## Restrictions and workflow
@@ -26,6 +26,10 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.123 — 2026-11-13 — Terminal receipt staging cleanup
+
+Offline cleanup can remove one explicitly selected orphan staging link after verifying the terminal evidence and inactive publisher. Repeat inspection distinguishes ambiguous cleanup outcomes. See [terminal receipt staging cleanup](PAPER_TERMINAL_STAGE_CLEANUP_V02123.md).
 
 ## v0.2.122 — 2026-11-13 — Interrupted recovery publication
 

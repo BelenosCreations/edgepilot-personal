@@ -1,3 +1,5 @@
+**v0.2.124** — Offline terminal receipt cleanup checks that the independent receipt and signed witness are still available immediately before unlink. Process-exit and concurrent cleanup tests preserve the published receipt and unrelated files. See [terminal cleanup evidence](PAPER_TERMINAL_CLEANUP_EVIDENCE_V02124.md).
+
 **v0.2.123** — Offline recovery can remove one operator-selected orphan terminal receipt link after checking the independent receipt, signed witness and inode. Repeat inspection distinguishes a remaining link from an unlink that already happened. See [terminal receipt staging cleanup](PAPER_TERMINAL_STAGE_CLEANUP_V02123.md).
 
 **v0.2.122** — Offline terminal receipt recovery can inspect a published receipt after interruption. Second-generation restore tests verify exact-pin inspection when directory sync fails on either side of unlink. See [interrupted recovery publication](PAPER_RECOVERY_PUBLICATION_V02122.md).

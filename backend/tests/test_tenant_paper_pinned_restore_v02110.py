@@ -632,7 +632,9 @@ class PinnedPaperRestoreTests(unittest.TestCase):
                 token, self.archive_key, self.destination, stage, policies=policies, trusted_pin=pin)
 
         for operation in (inspect, cleanup):
-            for token, pin, policies in ((first_token, second_pin, self.policies),
+            for token, pin, policies in ((None, second_pin, second_policies),
+                                         (second_token, None, second_policies),
+                                         (first_token, second_pin, self.policies),
                                          (first_token, first_pin, self.policies),
                                          (second_token, first_pin, second_policies)):
                 with self.subTest(operation=operation.__name__, pin=pin):
@@ -661,6 +663,8 @@ class PinnedPaperRestoreTests(unittest.TestCase):
                                  {"quarantineVerified": True, "additionalLinkPresent": link_remains})
             with self.assertRaises(backup.OfflineBackupDenied):
                 inspect(first_token, first_pin, self.policies)
+            with self.assertRaises(backup.OfflineBackupDenied):
+                inspect(second_token, None, second_policies)
             with self.assertRaises(backup.OfflineBackupDenied):
                 cleanup(first_token, first_pin, self.policies)
             self.assertEqual(stage.exists(), link_remains)

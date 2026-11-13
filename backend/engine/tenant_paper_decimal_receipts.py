@@ -423,8 +423,10 @@ class DecimalRecoveryReceipt:
 
     def inspect_local_terminal(self, receipts, witness, *, reviewed_receipt, operator_record):
         """Verify a published terminal receipt after interruption without changing files."""
-        with self._verified_terminal(receipts, witness, reviewed_receipt, operator_record) as tip:
+        with self._verified_terminal(receipts, witness, reviewed_receipt, operator_record) as evidence:
+            tip, require_unchanged = evidence
             with receipts._read_published(tip) as info:
+                require_unchanged()
                 return {"receipt": tip, "additionalLinkPresent": info.st_nlink == 2}
 
     def cleanup_local_terminal_stage(self, staging_path, receipts, witness, *, reviewed_receipt,
@@ -438,34 +440,50 @@ class DecimalRecoveryReceipt:
         stage = DecimalReceiptStore(stage_path, receipt_key=receipts.key)
         try:
             with (stage._lock_staging_directory() as folder_fd,
-                  self._verified_terminal(receipts, witness, reviewed_receipt, operator_record) as tip,
-                  receipts._read_published(tip) as verified):
-                # Make the destination name durable before removing its other link.
-                self._sync_receipt_directory(target.parent)
-                current = target.lstat()
-                link = os.stat(stage_path.name, dir_fd=folder_fd, follow_symlinks=False)
-                if (verified.st_nlink != 2 or current.st_nlink != 2
-                        or current.st_ctime_ns != verified.st_ctime_ns
-                        or not os.path.samestat(verified, current)
-                        or not os.path.samestat(verified, link)
-                        or not os.path.samestat(os.fstat(folder_fd), stage_path.parent.lstat())
-                        or any(os.path.lexists(str(path) + suffix)
-                               for path in (target, stage_path) for suffix in _SIDECARS)):
-                    recovery._deny()
-                os.unlink(stage_path.name, dir_fd=folder_fd)
-                os.fsync(folder_fd)
+                  self._verified_terminal(receipts, witness, reviewed_receipt, operator_record) as evidence):
+                tip, require_unchanged = evidence
+                with receipts._read_published(tip) as verified:
+                    # Make the destination name durable before removing its other link.
+                    self._sync_receipt_directory(target.parent)
+                    current = target.lstat()
+                    link = os.stat(stage_path.name, dir_fd=folder_fd, follow_symlinks=False)
+                    if (verified.st_nlink != 2 or current.st_nlink != 2
+                            or current.st_ctime_ns != verified.st_ctime_ns
+                            or not os.path.samestat(verified, current)
+                            or not os.path.samestat(verified, link)
+                            or not os.path.samestat(os.fstat(folder_fd), stage_path.parent.lstat())
+                            or any(os.path.lexists(str(path) + suffix)
+                                   for path in (target, stage_path) for suffix in _SIDECARS)):
+                        recovery._deny()
+                    require_unchanged()
+                    os.unlink(stage_path.name, dir_fd=folder_fd)
+                    os.fsync(folder_fd)
         except OSError:
             recovery._deny()
 
     @contextmanager
     def _verified_terminal(self, receipts, witness, reviewed_receipt, operator_record):
         self._verify_separation(receipts, witness)
-        with (self._store._pin(reviewed_receipt) as tip,
-              witness._open(write=False) as journal):
-            if tip != reviewed_receipt:
-                recovery._deny()
-            self._require_terminal(witness, journal, tip, operator_record)
-            yield tip
+        paths = (self._store.path, witness.path)
+        try:
+            originals = [path.lstat() for path in paths]
+
+            def require_unchanged():
+                for path, original in zip(paths, originals, strict=True):
+                    current = path.lstat()
+                    if (not os.path.samestat(original, current)
+                            or original.st_ctime_ns != current.st_ctime_ns
+                            or original.st_mtime_ns != current.st_mtime_ns):
+                        recovery._deny()
+
+            with (self._store._pin(reviewed_receipt) as tip,
+                  witness._open(write=False) as journal):
+                if tip != reviewed_receipt:
+                    recovery._deny()
+                self._require_terminal(witness, journal, tip, operator_record)
+                yield tip, require_unchanged
+        except OSError:
+            recovery._deny()
 
     @staticmethod
     def _require_terminal(witness, journal, tip, operator_record):
