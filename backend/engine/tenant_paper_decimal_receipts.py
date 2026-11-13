@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import sqlite3
 import stat
+import tempfile
 from urllib.parse import quote
 
 from . import tenant_paper_decimal_archive as archive
@@ -16,6 +17,7 @@ from . import tenant_paper_decimal_recovery as recovery
 _PROTOCOL = "EDGEPILOT-SYNTHETIC-DECIMAL-RECEIPT-v1"
 _PROMOTION_PROTOCOL = "EDGEPILOT-SYNTHETIC-DECIMAL-PROMOTION-CHECKPOINT-v1"
 _EXPORT_PROTOCOL = "EDGEPILOT-SYNTHETIC-DECIMAL-PROMOTION-EXPORT-v1"
+_SIDECARS = ("-journal", "-wal", "-shm")
 _SCHEMA = """CREATE TABLE retained_receipt (
     id INTEGER PRIMARY KEY CHECK (id = 1), number INTEGER NOT NULL,
     tip TEXT NOT NULL, pending INTEGER NOT NULL, signature TEXT NOT NULL)"""
@@ -73,18 +75,26 @@ class DecimalReceiptStore:
             recovery._deny()
 
     @contextmanager
-    def _open(self):
+    def _open(self, *, read_only=False):
         try:
             self._check_directory()
             info = self.path.lstat()
             if (not stat.S_ISREG(info.st_mode) or stat.S_IMODE(info.st_mode) != 0o600
-                    or info.st_uid != os.getuid() or info.st_nlink != 1):
+                    or info.st_uid != os.getuid() or info.st_nlink not in (
+                        (1, 2) if read_only else (1,))):
                 recovery._deny()
-            uri = "file:" + quote(str(self.path), safe="/") + "?mode=rw"
+            if read_only:
+                if any(os.path.lexists(str(self.path) + suffix) for suffix in _SIDECARS):
+                    recovery._deny()
+                with self.path.open("rb") as source:
+                    if source.read(20)[18:20] != b"\x01\x01":
+                        recovery._deny()
+            uri = "file:" + quote(str(self.path), safe="/") + ("?mode=ro" if read_only else "?mode=rw")
             with closing(sqlite3.connect(uri, uri=True, isolation_level=None)) as db:
                 db.execute("PRAGMA trusted_schema=OFF")
-                db.execute("PRAGMA synchronous=EXTRA")
-                db.execute("BEGIN IMMEDIATE")
+                if not read_only:
+                    db.execute("PRAGMA synchronous=EXTRA")
+                db.execute("BEGIN" if read_only else "BEGIN IMMEDIATE")
                 if (db.execute("PRAGMA journal_mode").fetchone() != ("delete",)
                         or db.execute("SELECT sql FROM sqlite_master "
                                       "WHERE name NOT LIKE 'sqlite_%'").fetchall() != [(_SCHEMA,)]):
@@ -348,7 +358,65 @@ class DecimalPromotionCheckpoint:
                 journal_key, anchor_key):
         """Recreate a lost checkpoint at an independently pinned completed promotion."""
         checkpoint = cls(path, checkpoint_key=checkpoint_key)
-        checkpoint._verify_separation(receipts, witness, journal_key, anchor_key)
+        with checkpoint._verified_recovery(
+                exported, trusted_receipt=trusted_receipt, receipts=receipts, witness=witness,
+                ledger_path=ledger_path, reserved_receipt=reserved_receipt,
+                prepared_receipt=prepared_receipt, operator_record=operator_record,
+                journal_key=journal_key, anchor_key=anchor_key):
+            checkpoint._publish_recovered(trusted_receipt)
+        return checkpoint
+
+    def _publish_recovered(self, receipt):
+        target = self._store.path
+        try:
+            self._store._check_directory()
+            with tempfile.TemporaryDirectory(prefix=".edgepilot-checkpoint-", dir=target.parent) as folder:
+                stage = DecimalPromotionCheckpoint(Path(folder) / "checkpoint.db",
+                                                   checkpoint_key=self._store.key)
+                stage._store._initialize(receipt)
+                with stage._store._open(read_only=True) as db:
+                    if stage._store._read(db, pending=False) != receipt:
+                        recovery._deny()
+                if any(os.path.lexists(str(target) + suffix) for suffix in _SIDECARS):
+                    recovery._deny()
+                os.link(stage._store.path, target, follow_symlinks=False)
+                stage._store.path.unlink()
+                fd = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
+                try:
+                    os.fsync(fd)
+                finally:
+                    os.close(fd)
+        except OSError:
+            recovery._deny()
+
+    def inspect_recovered(self, exported, *, trusted_receipt, receipts, witness, ledger_path,
+                          reserved_receipt, prepared_receipt, operator_record, journal_key,
+                          anchor_key):
+        """Read back an exact published candidate after an interrupted recovery."""
+        with self._verified_recovery(
+                exported, trusted_receipt=trusted_receipt, receipts=receipts, witness=witness,
+                ledger_path=ledger_path, reserved_receipt=reserved_receipt,
+                prepared_receipt=prepared_receipt, operator_record=operator_record,
+                journal_key=journal_key, anchor_key=anchor_key):
+            try:
+                path = self._store.path
+                before = path.lstat()
+                with self._store._open(read_only=True) as db:
+                    if self._store._read(db, pending=False) != trusted_receipt:
+                        recovery._deny()
+                    after = path.lstat()
+                    if (not os.path.samestat(before, after) or before.st_ctime_ns != after.st_ctime_ns
+                            or before.st_nlink != after.st_nlink):
+                        recovery._deny()
+            except OSError:
+                recovery._deny()
+            return {"receipt": trusted_receipt.copy(), "additionalLinkPresent": before.st_nlink == 2}
+
+    @contextmanager
+    def _verified_recovery(self, exported, *, trusted_receipt, receipts, witness, ledger_path,
+                           reserved_receipt, prepared_receipt, operator_record, journal_key,
+                           anchor_key):
+        self._verify_separation(receipts, witness, journal_key, anchor_key)
         if (type(exported) is not dict or exported.keys() != {"receipt", "mac"}
                 or type(trusted_receipt) is not dict
                 or trusted_receipt.keys() != {"number", "mac"}
@@ -356,7 +424,7 @@ class DecimalPromotionCheckpoint:
                 or type(trusted_receipt["mac"]) is not str
                 or exported["receipt"] != trusted_receipt or type(exported["mac"]) is not str
                 or not exported["mac"].isascii()
-                or not hmac.compare_digest(exported["mac"], checkpoint._export_mac(trusted_receipt))):
+                or not hmac.compare_digest(exported["mac"], self._export_mac(trusted_receipt))):
             recovery._deny()
         with receipts._open() as db, witness._open(write=False) as journal:
             retained, pending = receipts._read_state(db)
@@ -377,5 +445,4 @@ class DecimalPromotionCheckpoint:
                 recovery._require_checkpoint(candidate, journal_key, anchor_key, record["current"])
                 if not same_witness() or not same_ledger():
                     recovery._deny()
-                checkpoint._store._initialize(tip)
-        return checkpoint
+                yield

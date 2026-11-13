@@ -1,3 +1,15 @@
+## v0.2.116 — 2026-11-13 America/New_York — Interrupted checkpoint publication
+
+**Added** — Read-only inspection of a recovered promotion checkpoint against the exact signed export, witness and prepared ledger.
+
+**Changed** — Recovery reads back a private staged checkpoint before publishing it exclusively.
+
+**Fixed** — Interrupted initialization keeps partial data off the reviewed destination. Existing checkpoints and sidecars remain available for operator review.
+
+**Tests** — 107 focused tests and all 872 local tests passed. Four new regressions cover interrupted staging and publication, partial or occupied paths, and rejected access through restored tenant entry points.
+
+**Limitations** — Combined rollback and cross-resource power loss remain open. Real Public history acceptance is pending on the owner's device. Production execution remains disabled.
+
 ## v0.2.115 — 2026-11-13 America/New_York — Independent checkpoint recovery
 
 **Added** — Authenticated checkpoint export and explicit recovery against the latest independently retained receipt, exact witness tip, signed approval and prepared ledger.

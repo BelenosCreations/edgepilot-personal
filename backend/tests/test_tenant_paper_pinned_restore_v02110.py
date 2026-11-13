@@ -12,7 +12,8 @@ from uuid import uuid4
 
 from cryptography.fernet import Fernet
 
-from engine import account_scope, tenant_passkeys, tenant_registration
+from engine import (account_scope, identity_auth, tenant_foundation, tenant_passkeys,
+                    tenant_public_vault, tenant_registration)
 from engine import tenant_backup_rehearsal as backup
 from engine import tenant_paper_authenticated_preflight as preflight
 from engine import tenant_paper_ledger as ledger
@@ -447,3 +448,61 @@ class PinnedPaperRestoreTests(unittest.TestCase):
                 self.assertTrue(stage.samefile(self.destination))
                 self.destination.write_bytes(before)
         self.cleanup(token, pin, stage)
+
+    def test_quarantined_restore_refuses_saved_access_and_credentials(self):
+        self.prepare()
+        tenant_passkeys.setup(self.path)
+        tenant_registration.setup(self.path)
+        rp = "edgepilot.example.test"
+        passkeys = tenant_passkeys.TenantPasskeyStore(
+            self.path, self.auth, rp_id=rp, expected_origin="https://" + rp)
+        challenge = passkeys.begin_authentication()["requestId"]
+        invite = tenant_registration.TenantRegistration(self.path).issue_invitation()["invitation"]
+        original_vault = tenant_public_vault.TenantPublicVault(
+            self.path, self.auth, credential_key=self.fixture_vault_key)
+        self.assertEqual(original_vault._credential_for_provider_only(
+            self.session["token"], self.owner_conn), "fixture-broker-placeholder-for-owner")
+        with closing(sqlite3.connect(self.path)) as db, db:
+            db.execute("INSERT INTO tenant_passkey_credentials VALUES (?,?,?,?,?,?,?,?)",
+                       (b"synthetic-key-id", self.owner, b"synthetic-key", 1,
+                        "single_device", 0, 100, None))
+        token, pin = self.seal()
+        stage = self.orphan_stage(token, pin)
+        self.cleanup(token, pin, stage)
+        auth = identity_auth.IdentityStore(self.destination)
+        scopes = account_scope.AccountScopeStore(self.destination, auth)
+        restored_passkeys = tenant_passkeys.TenantPasskeyStore(
+            self.destination, auth, rp_id=rp, expected_origin="https://" + rp)
+        vault = tenant_public_vault.TenantPublicVault(
+            self.destination, auth, credential_key=self.fixture_vault_key)
+        self.assertIsNone(auth.principal(self.session["token"], self.session["csrf"]))
+        with self.assertRaises(tenant_passkeys.PasskeyDenied):
+            restored_passkeys.begin_registration(self.session["token"], self.session["csrf"])
+        with patch.object(tenant_passkeys, "_credential_json") as parse:
+            with self.assertRaises(tenant_passkeys.PasskeyDenied):
+                restored_passkeys.finish_authentication(challenge, {})
+            parse.assert_not_called()
+        fresh_challenge = restored_passkeys.begin_authentication()["requestId"]
+        credential_id = "c3ludGhldGljLWtleS1pZA"
+        with patch.object(tenant_passkeys, "verify_authentication_response") as verify:
+            with self.assertRaises(tenant_passkeys.PasskeyDenied):
+                restored_passkeys.finish_authentication(
+                    fresh_challenge, {"id": credential_id, "rawId": credential_id})
+            verify.assert_not_called()
+        signup = tenant_registration.TenantRegistration(self.destination)
+        with self.assertRaises(tenant_registration.RegistrationDenied):
+            signup.register(invite, "new_member", "synthetic-new-password", "New member",
+                            source="synthetic-restore")
+        with self.assertRaises(tenant_public_vault.TenantVaultDenied):
+            vault.list_connections(self.session["token"])
+        fresh = auth.authenticate("owner", "fixture-password-for-owner", "synthetic-restore")
+        self.assertIsNotNone(auth.principal(fresh["token"]))
+        self.assertEqual(scopes.list_accounts(fresh["token"]), [])
+        for account in (self.account, self.other):
+            with self.assertRaises(tenant_foundation.TenantAccessError):
+                scopes.account_summary(fresh["token"], account)
+        self.assertEqual([row["status"] for row in vault.list_connections(fresh["token"])["connections"]],
+                         ["revoked"])
+        for connection in (self.owner_conn, self.member_conn):
+            with self.assertRaises(tenant_public_vault.TenantVaultDenied):
+                vault._credential_for_provider_only(fresh["token"], connection)

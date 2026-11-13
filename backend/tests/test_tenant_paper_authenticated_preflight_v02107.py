@@ -33,7 +33,8 @@ class AuthenticatedPaperPreflightTest(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.path = Path(temp.name) / "fixture.db"
         preflight.create_fixture(self.path)
-        tenants = tenant_foundation.TenantStore(self.path, Fernet.generate_key())
+        self.fixture_vault_key = Fernet.generate_key()
+        tenants = tenant_foundation.TenantStore(self.path, self.fixture_vault_key)
         self.auth = identity_auth.IdentityStore(self.path)
         self.owner, self.owner_conn, self.account, self.session = self.provision(
             tenants, "owner")
