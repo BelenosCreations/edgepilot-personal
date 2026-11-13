@@ -20,6 +20,15 @@
         value.length > 64) throw new Error("Invalid read-only position quantity");
     return value;
   }
+  function resetOwnerOverview(hidden = true) {
+    el("ownerOverviewPane").hidden = hidden;
+    el("ownerOverviewValue").textContent = "Not loaded";
+    el("ownerOverviewPositions").textContent = "Not loaded";
+    el("ownerOverviewStatus").textContent =
+      "Choose View read-only portfolio below to load a fresh account snapshot.";
+    el("ownerOverviewDetail").textContent =
+      "No portfolio request has been made in this session.";
+  }
   const status = (message, error = false) => {
     const box = el("status");
     box.textContent = message;
@@ -106,6 +115,7 @@
   function clearReadOnly() {
     // Invalidate pending fetches from a previous identity before clearing DOM.
     identityViewGeneration += 1;
+    resetOwnerOverview(true);
     el("connections").replaceChildren();
     el("connectionChoice").replaceChildren();
     el("discoveredAccounts").replaceChildren();
@@ -350,6 +360,7 @@
     const generation = identityViewGeneration;
     const items = el("linkedAccounts");
     items.replaceChildren();
+    resetOwnerOverview(true);
     el("holdings").replaceChildren();
     el("portfolioSummary").textContent = "";
     el("monitorPlanInfo").textContent = "";
@@ -364,6 +375,7 @@
       // The server decides capability for the current authenticated owner.
       // A second registered user immediately disables the solo pilot.
       const soloPortfolio = data.soloOwnerPortfolioAvailable === true;
+      el("ownerOverviewPane").hidden = !(soloPortfolio && data.accounts.length > 0);
       if (data.accounts.length === 0) {
         el("portfolioSummary").textContent = "No verified Public accounts are linked yet.";
       } else if (data.discoveryOnlyPilot === true && !soloPortfolio) {
@@ -403,7 +415,11 @@
           // Never leave an older successful balance visible after a new
           // request fails or a linked account is switched.
           holdings.replaceChildren();
+          resetOwnerOverview(false);
+          el("ownerOverviewStatus").textContent =
+            "Requesting a fresh snapshot for this selected Public account…";
           el("portfolioSummary").textContent = "Retrieving a fresh read-only Public account snapshot…";
+          try {
           const portfolio = await api("/public/read/accounts/" + encodeURIComponent(id) + "/portfolio");
           if (requestGeneration !== identityViewGeneration) return;
           if (portfolio.readOnly !== true || portfolio.ordersEnabled !== false ||
@@ -443,6 +459,23 @@
             " · Public-reported total value: " + total +
             " · retrieved " + retrieved +
             " (device time; not a market quote timestamp) · read-only";
+          el("ownerOverviewValue").textContent = total;
+          el("ownerOverviewPositions").textContent = String(positions.length);
+          el("ownerOverviewStatus").textContent = "Latest manual read-only Public snapshot";
+          el("ownerOverviewDetail").textContent =
+            String(account.label || "Public account") + " · retrieved " + retrieved +
+            " (device time; not a market quote timestamp)";
+          } catch (error) {
+            if (requestGeneration === identityViewGeneration) {
+              resetOwnerOverview(false);
+              el("ownerOverviewStatus").textContent =
+                "Portfolio snapshot unavailable. Select View read-only portfolio to retry.";
+              holdings.replaceChildren();
+              el("portfolioSummary").textContent =
+                "Read-only Public portfolio unavailable. Your existing account remains connected.";
+            }
+            throw error;
+          }
         }));
         li.appendChild(button);
         if (data.discoveryOnlyPilot === true) {
