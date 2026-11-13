@@ -1,3 +1,13 @@
+## v0.2.120 — 2026-11-13 America/New_York — Independent witness recovery receipt
+
+**Added** — An offline receipt store can advance to an explicitly reviewed descendant and require an exact match during witness recovery. The terminal quarantine rehearsal covers simultaneous rollback of the witness and its local receipt after the promotion checkpoint is lost.
+
+**Changed** — The second tenant restore rehearsal now interrupts publication and verifies that only the matching archive can authorize inspection and cleanup. Public history coverage now includes an account disabled during a provider request.
+
+**Tests** — All 883 local tests passed, including 109 focused tests.
+
+**Limitations** — Receipt advancement requires explicit review. Combined rollback of all retained evidence, cross-resource power loss, and owner-device Public history acceptance remain open. Production execution remains disabled.
+
 ## v0.2.119 — 2026-11-13 America/New_York — Recovery evidence across generations
 
 **Added** — Rehearsed a process exit during a second promotion and verified that the advanced witness rejects the first signed export even with matching older local resources.

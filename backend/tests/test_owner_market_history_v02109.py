@@ -153,6 +153,17 @@ class OwnerMarketHistoryTests(unittest.TestCase):
             self.history()
         self.assertEqual(len(self.history_calls), 1)
 
+    def test_history_is_discarded_when_selected_account_is_disabled_during_request(self):
+        def disable():
+            with sqlite3.connect(self.path) as db:
+                db.execute("UPDATE tenant_accounts SET disabled_at=1 WHERE account_id=?",
+                           (self.account_a,))
+
+        self.provider(self.payload(), during=disable)
+        with self.assertRaises(quote_tests.market.OwnerQuoteUnavailable):
+            self.history()
+        self.assertEqual(len(self.history_calls), 1)
+
     def test_history_is_discarded_when_connection_ciphertext_changes(self):
         def replace():
             with sqlite3.connect(self.path) as db:
