@@ -8,14 +8,14 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 
 ## Verification and checkpoint
 
-- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.122 from the merged PR for `development/v0.2.122-recovery-publication`. A later verified main checkpoint takes precedence.
-- Verified v0.2.121 baseline. PR #148 head `6c4efb01318dcf968e75c8d70d4cdd759d39d01c` passed [Actions #43487420391](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43487420391). Main `a7a6cc4ac518e409cf56ed9970d44864deee9a9f` passed [Actions #43487771808](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43487771808), matched live Render deployment `dep-dbrlrolg1s2s73cnejs0`, and returned HTTP 200 from `/healthz`. No PRs were open.
-- v0.2.122 adds exact terminal receipt inspection after interrupted publication and rehearses directory sync failures during second-generation archive cleanup. See [milestone notes](PAPER_RECOVERY_PUBLICATION_V02122.md).
+- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.123 from the merged PR for `development/v0.2.123-terminal-receipt-cleanup`. A later verified main checkpoint takes precedence.
+- Verified v0.2.122 baseline. PR #149 head `d92d6c994fc861f854e8855f19e8a3c9a2cbcf97` passed [Actions #43489460201](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43489460201). Main `8cf9b6b3dd07c164e33b53a0e41515c859cd3593` passed [Actions #43489848988](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43489848988), matched live Render deployment `dep-dbrm1p0ae00c73dud630`, and returned HTTP 200 from `/healthz`. No PRs were open.
+- v0.2.123 adds explicit terminal receipt staging cleanup and exact readback after ambiguous cleanup. See [milestone notes](PAPER_TERMINAL_STAGE_CLEANUP_V02123.md).
 
 ## Next safe development batch
 
-1. Rehearse explicit cleanup of an operator-selected orphan terminal receipt link. Require the exact independent terminal receipt, matching signed witness, same inode and an inactive publisher. Preserve unrelated staging files and fail closed when the exact evidence is unavailable.
-2. Verify repeat inspection after an ambiguous cleanup result and preserve archive recovery through all existing entry points. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
+1. Rehearse actual process exit immediately before and after terminal receipt cleanup unlink, plus competing cleanup attempts against the same selected path. Require exact evidence on repeat inspection and preserve the published inode and unrelated files.
+2. Extend the offline failure matrix to cover loss or rollback of one retained evidence resource during terminal cleanup and a second-generation archive readback. Keep independent evidence mandatory. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
 3. Continue source-attributed and session-only Public research under the user's instruction to assume provider permission. Use real history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance). Earlier snapshot and MSFT quote acceptance still apply.
 
 ## Restrictions and workflow
@@ -26,6 +26,10 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.122 — 2026-11-13 — Interrupted recovery publication
+
+Terminal receipt inspection verifies an exact independent receipt and signed witness after publication interruption. Second-generation archive cleanup tests cover directory sync errors around unlink. See [interrupted recovery publication](PAPER_RECOVERY_PUBLICATION_V02122.md).
 
 ## v0.2.121 — 2026-11-13 — Terminal quarantine readback
 

@@ -21,6 +21,7 @@ _EXPORT_PROTOCOL = "EDGEPILOT-SYNTHETIC-DECIMAL-PROMOTION-EXPORT-v1"
 _RECOVERY_PROTOCOL = "EDGEPILOT-SYNTHETIC-DECIMAL-RECOVERY-RECEIPT-v1"
 _SIDECARS = ("-journal", "-wal", "-shm")
 _CHECKPOINT_STAGE_PREFIX = ".edgepilot-checkpoint-"
+_TERMINAL_STAGE_PREFIX = ".decimal-terminal-receipt-"
 _SCHEMA = """CREATE TABLE retained_receipt (
     id INTEGER PRIMARY KEY CHECK (id = 1), number INTEGER NOT NULL,
     tip TEXT NOT NULL, pending INTEGER NOT NULL, signature TEXT NOT NULL)"""
@@ -160,6 +161,21 @@ class DecimalReceiptStore:
                 yield after
         except OSError:
             recovery._deny()
+
+    @contextmanager
+    def _lock_staging_directory(self):
+        self._check_directory()
+        fd = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            info = os.fstat(fd)
+            if info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o700:
+                recovery._deny()
+            # Cleanup takes this lock before the evidence locks. Refuse an active
+            # publisher immediately, even while it holds those evidence locks.
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            yield fd
+        finally:
+            os.close(fd)
 
     def publish(self, witness, proposed):
         """Reserve before publishing a record and retain only its exact successor."""
@@ -407,14 +423,49 @@ class DecimalRecoveryReceipt:
 
     def inspect_local_terminal(self, receipts, witness, *, reviewed_receipt, operator_record):
         """Verify a published terminal receipt after interruption without changing files."""
+        with self._verified_terminal(receipts, witness, reviewed_receipt, operator_record) as tip:
+            with receipts._read_published(tip) as info:
+                return {"receipt": tip, "additionalLinkPresent": info.st_nlink == 2}
+
+    def cleanup_local_terminal_stage(self, staging_path, receipts, witness, *, reviewed_receipt,
+                                     operator_record):
+        """Remove only the selected orphan hard link to the verified terminal receipt."""
+        stage_path = Path(staging_path)
+        target = receipts.path
+        if (stage_path.parent.parent != target.parent or stage_path.name != "receipt.db"
+                or not stage_path.parent.name.startswith(_TERMINAL_STAGE_PREFIX)):
+            recovery._deny()
+        stage = DecimalReceiptStore(stage_path, receipt_key=receipts.key)
+        try:
+            with (stage._lock_staging_directory() as folder_fd,
+                  self._verified_terminal(receipts, witness, reviewed_receipt, operator_record) as tip,
+                  receipts._read_published(tip) as verified):
+                # Make the destination name durable before removing its other link.
+                self._sync_receipt_directory(target.parent)
+                current = target.lstat()
+                link = os.stat(stage_path.name, dir_fd=folder_fd, follow_symlinks=False)
+                if (verified.st_nlink != 2 or current.st_nlink != 2
+                        or current.st_ctime_ns != verified.st_ctime_ns
+                        or not os.path.samestat(verified, current)
+                        or not os.path.samestat(verified, link)
+                        or not os.path.samestat(os.fstat(folder_fd), stage_path.parent.lstat())
+                        or any(os.path.lexists(str(path) + suffix)
+                               for path in (target, stage_path) for suffix in _SIDECARS)):
+                    recovery._deny()
+                os.unlink(stage_path.name, dir_fd=folder_fd)
+                os.fsync(folder_fd)
+        except OSError:
+            recovery._deny()
+
+    @contextmanager
+    def _verified_terminal(self, receipts, witness, reviewed_receipt, operator_record):
         self._verify_separation(receipts, witness)
         with (self._store._pin(reviewed_receipt) as tip,
               witness._open(write=False) as journal):
             if tip != reviewed_receipt:
                 recovery._deny()
             self._require_terminal(witness, journal, tip, operator_record)
-            with receipts._read_published(tip) as info:
-                return {"receipt": tip, "additionalLinkPresent": info.st_nlink == 2}
+            yield tip
 
     @staticmethod
     def _require_terminal(witness, journal, tip, operator_record):
@@ -422,22 +473,32 @@ class DecimalRecoveryReceipt:
         if record["status"] != "QUARANTINED" or record != operator_record:
             recovery._deny()
 
-    @staticmethod
-    def _publish_missing_local(receipts, tip):
+    def _publish_missing_local(self, receipts, tip):
         path = receipts.path
-        receipts._check_directory()
-        with tempfile.TemporaryDirectory(prefix=".decimal-terminal-receipt-", dir=path.parent) as folder:
-            stage = DecimalReceiptStore(Path(folder) / "receipt.db", receipt_key=receipts.key)
-            stage._initialize(tip)
-            with stage._read_published(tip):
-                if any(os.path.lexists(str(path) + suffix) for suffix in _SIDECARS):
-                    recovery._deny()
-                os.link(stage.path, path, follow_symlinks=False)
-            fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-            try:
-                os.fsync(fd)
-            finally:
-                os.close(fd)
+        try:
+            receipts._check_directory()
+            folder = Path(tempfile.mkdtemp(prefix=_TERMINAL_STAGE_PREFIX, dir=path.parent))
+            stage = DecimalReceiptStore(folder / "receipt.db", receipt_key=receipts.key)
+            with stage._lock_staging_directory():
+                stage._initialize(tip)
+                with stage._read_published(tip):
+                    if any(os.path.lexists(str(path) + suffix) for suffix in _SIDECARS):
+                        recovery._deny()
+                    os.link(stage.path, path, follow_symlinks=False)
+                # On an ambiguous sync failure both names remain for review.
+                self._sync_receipt_directory(path.parent)
+                stage.path.unlink()
+                folder.rmdir()
+        except OSError:
+            recovery._deny()
+
+    @staticmethod
+    def _sync_receipt_directory(path):
+        fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
 
 
 class DecimalPromotionCheckpoint:
@@ -505,7 +566,7 @@ class DecimalPromotionCheckpoint:
             with tempfile.TemporaryDirectory(prefix=_CHECKPOINT_STAGE_PREFIX, dir=target.parent) as folder:
                 stage = DecimalPromotionCheckpoint(Path(folder) / "checkpoint.db",
                                                    checkpoint_key=self._store.key)
-                with stage._lock_staging_directory():
+                with stage._store._lock_staging_directory():
                     stage._store._initialize(receipt)
                     with stage._store._read_published(receipt):
                         if any(os.path.lexists(str(target) + suffix) for suffix in _SIDECARS):
@@ -519,18 +580,6 @@ class DecimalPromotionCheckpoint:
                         os.close(fd)
         except OSError:
             recovery._deny()
-
-    @contextmanager
-    def _lock_staging_directory(self):
-        self._store._check_directory()
-        fd = os.open(self._store.path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-        try:
-            # Cleanup takes this lock before the evidence locks. A publisher
-            # already holding the staging lock must be refused immediately.
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            yield fd
-        finally:
-            os.close(fd)
 
     def inspect_recovered(self, exported, *, trusted_receipt, receipts, witness, ledger_path,
                           reserved_receipt, prepared_receipt, operator_record, journal_key,
@@ -554,7 +603,7 @@ class DecimalPromotionCheckpoint:
             recovery._deny()
         stage = DecimalPromotionCheckpoint(stage_path, checkpoint_key=self._store.key)
         try:
-            with stage._lock_staging_directory() as folder_fd, self._verified_recovery(
+            with stage._store._lock_staging_directory() as folder_fd, self._verified_recovery(
                     exported, trusted_receipt=trusted_receipt, receipts=receipts, witness=witness,
                     ledger_path=ledger_path, reserved_receipt=reserved_receipt,
                     prepared_receipt=prepared_receipt, operator_record=operator_record,

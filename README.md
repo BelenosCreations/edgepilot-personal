@@ -1,3 +1,5 @@
+**v0.2.123** — Offline recovery can remove one operator-selected orphan terminal receipt link after checking the independent receipt, signed witness and inode. Repeat inspection distinguishes a remaining link from an unlink that already happened. See [terminal receipt staging cleanup](PAPER_TERMINAL_STAGE_CLEANUP_V02123.md).
+
 **v0.2.122** — Offline terminal receipt recovery can inspect a published receipt after interruption. Second-generation restore tests verify exact-pin inspection when directory sync fails on either side of unlink. See [interrupted recovery publication](PAPER_RECOVERY_PUBLICATION_V02122.md).
 
 **v0.2.121** — Offline recovery can retain an already committed terminal quarantine after an interrupted handoff and repair the matching local receipt. Second-generation restore cleanup now syncs the directory around unlink. See [terminal quarantine readback](PAPER_TERMINAL_READBACK_V02121.md).

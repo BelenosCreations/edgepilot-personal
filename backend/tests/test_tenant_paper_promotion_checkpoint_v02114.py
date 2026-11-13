@@ -172,7 +172,7 @@ class PromotionCheckpointTests(unittest.TestCase):
             anchor_key=self.anchor, recovery_receipt=retained)
         self.assertEqual(rebuilt.read(trusted_receipt=tip), (self.promotion, tip, False))
 
-    def test_terminal_receipt_publication_refuses_unsafe_retry_and_allows_readback(self):
+    def terminal_recovery_evidence(self):
         self.prepare_checkpoint()
         active = self.promote()
         old_witness = self.store.backup(expected_receipt=active)
@@ -190,6 +190,11 @@ class PromotionCheckpointTests(unittest.TestCase):
                                  reviewed_receipt=terminal, operator_record=quarantine)
         self.pin_path.unlink()
         evidence = dict(reviewed_receipt=terminal, operator_record=quarantine)
+        return retained, evidence, old_witness, terminal_witness
+
+    def test_terminal_receipt_publication_refuses_unsafe_retry_and_allows_readback(self):
+        retained, evidence, old_witness, terminal_witness = self.terminal_recovery_evidence()
+        terminal, quarantine = evidence["reviewed_receipt"], evidence["operator_record"]
 
         def repair():
             return retained.repair_local_terminal(self.pins, self.store, **evidence)
@@ -251,6 +256,113 @@ class PromotionCheckpointTests(unittest.TestCase):
         self.assertEqual(partial.read_bytes(), b"")
         self.assertEqual(unrelated.read_bytes(), b"unrelated fixture")
         self.assertEqual(self.store.read(trusted_receipt=terminal), (quarantine, terminal, False))
+        linked, = (path for path in self.pin_path.parent.glob(".decimal-terminal-receipt-*/receipt.db")
+                   if path.samefile(self.pin_path))
+        sibling = linked.with_name("operator-notes.txt")
+        sibling.write_bytes(b"operator fixture")
+        retained.cleanup_local_terminal_stage(linked, self.pins, self.store, **evidence)
+        self.assertFalse(linked.exists())
+        self.assertEqual(sibling.read_bytes(), b"operator fixture")
+        self.assertEqual(partial.read_bytes(), b"")
+        self.assertEqual(unrelated.read_bytes(), b"unrelated fixture")
+        self.assertEqual(inspect(), {"receipt": terminal, "additionalLinkPresent": False})
+        self.assertEqual(self.pins.latest(), terminal)
+
+    def test_terminal_stage_cleanup_refuses_active_publisher_and_inexact_evidence(self):
+        retained, evidence, old_witness, terminal_witness = self.terminal_recovery_evidence()
+
+        def cleanup(path, **overrides):
+            retained.cleanup_local_terminal_stage(path, self.pins, self.store,
+                                                  **(evidence | overrides))
+
+        def fail_sync(_):
+            stage, = self.pin_path.parent.glob(".decimal-terminal-receipt-*/receipt.db")
+            self.assertTrue(stage.samefile(self.pin_path))
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                cleanup(stage)
+            self.assertTrue(stage.samefile(self.pin_path))
+            raise OSError("synthetic lost publication acknowledgment")
+
+        with patch.object(retained, "_sync_receipt_directory", side_effect=fail_sync):
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                retained.repair_local_terminal(self.pins, self.store, **evidence)
+        stage, = self.pin_path.parent.glob(".decimal-terminal-receipt-*/receipt.db")
+        folder = tempfile.TemporaryDirectory(prefix=".decimal-terminal-receipt-",
+                                             dir=self.pin_path.parent)
+        self.addCleanup(folder.cleanup)
+        unrelated = Path(folder.name) / stage.name
+        content = self.pin_path.read_bytes()
+        unrelated.write_bytes(content)
+        unrelated.chmod(0o600)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            cleanup(unrelated)
+        self.assertEqual(unrelated.read_bytes(), content)
+        unrelated.unlink()
+        unrelated.symlink_to(self.pin_path)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            cleanup(unrelated)
+        self.assertTrue(unrelated.is_symlink())
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            cleanup(stage, operator_record=self.promotion)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            cleanup(stage, reviewed_receipt={"number": 1, "mac": "0" * 64})
+        self.store_path.write_bytes(old_witness)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            cleanup(stage)
+        self.store_path.write_bytes(terminal_witness)
+        independent = retained._store.path
+        offline = independent.with_suffix(".offline")
+        independent.rename(offline)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            cleanup(stage)
+        offline.rename(independent)
+        sidecar = stage.with_name(stage.name + "-journal")
+        sidecar.write_bytes(b"unreviewed fixture")
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            cleanup(stage)
+        self.assertEqual(sidecar.read_bytes(), b"unreviewed fixture")
+        self.assertTrue(stage.samefile(self.pin_path))
+        sidecar.unlink()
+        cleanup(stage)
+        self.assertFalse(stage.exists())
+        self.assertEqual(self.pin_path.read_bytes(), content)
+
+    def test_terminal_stage_cleanup_sync_failures_require_exact_readback(self):
+        retained, evidence, _, _ = self.terminal_recovery_evidence()
+        terminal = evidence["reviewed_receipt"]
+        retained.repair_local_terminal(self.pins, self.store, **evidence)
+        folder = tempfile.TemporaryDirectory(prefix=".decimal-terminal-receipt-",
+                                             dir=self.pin_path.parent)
+        self.addCleanup(folder.cleanup)
+        stage = Path(folder.name) / "receipt.db"
+        os.link(self.pin_path, stage)
+        original, content = self.pin_path.stat(), self.pin_path.read_bytes()
+        fsync = os.fsync
+        for failed_sync in (1, 2):
+            calls = []
+
+            def fail_directory_sync(fd):
+                directory = self.pin_path.parent if not calls else stage.parent
+                self.assertTrue(os.path.samestat(os.fstat(fd), directory.stat()))
+                calls.append(stage.exists())
+                if len(calls) == failed_sync:
+                    raise OSError("synthetic cleanup sync failure")
+                fsync(fd)
+
+            with self.subTest(failed_sync=failed_sync):
+                with patch.object(receipts.os, "fsync", side_effect=fail_directory_sync):
+                    with self.assertRaises(recovery.DecimalRecoveryDenied):
+                        retained.cleanup_local_terminal_stage(stage, self.pins, self.store, **evidence)
+                self.assertEqual(calls, [True] if failed_sync == 1 else [True, False])
+                expected = {"receipt": terminal, "additionalLinkPresent": failed_sync == 1}
+                for _ in range(2):
+                    self.assertEqual(retained.inspect_local_terminal(self.pins, self.store, **evidence),
+                                     expected)
+                self.assertTrue(os.path.samestat(self.pin_path.stat(), original))
+                self.assertEqual(self.pin_path.read_bytes(), content)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            retained.cleanup_local_terminal_stage(stage, self.pins, self.store, **evidence)
+        self.assertEqual(self.pins.latest(), terminal)
 
     def test_terminal_readback_after_witness_commit_and_concurrent_review(self):
         self.prepare_checkpoint()

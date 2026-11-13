@@ -656,8 +656,9 @@ class PinnedPaperRestoreTests(unittest.TestCase):
                     cleanup(second_token, second_pin, second_policies)
             self.assertEqual(calls, [True] if failed_sync == 1 else [True, False])
             link_remains = failed_sync == 1
-            self.assertEqual(inspect(second_token, second_pin, second_policies),
-                             {"quarantineVerified": True, "additionalLinkPresent": link_remains})
+            for _ in range(2):
+                self.assertEqual(inspect(second_token, second_pin, second_policies),
+                                 {"quarantineVerified": True, "additionalLinkPresent": link_remains})
             with self.assertRaises(backup.OfflineBackupDenied):
                 inspect(first_token, first_pin, self.policies)
             with self.assertRaises(backup.OfflineBackupDenied):
