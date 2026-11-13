@@ -121,11 +121,13 @@ def sealed_snapshot(source_path, archive_key):
 
 
 def restore_sealed_fixture(token, archive_key, destination_path):
-    """Restore to a NEW verified tmpfs path; never overwrite any existing DB.
+    """Validate, quarantine, then atomically publish a NEW tmpfs fixture.
 
-    The destination is entirely removed on failure. Restored sessions,
-    challenges, invitations and stale leases are purged in one transaction.
-    The return value is the isolated file path, NOT an authenticated session.
+    Synthetic only. An unverified database is never visible at the requested
+    destination, not even briefly. Stage privately under the same verified
+    tmpfs directory; publish with a no-replace hard link only AFTER all
+    integrity checks, revocation and rollback-sensitive cleanup have committed.
+    Neither an existing destination nor its contents may be removed on error.
     """
     cipher = _archive_cipher(archive_key)
     if not isinstance(token, bytes) or len(token) > 2 * _MAX_DB_SIZE + 8192:
@@ -146,49 +148,58 @@ def restore_sealed_fixture(token, archive_key, destination_path):
             raise OfflineBackupDenied("Synthetic restore destination unavailable")
         if target.exists() or target.is_symlink() or target.name in ("", ".", ".."):
             raise OfflineBackupDenied("Synthetic restore destination unavailable")
-        # O_NOFOLLOW and O_EXCL prevent symlink swaps and existing file
-        # overwrite; mode 0600 keeps the test plaintext private.
-        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os,"O_NOFOLLOW",0)
-        fd = os.open(target, flags, 0o600)
     except OfflineBackupDenied:
         raise
     except (OSError, ValueError, shadow_storage.MemoryStorageError):
         raise OfflineBackupDenied("Synthetic restore destination unavailable") from None
+
+    stage = None
     try:
-        with os.fdopen(fd,"wb") as writer:
+        # mkstemp creates a private 0600 regular file using O_EXCL. Do not
+        # create the caller's destination until the synthetic archive has
+        # passed all audits and revoked its restored credentials and sessions.
+        fd, name = tempfile.mkstemp(
+            prefix=".edgepilot-synthetic-restore-", suffix=".db",
+            dir=str(parent))
+        stage = Path(name)
+        with os.fdopen(fd, "wb") as writer:
             writer.write(payload[len(_MAGIC):])
             writer.flush()
-        shadow_storage.require_isolated_source(target)
-        with closing(sqlite3.connect(str(target),timeout=10)) as restored:
+            os.fsync(writer.fileno())
+        shadow_storage.require_isolated_source(stage)
+        with closing(sqlite3.connect(str(stage), timeout=10)) as restored:
             restored.execute("PRAGMA foreign_keys=ON")
-            tables = _check_contents(restored,require_quiescent=False)
+            tables = _check_contents(restored, require_quiescent=False)
             restored.execute("BEGIN IMMEDIATE")
             for name in _INVALIDATE_RESTORED:
                 if name in tables:
-                    restored.execute("DELETE FROM "+name)
-            # An older archive may predate an API-key revocation or account
-            # unlink. Restoring it must NEVER revive brokerage visibility.
-            # Keep encrypted ciphertext for the test, but quarantine every
-            # restored connection/account until freshly verified elsewhere.
+                    restored.execute("DELETE FROM " + name)
             quarantined_at = datetime.now(timezone.utc).isoformat()
             restored.execute("""UPDATE tenant_accounts
-                SET disabled_at=COALESCE(disabled_at,?)""",(quarantined_at,))
+                SET disabled_at=COALESCE(disabled_at,?)""", (quarantined_at,))
             restored.execute("""UPDATE tenant_connections
-                SET revoked_at=COALESCE(revoked_at,?)""",(quarantined_at,))
-            # A backup can also predate a passkey revocation. Public-key
-            # credentials retain forensic provenance but can no longer sign
-            # in until the user enrolls fresh authenticators.
+                SET revoked_at=COALESCE(revoked_at,?)""", (quarantined_at,))
             if "tenant_passkey_credentials" in tables:
                 restored.execute("""UPDATE tenant_passkey_credentials
-                    SET revoked_at=COALESCE(revoked_at,?)""",(int(time.time()),))
-            _check_contents(restored,require_quiescent=True)
+                    SET revoked_at=COALESCE(revoked_at,?)""", (int(time.time()),))
+            _check_contents(restored, require_quiescent=True)
             restored.commit()
+        # The staged file is complete before publication; a failed fsync
+        # cannot leave a partial database at the caller's final path.
+        with stage.open("rb") as checked:
+            os.fsync(checked.fileno())
+        # Atomic link is no-replace, including if the target appeared during
+        # validation. Never use os.replace or unlink an existing destination.
+        os.link(stage, target)
         return target
     except Exception:
-        # Any failure leaves no unverified plaintext recovery source behind.
-        for suffix in ("","-journal","-wal","-shm"):
-            try:
-                Path(str(target)+suffix).unlink(missing_ok=True)
-            except OSError:
-                pass
         raise OfflineBackupDenied("Synthetic restore verification failed") from None
+    finally:
+        # Success removes the staging name; failure removes only our staging
+        # name and SQLite sidecars, never an unrelated destination path.
+        if stage is not None:
+            for suffix in ("", "-journal", "-wal", "-shm"):
+                try:
+                    Path(str(stage) + suffix).unlink(missing_ok=True)
+                except OSError:
+                    pass

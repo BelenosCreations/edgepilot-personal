@@ -4,6 +4,7 @@ import tempfile
 import unittest
 import uuid
 from pathlib import Path
+from unittest.mock import patch
 
 from cryptography.fernet import Fernet
 from engine import (
@@ -177,6 +178,69 @@ class PaperRecoveryRehearsal(unittest.TestCase):
         self.assertEqual(self.check()["verifiedAssumedFills"], 4)
         token = tenant_backup_rehearsal.sealed_snapshot(self.path, self.key)
         self.assertTrue(token)
+
+    def test_atomic_restore_never_overwrites_existing_destination(self):
+        token = tenant_backup_rehearsal.sealed_snapshot(self.path, self.key)
+        existing = Path(self.tmp.name) / "important-existing.db"
+        existing.write_bytes(b"EXISTING-DESTINATION-UNTOUCHED")
+        with self.assertRaises(tenant_backup_rehearsal.OfflineBackupDenied):
+            tenant_backup_rehearsal.restore_sealed_fixture(
+                token, self.key, existing)
+        self.assertEqual(existing.read_bytes(), b"EXISTING-DESTINATION-UNTOUCHED")
+        self.assertEqual(list(Path(self.tmp.name).glob(
+            ".edgepilot-synthetic-restore-*")), [])
+
+    def test_atomic_restore_rolls_back_before_publication(self):
+        token = tenant_backup_rehearsal.sealed_snapshot(self.path, self.key)
+        # Source decrypts but the SQLite payload is an invalid authenticated
+        # synthetic archive. The final path must not exist even briefly.
+        malformed = Fernet(self.key).encrypt(
+            tenant_backup_rehearsal._MAGIC +
+            b"SQLite format 3\x00" + b"invalid-synthetic-database")
+        for label, blob in (("bad-sqlite", malformed),
+                            ("wrong-key", token)):
+            dest = Path(self.tmp.name) / (label + ".db")
+            key = Fernet.generate_key() if label == "wrong-key" else self.key
+            with self.assertRaises(tenant_backup_rehearsal.OfflineBackupDenied):
+                tenant_backup_rehearsal.restore_sealed_fixture(blob, key, dest)
+            self.assertFalse(dest.exists())
+        self.assertEqual(list(Path(self.tmp.name).glob(
+            ".edgepilot-synthetic-restore-*")), [])
+
+    def test_atomic_restore_refuses_publication_race_or_fsync_failure(self):
+        token = tenant_backup_rehearsal.sealed_snapshot(self.path, self.key)
+        for label, target_method, failure in (
+            ("link-race", "link", FileExistsError("synthetic collision")),
+            ("fsync", "fsync", OSError("synthetic disk failure")),
+        ):
+            dest = Path(self.tmp.name) / (label + ".db")
+            with self.subTest(label=label):
+                with patch.object(tenant_backup_rehearsal.os, target_method,
+                                  side_effect=failure):
+                    with self.assertRaises(tenant_backup_rehearsal.OfflineBackupDenied):
+                        tenant_backup_rehearsal.restore_sealed_fixture(
+                            token, self.key, dest)
+                self.assertFalse(dest.exists())
+                self.assertEqual(list(Path(self.tmp.name).glob(
+                    ".edgepilot-synthetic-restore-*")), [])
+
+    def test_failed_quarantine_before_publication_leaves_no_final_file(self):
+        token = tenant_backup_rehearsal.sealed_snapshot(self.path, self.key)
+        dest = Path(self.tmp.name) / "failed-quarantine.db"
+        original = tenant_backup_rehearsal._check_contents
+        def force_rollback(db, *, require_quiescent):
+            if require_quiescent:
+                raise tenant_backup_rehearsal.OfflineBackupDenied(
+                    "Synthetic injected quarantine interruption")
+            return original(db, require_quiescent=require_quiescent)
+        with patch.object(tenant_backup_rehearsal, "_check_contents",
+                          side_effect=force_rollback):
+            with self.assertRaises(tenant_backup_rehearsal.OfflineBackupDenied):
+                tenant_backup_rehearsal.restore_sealed_fixture(
+                    token, self.key, dest)
+        self.assertFalse(dest.exists())
+        self.assertEqual(list(Path(self.tmp.name).glob(
+            ".edgepilot-synthetic-restore-*")), [])
 
     def test_paper_restore_never_adds_http_or_production_migration(self):
         app = (Path(__file__).resolve().parents[1] / "app.py").read_text()
