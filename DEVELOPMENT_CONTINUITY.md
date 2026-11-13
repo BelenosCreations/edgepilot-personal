@@ -1,3 +1,11 @@
+## v0.2.108 — 2026-11-13 — Offline Decimal recovery and provider rights
+
+Starting checkpoint independently verified. GitHub main `5b0d6715c4ce3cab3b517e0041e46cc4aa1737d6` and push Actions `43437012015` succeeded. GitHub deployment `7766851410` identifies the exact main commit, with successful Render deployment `dep-dbrhanp42hec73blgb40` and HTTP 200 from the service health endpoint. No PRs were open at baseline.
+
+The offline Decimal recovery and archive modules add signed evidence proposals, account-prefix continuity, prepared journal-key rotation, terminal compromise quarantine and explicit approval for exact-tip encrypted recovery. They preserve the v0.2.107 authenticated account boundary. The [recovery design](PAPER_DECIMAL_RECOVERY_V02108.md) and [Public rights review](OWNER_MARKET_DATA_RIGHTS_V02108.md) record remaining prerequisites. Prior owner acceptance still applies.
+
+**Next.** Design and test a separately controlled monotonic evidence publisher with compare-and-swap and independent crash verification. Extend authenticated recovery audits in synthetic tenant fixtures to preserve active/revoked scope, request digests and historical stop state. Keep market-data expansion limited to verified provider rights and approved purposes. Keep production paper fills, live trading, autonomous orders and transfers disabled.
+
 ## v0.2.107 — 2026-11-13 — Authenticated offline paper preflight
 
 Starting checkpoint independently verified against GitHub main `f0a028f472fe7551086a42977cad4a9e4202e6fd`, push Actions `43429441401`, and the successful exact-SHA GitHub deployment status targeting Render `dep-dbrgi5s9v7es73a7i15g` with the service health probe returning OK. No open PRs at baseline.
