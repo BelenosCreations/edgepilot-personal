@@ -189,6 +189,20 @@ class DecimalAtomicTests(unittest.TestCase):
             self.fill()
         self.assertEqual(old["epoch"],2)
 
+    def test_checkpoint_refuses_orphan_event_and_missing_account(self):
+        self.fill()
+        current=self.pin()
+        # Restoring an older whole fixture cannot pass the latest operator pin.
+        with sqlite3.connect(self.path) as db:
+            db.execute("PRAGMA foreign_keys=OFF")
+            db.execute("DELETE FROM decimal_events WHERE account_id=?",(self.a1,))
+            db.execute("DELETE FROM decimal_positions WHERE account_id=?",(self.a1,))
+            db.execute("DELETE FROM decimal_wallets WHERE account_id=?",(self.a1,))
+        with self.assertRaises(decimal_atomic.DecimalAtomicDenied):
+            decimal_atomic.verify_decimal_checkpoint(
+                self.path,hmac_key=self.key,anchor_key=self.anchor,
+                externally_trusted_latest_checkpoint=current)
+
     def test_reject_existing_untrusted_database_and_unsafe_paths(self):
         with self.assertRaises(decimal_atomic.DecimalAtomicDenied):
             decimal_atomic.create_decimal_fixture(self.path)
