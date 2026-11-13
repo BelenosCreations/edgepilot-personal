@@ -196,7 +196,7 @@ class PaperRecoveryRehearsal(unittest.TestCase):
         # synthetic archive. The final path must not exist even briefly.
         malformed = Fernet(self.key).encrypt(
             tenant_backup_rehearsal._MAGIC +
-            b"SQLite format 3\\x00" + b"invalid-synthetic-database")
+            b"SQLite format 3\x00" + b"invalid-synthetic-database")
         for label, blob in (("bad-sqlite", malformed),
                             ("wrong-key", token)):
             dest = Path(self.tmp.name) / (label + ".db")
