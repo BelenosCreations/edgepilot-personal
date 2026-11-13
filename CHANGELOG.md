@@ -1,3 +1,13 @@
+## v0.2.108 — 2026-11-13 America/New_York — Offline Decimal recovery and Public data-rights review
+
+**Added** — Independent operator records and prepared checkpoint transitions for synthetic fractional fixtures. The restore rehearsal authenticates explicit operator approval and independently audits Fernet backups before no-replace publication.
+
+**Changed** — The owner quote view explains session-only quote handling and links to Public's source documentation and market-data terms. The rights review covers stocks, ETFs and crypto by purpose. Storage and redistribution rights remain unverified.
+
+**Tests** — Focused synthetic coverage for monotonic journal continuity, rollback, compromised keys, interrupted publication, stale archives, changed schemas, concurrent restore and preserved exact-cent loss stops and idempotency. The local full regression passed all 807 tests. GitHub Actions runs the same suite.
+
+**Limitations** — The prototype requires an externally supplied latest tip. Durable custody, cross-resource crash consistency and production restore validation remain open. Production paper fills, live trading, autonomous orders and transfers remain disabled.
+
 ## v0.2.107 — 2026-11-13 America/New_York — Authenticated offline Decimal paper preflight
 
 **Added.** A verified tmpfs-only tenant fixture and read-only transaction combining server session and CSRF verification, current tenant/account/connection scope, dormant ledger audit and idempotency checks, and the fractional Decimal transition with historical realized-loss stops.

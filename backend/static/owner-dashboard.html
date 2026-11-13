@@ -97,7 +97,7 @@ label{display:block;font-weight:600;font-size:.9rem;margin-top:12px}
     </section>
     <section class="panel" aria-labelledby="quoteHeading">
       <h2 id="quoteHeading">Source-attributed market research</h2>
-      <p class="muted small">Request one Public API quote only when you choose. Equity includes stocks and ETFs. Crypto uses Public's own symbol naming. This does not record a trade, chart, paper fill or estimated return.</p>
+      <p class="muted small">Request a Public API quote for a stock, ETF or crypto symbol. EdgePilot displays the quote for this session.</p>
       <label for="quoteType">Instrument category</label>
       <select id="quoteType"><option value="EQUITY">Stock / ETF (equity)</option><option value="CRYPTO">Crypto</option></select>
       <label for="quoteSymbol">Public symbol</label>
@@ -114,7 +114,7 @@ label{display:block;font-weight:600;font-size:.9rem;margin-top:12px}
       </div>
       <p id="quoteEvidence" class="muted small" aria-live="polite">No quote requested. Provider timestamps, not device retrieval time, determine observation age.</p>
       <p class="muted small">Bid–ask spread is computed from Public-reported prices only when both sides have provider timestamps fresh at EdgePilot receipt. The absolute value is in quoted price units; the relative value divides the source difference by the source midpoint and expresses it in basis points (1 bp = 0.01%). Neither is a fee, expected return, liquidity guarantee or fillable price. Both are unavailable for stale, untimed, missing or crossed books. Fresh at receipt does not mean live now.</p>
-      <p class="alert small">Quotes can be stale, unavailable or outside market hours. Provider data permissions have not been verified for persistent caching or paper execution. No price or performance is manufactured when a source fails.</p>
+      <p class="alert small">Public may return stale or unavailable quotes. Data retention and paper execution require separate permission. <a href="https://public.com/api/docs/resources/market-data/get-quotes" target="_blank" rel="noopener noreferrer">Quote documentation</a> · <a href="https://public.com/disclosures/individual-api-program" target="_blank" rel="noopener noreferrer">Public API terms</a></p>
     </section>
     <section class="panel">
       <h2>Trading safeguards</h2>

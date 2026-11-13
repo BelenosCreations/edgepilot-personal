@@ -35,6 +35,54 @@ _EVENT_FIELDS = ("user_id", "account_id", "seq", "request_id", "request_hash",
                  "realized_after_cents", "worst_after_cents", "stopped_after",
                  "position_qty_after", "position_basis_after", "position_realized_after",
                  "previous_mac")
+_SCHEMA = """
+PRAGMA journal_mode=DELETE;
+PRAGMA foreign_keys=ON;
+CREATE TABLE decimal_marker (
+    id INTEGER PRIMARY KEY CHECK(id=1), label TEXT NOT NULL);
+CREATE TABLE decimal_wallets (
+    user_id TEXT NOT NULL, account_id TEXT NOT NULL,
+    seed INTEGER NOT NULL CHECK(seed>0),
+    cash INTEGER NOT NULL CHECK(cash>=0),
+    protected INTEGER NOT NULL CHECK(protected BETWEEN 0 AND 99),
+    spend INTEGER NOT NULL CHECK(spend>0),
+    trade INTEGER NOT NULL CHECK(trade>0),
+    loss INTEGER NOT NULL CHECK(loss>0),
+    realized INTEGER NOT NULL, worst INTEGER NOT NULL CHECK(worst<=0),
+    stopped INTEGER NOT NULL CHECK(stopped IN (0,1)),
+    seq INTEGER NOT NULL CHECK(seq>=0), last_mac TEXT NOT NULL,
+    policy_mac TEXT NOT NULL, state_mac TEXT NOT NULL,
+    PRIMARY KEY(user_id,account_id));
+CREATE TABLE decimal_positions (
+    user_id TEXT NOT NULL, account_id TEXT NOT NULL,
+    asset_class TEXT NOT NULL, symbol TEXT NOT NULL,
+    quantity TEXT NOT NULL, basis INTEGER NOT NULL CHECK(basis>=0),
+    realized INTEGER NOT NULL,
+    PRIMARY KEY(user_id,account_id,asset_class,symbol),
+    FOREIGN KEY(user_id,account_id)
+      REFERENCES decimal_wallets(user_id,account_id));
+CREATE TABLE decimal_events (
+    user_id TEXT NOT NULL, account_id TEXT NOT NULL,
+    seq INTEGER NOT NULL, request_id TEXT NOT NULL,
+    request_hash TEXT NOT NULL, side TEXT NOT NULL,
+    asset_class TEXT NOT NULL, symbol TEXT NOT NULL,
+    quantity TEXT NOT NULL, price TEXT NOT NULL,
+    fee TEXT NOT NULL, slippage TEXT NOT NULL,
+    change_cents INTEGER NOT NULL, cash_after_cents INTEGER NOT NULL,
+    realized_after_cents INTEGER NOT NULL,
+    worst_after_cents INTEGER NOT NULL,
+    stopped_after INTEGER NOT NULL,
+    position_qty_after TEXT NOT NULL,
+    position_basis_after INTEGER NOT NULL,
+    position_realized_after INTEGER NOT NULL,
+    previous_mac TEXT NOT NULL, entry_mac TEXT NOT NULL,
+    PRIMARY KEY(user_id,account_id,seq),
+    UNIQUE(user_id,account_id,request_id),
+    FOREIGN KEY(user_id,account_id)
+      REFERENCES decimal_wallets(user_id,account_id));
+INSERT INTO decimal_marker VALUES
+    (1,'EDGEPILOT-OFFLINE-DECIMAL-ATOMIC-v1');
+"""
 
 
 class DecimalAtomicDenied(ValueError):
@@ -76,20 +124,23 @@ def _inputs(side, asset, symbol, quantity, price, fee, slippage):
             _decimal(fee, "assumed fee"), _decimal(slippage, "assumed slippage"))
 
 
-def _open(path):
+def _open(path, *, read_only=False):
     source = base._file(path)  # Verified /dev/shm, 0600, owner, no links.
-    uri = "file:" + url_quote(str(source), safe="/") + "?mode=rw"
+    mode = "ro" if read_only else "rw"
+    uri = "file:" + url_quote(str(source), safe="/") + "?mode=" + mode
     db = sqlite3.connect(uri, uri=True, isolation_level=None, timeout=15)
     db.row_factory = sqlite3.Row
     try:
         db.execute("PRAGMA foreign_keys=ON")
-        marker = db.execute("SELECT label FROM decimal_marker WHERE id=1").fetchone()
+        db.execute("PRAGMA trusted_schema=OFF")
         tables = db.execute("""SELECT name,type FROM sqlite_master
             WHERE type IN ('table','view','trigger')""").fetchall()
-        if (marker is None or marker["label"] != _MAGIC
-                or frozenset(r["name"] for r in tables) != _TABLES
+        if (frozenset(r["name"] for r in tables) != _TABLES
                 or any(r["type"] != "table" for r in tables)
                 or db.execute("PRAGMA journal_mode").fetchone()[0].lower() != "delete"):
+            _fail()
+        marker = db.execute("SELECT label FROM decimal_marker WHERE id=1").fetchone()
+        if marker is None or marker["label"] != _MAGIC:
             _fail()
         return db
     except Exception:
@@ -111,54 +162,7 @@ def create_decimal_fixture(path):
         os.close(fd)
         created = True
         with closing(sqlite3.connect(str(target), isolation_level=None)) as db:
-            db.executescript("""
-                PRAGMA journal_mode=DELETE;
-                PRAGMA foreign_keys=ON;
-                CREATE TABLE decimal_marker (
-                    id INTEGER PRIMARY KEY CHECK(id=1), label TEXT NOT NULL);
-                CREATE TABLE decimal_wallets (
-                    user_id TEXT NOT NULL, account_id TEXT NOT NULL,
-                    seed INTEGER NOT NULL CHECK(seed>0),
-                    cash INTEGER NOT NULL CHECK(cash>=0),
-                    protected INTEGER NOT NULL CHECK(protected BETWEEN 0 AND 99),
-                    spend INTEGER NOT NULL CHECK(spend>0),
-                    trade INTEGER NOT NULL CHECK(trade>0),
-                    loss INTEGER NOT NULL CHECK(loss>0),
-                    realized INTEGER NOT NULL, worst INTEGER NOT NULL CHECK(worst<=0),
-                    stopped INTEGER NOT NULL CHECK(stopped IN (0,1)),
-                    seq INTEGER NOT NULL CHECK(seq>=0), last_mac TEXT NOT NULL,
-                    policy_mac TEXT NOT NULL, state_mac TEXT NOT NULL,
-                    PRIMARY KEY(user_id,account_id));
-                CREATE TABLE decimal_positions (
-                    user_id TEXT NOT NULL, account_id TEXT NOT NULL,
-                    asset_class TEXT NOT NULL, symbol TEXT NOT NULL,
-                    quantity TEXT NOT NULL, basis INTEGER NOT NULL CHECK(basis>=0),
-                    realized INTEGER NOT NULL,
-                    PRIMARY KEY(user_id,account_id,asset_class,symbol),
-                    FOREIGN KEY(user_id,account_id)
-                      REFERENCES decimal_wallets(user_id,account_id));
-                CREATE TABLE decimal_events (
-                    user_id TEXT NOT NULL, account_id TEXT NOT NULL,
-                    seq INTEGER NOT NULL, request_id TEXT NOT NULL,
-                    request_hash TEXT NOT NULL, side TEXT NOT NULL,
-                    asset_class TEXT NOT NULL, symbol TEXT NOT NULL,
-                    quantity TEXT NOT NULL, price TEXT NOT NULL,
-                    fee TEXT NOT NULL, slippage TEXT NOT NULL,
-                    change_cents INTEGER NOT NULL, cash_after_cents INTEGER NOT NULL,
-                    realized_after_cents INTEGER NOT NULL,
-                    worst_after_cents INTEGER NOT NULL,
-                    stopped_after INTEGER NOT NULL,
-                    position_qty_after TEXT NOT NULL,
-                    position_basis_after INTEGER NOT NULL,
-                    position_realized_after INTEGER NOT NULL,
-                    previous_mac TEXT NOT NULL, entry_mac TEXT NOT NULL,
-                    PRIMARY KEY(user_id,account_id,seq),
-                    UNIQUE(user_id,account_id,request_id),
-                    FOREIGN KEY(user_id,account_id)
-                      REFERENCES decimal_wallets(user_id,account_id));
-                INSERT INTO decimal_marker VALUES
-                    (1,'EDGEPILOT-OFFLINE-DECIMAL-ATOMIC-v1');
-            """)
+            db.executescript(_SCHEMA)
         return target
     except Exception:
         if created:
