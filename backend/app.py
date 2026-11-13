@@ -9,7 +9,7 @@ from urllib.parse import quote
 import requests
 from flask import Flask, jsonify, request, send_from_directory, redirect, g
 from dotenv import load_dotenv
-from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, tenant_password_change, tenant_session_controls, tenant_registration, tenant_passkeys, account_scope, tenant_monitor_blueprint, tenant_watchlist, tenant_public_vault, tenant_public_live_readonly, staging_isolation, staging_operator, shared_storage_cutover, permanent_admin_invitations, solo_owner_portfolio
+from engine import ledger, reconcile, order_audit, connection_check, session_auth, broker_credentials, fifteen_minute, engine_config, automation, automation_worker, observation_health, tenant_foundation, identity_auth, tenant_password_change, tenant_session_controls, tenant_registration, tenant_passkeys, account_scope, tenant_monitor_blueprint, tenant_watchlist, tenant_public_vault, tenant_public_live_readonly, staging_isolation, staging_operator, shared_storage_cutover, permanent_admin_invitations, solo_owner_portfolio, owner_market_quotes
 ROOT=Path(__file__).parent; load_dotenv(ROOT/'.env')
 # Refuse unsafe isolated-test configuration before opening any database,
 # owner credential store or background-worker state. Production is unchanged.
@@ -676,6 +676,29 @@ def identity_public_account_portfolio(account_id):
     except (tenant_public_live_readonly.PublicReadUnavailable,
             tenant_public_vault.TenantVaultDenied):
         return fail('Public portfolio unavailable',404)
+
+
+# A deliberate, ephemeral quote observation for the independently authenticated
+# sole owner, NEVER a broker order, persistent market feed, or paper fill.
+# Requires the same identity cookie, CSRF, and same-origin POST protections as
+# all identity mutating methods, plus the server-owned sole-owner state twice.
+@app.post('/api/identity/public/read/accounts/<account_id>/quote')
+def identity_owner_manual_quote(account_id):
+    if (tenant_public_reader is None or not solo_owner_portfolio_enabled or
+            not solo_owner_portfolio.active_for_owner(TENANT_DB,g.edge_identity)):
+        return fail('Not found',404)
+    body=request.get_json(silent=True)
+    if not isinstance(body,dict) or set(body)!={'symbol','type'}:
+        return fail('Choose one quote symbol and category',400)
+    try:
+        token=request.cookies.get(identity_auth.COOKIE_NAME,'')
+        result=owner_market_quotes.OwnerMarketQuotes(tenant_public_reader).one(
+            token,account_id,symbol=body['symbol'],instrument_type=body['type'])
+        if not solo_owner_portfolio.active_for_owner(TENANT_DB,g.edge_identity):
+            return fail('Not found',404)
+        return result
+    except owner_market_quotes.OwnerQuoteUnavailable:
+        return fail('Verified source quote unavailable',404)
 
 
 @app.get('/api/identity/session')
