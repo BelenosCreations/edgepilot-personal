@@ -169,6 +169,17 @@ invalid_history=post(a,history_path,{**history_request,"period":"ALL"},csrf)
 assert invalid_history.status_code==404
 assert invalid_history.headers["Cache-Control"]=="no-store"
 assert "bars" not in invalid_history.json
+calls_before_logout = list(fake.calls)
+assert post(a, "/api/identity/logout", {}, csrf).status_code == 200
+logged_out_history = post(a, history_path, history_request, csrf)
+assert logged_out_history.status_code == 401
+assert logged_out_history.headers["Cache-Control"] == "no-store"
+assert "bars" not in logged_out_history.json
+assert fake.calls == calls_before_logout
+owner_login = post(a, "/api/identity/login", {
+    "username": "single_owner", "password": "synthetic-owner-password-long-2026"})
+assert owner_login.status_code == 200
+csrf = owner_login.json["csrf"]
 assert all(route not in str(fake.calls) for route in ("ORDER","TRANSFER","EXECUTE"))
 assert get(a,"/api/identity/accounts/"+aid+"/monitor/preview").status_code==404
 assert a.put("/api/identity/accounts/"+aid+"/monitor/watchlist",

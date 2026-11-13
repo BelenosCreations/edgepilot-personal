@@ -1,3 +1,11 @@
+## v0.2.125 — 2026-11-13 America/New_York — Publication evidence
+
+**Changed** — Terminal receipt publication checks the independent receipt and signed witness before linking and after destination sync. Checkpoint readback and cleanup recheck the local receipt, signed witness and ledger before accepting the result or removing a staging link.
+
+**Tests** — Cover evidence loss or replacement during publication and readback, second-generation archive candidate replacement during audit, and synthetic Public history after logout. See [publication evidence](PAPER_PUBLICATION_EVIDENCE_V02125.md).
+
+**Limitations** — Combined rollback, cross-resource power loss and owner-device Public history acceptance remain open. Production execution remains disabled.
+
 ## v0.2.124 — 2026-11-13 America/New_York — Recovery interruptions
 
 **Fixed** — Terminal receipt cleanup refuses to unlink when either evidence file disappears or changes after verification. Readback also rechecks both evidence paths before returning.

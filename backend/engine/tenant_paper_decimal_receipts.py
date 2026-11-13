@@ -27,6 +27,23 @@ _SCHEMA = """CREATE TABLE retained_receipt (
     tip TEXT NOT NULL, pending INTEGER NOT NULL, signature TEXT NOT NULL)"""
 
 
+def _evidence_recheck(*paths):
+    def file_state():
+        try:
+            return tuple((info.st_dev, info.st_ino, info.st_ctime_ns)
+                         for info in (path.lstat() for path in paths))
+        except OSError:
+            recovery._deny()
+
+    original = file_state()
+
+    def recheck():
+        if file_state() != original:
+            recovery._deny()
+
+    return recheck
+
+
 class DecimalReceiptStore:
     """A separately operated receipt pin and persistent rotation reservation."""
 
@@ -405,6 +422,7 @@ class DecimalRecoveryReceipt:
     def repair_local_terminal(self, receipts, witness, *, reviewed_receipt, operator_record):
         """Restore only a terminal local pin from the exact independent and witness tips."""
         self._verify_separation(receipts, witness)
+        recheck_evidence = _evidence_recheck(self._store.path, witness.path)
         with self._store._pin(reviewed_receipt) as tip:
             if tip != reviewed_receipt:
                 recovery._deny()
@@ -412,10 +430,11 @@ class DecimalRecoveryReceipt:
             with local as db, witness._open(write=False) as journal:
                 self._require_terminal(witness, journal, tip, operator_record)
                 if db is None:
-                    self._publish_missing_local(receipts, tip)
+                    self._publish_missing_local(receipts, tip, recheck_evidence)
                 else:
                     previous, pending = receipts._read_state(db)
                     witness._read(journal, previous, exact=False)
+                    recheck_evidence()
                     if previous != tip or pending:
                         receipts._save(db, tip, pending=False)
                         db.commit()
@@ -464,27 +483,13 @@ class DecimalRecoveryReceipt:
     @contextmanager
     def _verified_terminal(self, receipts, witness, reviewed_receipt, operator_record):
         self._verify_separation(receipts, witness)
-        paths = (self._store.path, witness.path)
-
-        def file_state():
-            return tuple((info.st_dev, info.st_ino, info.st_ctime_ns)
-                         for info in (path.lstat() for path in paths))
-
-        try:
-            original = file_state()
-
-            def recheck_evidence():
-                if file_state() != original:
-                    recovery._deny()
-
-            with (self._store._pin(reviewed_receipt) as tip,
-                  witness._open(write=False) as journal):
-                if tip != reviewed_receipt:
-                    recovery._deny()
-                self._require_terminal(witness, journal, tip, operator_record)
-                yield tip, recheck_evidence
-        except OSError:
-            recovery._deny()
+        recheck_evidence = _evidence_recheck(self._store.path, witness.path)
+        with (self._store._pin(reviewed_receipt) as tip,
+              witness._open(write=False) as journal):
+            if tip != reviewed_receipt:
+                recovery._deny()
+            self._require_terminal(witness, journal, tip, operator_record)
+            yield tip, recheck_evidence
 
     @staticmethod
     def _require_terminal(witness, journal, tip, operator_record):
@@ -492,7 +497,7 @@ class DecimalRecoveryReceipt:
         if record["status"] != "QUARANTINED" or record != operator_record:
             recovery._deny()
 
-    def _publish_missing_local(self, receipts, tip):
+    def _publish_missing_local(self, receipts, tip, recheck_evidence):
         path = receipts.path
         try:
             receipts._check_directory()
@@ -503,9 +508,11 @@ class DecimalRecoveryReceipt:
                 with stage._read_published(tip):
                     if any(os.path.lexists(str(path) + suffix) for suffix in _SIDECARS):
                         recovery._deny()
+                    recheck_evidence()
                     os.link(stage.path, path, follow_symlinks=False)
                 # On an ambiguous sync failure both names remain for review.
                 self._sync_receipt_directory(path.parent)
+                recheck_evidence()
                 stage.path.unlink()
                 folder.rmdir()
         except OSError:
@@ -608,8 +615,9 @@ class DecimalPromotionCheckpoint:
                 exported, trusted_receipt=trusted_receipt, receipts=receipts, witness=witness,
                 ledger_path=ledger_path, reserved_receipt=reserved_receipt,
                 prepared_receipt=prepared_receipt, operator_record=operator_record,
-                journal_key=journal_key, anchor_key=anchor_key):
+                journal_key=journal_key, anchor_key=anchor_key) as recheck_evidence:
             with self._store._read_published(trusted_receipt) as info:
+                recheck_evidence()
                 return {"receipt": trusted_receipt.copy(), "additionalLinkPresent": info.st_nlink == 2}
 
     def cleanup_recovered_stage(self, staging_path, exported, *, trusted_receipt, receipts,
@@ -626,7 +634,7 @@ class DecimalPromotionCheckpoint:
                     exported, trusted_receipt=trusted_receipt, receipts=receipts, witness=witness,
                     ledger_path=ledger_path, reserved_receipt=reserved_receipt,
                     prepared_receipt=prepared_receipt, operator_record=operator_record,
-                    journal_key=journal_key, anchor_key=anchor_key):
+                    journal_key=journal_key, anchor_key=anchor_key) as recheck_evidence:
                 with self._store._read_published(trusted_receipt) as verified:
                     current = target.lstat()
                     link = os.stat(stage_path.name, dir_fd=folder_fd, follow_symlinks=False)
@@ -637,6 +645,7 @@ class DecimalPromotionCheckpoint:
                             or not os.path.samestat(os.fstat(folder_fd), stage_path.parent.lstat())
                             or any(os.path.lexists(str(stage_path) + suffix) for suffix in _SIDECARS)):
                         recovery._deny()
+                    recheck_evidence()
                     os.unlink(stage_path.name, dir_fd=folder_fd)
                     os.fsync(folder_fd)
         except OSError:
@@ -656,6 +665,7 @@ class DecimalPromotionCheckpoint:
                 or not exported["mac"].isascii()
                 or not hmac.compare_digest(exported["mac"], self._export_mac(trusted_receipt))):
             recovery._deny()
+        recheck_evidence = _evidence_recheck(receipts.path, witness.path, Path(ledger_path))
         with receipts._open() as db, witness._open(write=False) as journal:
             retained, pending = receipts._read_state(db)
             witness._read(journal, reserved_receipt, exact=False)
@@ -668,11 +678,7 @@ class DecimalPromotionCheckpoint:
                     or record != operator_record or record["status"] != "ACTIVE"
                     or retained != (reserved_receipt if pending else tip)):
                 recovery._deny()
-            source = recovery._source(ledger_path)
-            with (witness._hold_original(witness.path) as same_witness,
-                  witness._hold_original(source) as same_ledger,
-                  recovery._fixture(source) as candidate):
+            with recovery._fixture(ledger_path) as candidate:
                 recovery._require_checkpoint(candidate, journal_key, anchor_key, record["current"])
-                if not same_witness() or not same_ledger():
-                    recovery._deny()
-                yield
+                recheck_evidence()
+                yield recheck_evidence

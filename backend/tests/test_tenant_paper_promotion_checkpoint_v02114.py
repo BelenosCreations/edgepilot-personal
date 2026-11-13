@@ -1,5 +1,6 @@
 """Exercise independently retained promotion evidence under synthetic rollback."""
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 import os
 from pathlib import Path
 import shutil
@@ -452,6 +453,43 @@ class PromotionCheckpointTests(unittest.TestCase):
             retained.cleanup_local_terminal_stage(stage, self.pins, self.store, **evidence)
         self.assertEqual(self.pins.latest(), terminal)
 
+    def test_terminal_publication_requires_evidence_before_link_and_after_sync(self):
+        retained, evidence, _, _ = self.terminal_recovery_evidence()
+        sync = retained._sync_receipt_directory
+        initialize = receipts.DecimalReceiptStore._initialize
+        for path in (retained._store.path, self.store_path):
+            for after_link in (False, True):
+                with self.subTest(resource=path.name, after_link=after_link):
+                    saved = path.with_suffix(".saved")
+                    exact = path.read_bytes()
+
+                    def interrupt_initialization(stage, tip):
+                        initialize(stage, tip)
+                        path.rename(saved)
+
+                    def interrupt_sync(directory):
+                        sync(directory)
+                        path.rename(saved)
+                        path.write_bytes(exact)
+                        path.chmod(0o600)
+
+                    interruption = (patch.object(retained, "_sync_receipt_directory", interrupt_sync)
+                                    if after_link else patch.object(receipts.DecimalReceiptStore,
+                                                                    "_initialize", interrupt_initialization))
+                    with interruption:
+                        with self.assertRaises(recovery.DecimalRecoveryDenied):
+                            retained.repair_local_terminal(self.pins, self.store, **evidence)
+                    self.assertEqual(self.pin_path.exists(), after_link)
+                    saved.replace(path)
+                    if after_link:
+                        self.assertEqual(retained.inspect_local_terminal(self.pins, self.store, **evidence),
+                                         {"receipt": evidence["reviewed_receipt"],
+                                          "additionalLinkPresent": True})
+                        stage, = (candidate for candidate in self.pin_path.parent.glob(
+                            ".decimal-terminal-receipt-*/receipt.db") if candidate.samefile(self.pin_path))
+                        retained.cleanup_local_terminal_stage(stage, self.pins, self.store, **evidence)
+                        self.pin_path.unlink()
+
     def test_terminal_readback_after_witness_commit_and_concurrent_review(self):
         self.prepare_checkpoint()
         active_tip = self.promote()
@@ -856,6 +894,33 @@ class PromotionCheckpointTests(unittest.TestCase):
         self.assertEqual(self.checkpoint.inspect_recovered(
             exported, trusted_receipt=tip, **self.recovery_evidence()),
             {"receipt": tip, "additionalLinkPresent": linked})
+
+    def test_checkpoint_readback_refuses_lost_or_replaced_evidence_during_audit(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        original, content = self.checkpoint_path.stat(), self.checkpoint_path.read_bytes()
+        read = self.checkpoint._store._read_published
+
+        for path in (self.pin_path, self.store_path):
+            exact = path.read_bytes()
+            for replace in (False, True):
+                with self.subTest(resource=path.name, replace=replace):
+                    saved = path.with_suffix(".saved")
+
+                    @contextmanager
+                    def interrupt(receipt):
+                        with read(receipt) as info:
+                            path.rename(saved)
+                            if replace:
+                                path.write_bytes(exact)
+                                path.chmod(0o600)
+                            yield info
+
+                    with patch.object(self.checkpoint._store, "_read_published", interrupt):
+                        with self.assertRaises(recovery.DecimalRecoveryDenied):
+                            self.checkpoint.inspect_recovered(
+                                exported, trusted_receipt=tip, **self.recovery_evidence())
+                    saved.replace(path)
+                    self.assert_checkpoint_readback(stage, exported, tip, original, content, linked=True)
 
     def test_process_exit_immediately_before_and_after_checkpoint_cleanup_unlink(self):
         stage, exported, tip = self.reviewed_staging_link()
