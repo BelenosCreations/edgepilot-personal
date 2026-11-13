@@ -160,6 +160,11 @@ assert monthly.json["bars"][0]["close"] == "98.50"
 assert monthly.json["dataPersisted"] is False
 assert fake.calls.count(("GET", "HISTORY")) == 1
 assert fake.calls.count(("GET", "MONTH_HISTORY")) == 1
+weekly_again = post(a, history_path, history_request, csrf)
+assert weekly_again.status_code == 200
+assert weekly_again.headers["Cache-Control"] == "no-store"
+assert weekly_again.json == {**history.json, "receivedAt": weekly_again.json["receivedAt"]}
+assert fake.calls.count(("GET", "HISTORY")) == 2
 invalid_history=post(a,history_path,{**history_request,"period":"ALL"},csrf)
 assert invalid_history.status_code==404
 assert invalid_history.headers["Cache-Control"]=="no-store"

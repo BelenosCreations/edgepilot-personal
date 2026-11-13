@@ -1,3 +1,13 @@
+## v0.2.124 — 2026-11-13 America/New_York — Recovery interruptions
+
+**Fixed** — Terminal receipt cleanup refuses to unlink when either evidence file disappears or changes after verification. Readback also rechecks both evidence paths before returning.
+
+**Added** — Regressions cover actual process exit on either side of unlink, competing cleanup attempts, evidence loss and witness rollback during cleanup, and missing or stale second-generation archive pins. A synthetic Public history test confirms a repeat request fetches its own source response.
+
+**Tests** — All 890 local tests passed, including 119 focused tests.
+
+**Limitations** — Combined rollback of all retained evidence, cross-resource power loss and owner-device Public history acceptance remain open. Production execution remains disabled.
+
 ## v0.2.123 — 2026-11-13 America/New_York — Terminal receipt staging cleanup
 
 **Added** — Offline cleanup removes an operator-selected terminal receipt staging link only at the exact independent receipt and signed witness tip, with the same published inode and an inactive publisher.
