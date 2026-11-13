@@ -1,3 +1,11 @@
+## v0.2.107 — 2026-11-13 — Authenticated offline paper preflight
+
+Starting checkpoint independently verified against GitHub main `f0a028f472fe7551086a42977cad4a9e4202e6fd`, push Actions `43429441401`, and the successful exact-SHA GitHub deployment status targeting Render `dep-dbrgi5s9v7es73a7i15g` with the service health probe returning OK. No open PRs at baseline.
+
+The marked /dev/shm fixture now rehearses session- and CSRF-derived tenant authorization, account isolation, dormant ledger audit/idempotency, and v0.2.106 fractional Decimal risk projection in a single always-rolled-back transaction. See PAPER_AUTHENTICATED_PREFLIGHT_V02107.md. v0.2.94 owner acceptance still applies.
+
+**Next.** Advance externally durable operator evidence custody and crash-consistency design for fractional accounting, including rotation, quarantine and authenticated encrypted recovery. Establish per-source rights independently before any persistent use of a real quote. Keep production paper fills, live orders, autonomous brokerage orders and bank transfers disabled.
+
 ## v0.2.106 — 2026-11-13 — Inactive fractional Decimal atomic stop/accounting research
 
 Baseline independently reverified: v0.2.105 main `9d22638364565206505085104096600b273ad650`, post-merge Actions `43380544724` success, Render `dep-dbrb2iijnfac73992ou0` LIVE with the exact matching SHA; Starter service, 1 GB disk and automatic deployment preserved; no open PRs. Added `tenant_paper_decimal_atomic_rehearsal.py` and `test_tenant_paper_decimal_atomic_v02106.py` as separate /dev/shm-only fabricated-input research. Reuses Decimal parsing and cent accounting primitives from dormant `tenant_paper_ledger.py`; wraps fractional holdings, conservative basis, account-protected budgets, exact realized changes, historical sticky stop, idempotent MAC-journal replay and scoped wallet state in one synthetic SQLite transaction. Separate operator-held HMAC candidate checkpoint detects stale whole fixtures only if the latest pin remains independently trusted. Tests cover concurrent requests, rollback, cross-account boundaries, bad data, missing wallet and signed tampering. See PAPER_DECIMAL_ATOMIC_V02106.md.

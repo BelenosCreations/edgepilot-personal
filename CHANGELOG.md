@@ -1,3 +1,11 @@
+## v0.2.107 — 2026-11-13 America/New_York — Authenticated offline Decimal paper preflight
+
+**Added.** A verified tmpfs-only tenant fixture and read-only transaction combining server session and CSRF verification, current tenant/account/connection scope, dormant ledger audit and idempotency checks, and the fractional Decimal transition with historical realized-loss stops.
+
+**Tests.** Two users and three accounts, fractional protected balance and cost basis, exact loss threshold, subsequent gains, scoped duplicate and conflict handling, malformed or stale observations, disabled and revoked identity, concurrent revocation, interrupted audit, and byte-for-byte fixture preservation.
+
+**Limits.** The preflight's observations and policies are fictional. Historical provider rights, external checkpoint custody, key rotation, encrypted recovery and production risk enforcement remain unresolved. See PAPER_AUTHENTICATED_PREFLIGHT_V02107.md.
+
 ## v0.2.106 — 2026-11-13 America/New_York — Inactive fractional Decimal accounting / historical stop atomic rehearsal
 **Added:** New exclusive 0600 verified /dev/shm synthetic SQLite schema using the dormant Decimal paper ledger's quantity validation and exact cent-rounding primitives, immutable account-scoped protected exposure and spend/trade/loss caps, conservative fractional cost basis, append-only HMAC-authenticated replay, sticky worst realized losses, idempotent request conflicts and single-BEGIN-IMMEDIATE wallet/position/event/stop commits. Independent whole-account candidate checkpoint verification against an operator-held latest external pin.
 **Tests:** Two synthetic users/three accounts; subshare purchases and partial/full sales; cent rounding; gains after stop; conflicting requests; concurrent overspend and duplicate requests; precommit abort; stale pinned fixture, wrong journal/anchor key, tampered position, missing account and forbidden disk/symlink paths. Full regression CI required before merge.
