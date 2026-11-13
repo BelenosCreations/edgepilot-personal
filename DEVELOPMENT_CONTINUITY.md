@@ -8,14 +8,14 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 
 ## Verification and checkpoint
 
-- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.114 from the merged PR for `development/v0.2.114-promotion-checkpoint`. A later verified main checkpoint takes precedence.
-- Verified v0.2.113 baseline. PR #140 head `bb93d65d2f25e7942f9481c988282acda29e58e8` passed [Actions #43460114041](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43460114041). Main `a11268584de2d6f51a3c4287a076c0532749f1e3` passed [Actions #43460516814](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43460516814), matched live Render deployment `dep-dbrje8c9v7es73acdspg`, and returned HTTP 200 from `/healthz`. No PRs were open.
-- v0.2.114 adds an independent promotion checkpoint rehearsal and verifies restore cleanup under concurrent operations and process exit. See [milestone notes](PAPER_PROMOTION_CHECKPOINT_V02114.md).
+- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.115 from the merged PR for `development/v0.2.115-checkpoint-recovery`. A later verified main checkpoint takes precedence.
+- Verified v0.2.114 baseline. PR #141 head `039dbffb5560a2a0022982a4b782f64d5e9e1572` passed [Actions #43464750637](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43464750637). Main `423b71a6ce1d74a5d33ea961d8fd684b3a5b9c3b` passed [Actions #43465088509](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43465088509), matched live Render deployment `dep-dbrjqvpsrm7s73e5sh5g`, and returned HTTP 200 from `/healthz`. No PRs were open.
+- v0.2.115 adds recovery from an independently retained signed promotion export and audits restored identity, passkey and connection history through cleanup. See [milestone notes](PAPER_CHECKPOINT_RECOVERY_V02115.md).
 
 ## Next safe development batch
 
-1. Rehearse recovery when the independent checkpoint is unavailable. Compare an independently retained signed checkpoint export with the exact witness and ledger. Exercise stale exports, wrong lineages, missing resources and explicit terminal quarantine. Combined rollback and cross-resource power-loss consistency remain open.
-2. Audit offline restore quarantine across the full restored security state and verify that revoked passkey and connection records retain their historical revocation evidence through publication and cleanup. Preserve the existing restore paths.
+1. Rehearse process exit during checkpoint recovery publication. Verify the exact signed export, exclusive creation, readback and explicit resolution of partial or ambiguous checkpoint files. Keep terminal quarantine available. Combined rollback and cross-resource power-loss consistency remain open.
+2. Exercise authentication and account-scope rejection against the quarantined restore across session, challenge, invitation and connection entry points. Preserve historical revocations and existing restore paths.
 3. Continue source-attributed and session-only Public research under the user's instruction to assume provider permission. Use real history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance). Earlier snapshot and MSFT quote acceptance still apply.
 
 ## Restrictions and workflow
@@ -26,6 +26,12 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.114 — 2026-11-13 — Independent promotion checkpoint
+
+Starting checkpoint independently verified. PR #140 head `bb93d65d2f25e7942f9481c988282acda29e58e8` passed [Actions #43460114041](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43460114041). Main `a11268584de2d6f51a3c4287a076c0532749f1e3` passed [Actions #43460516814](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43460516814), matched Render deployment `dep-dbrje8c9v7es73acdspg`, and returned HTTP 200 from `/healthz`.
+
+The milestone adds a separate promotion checkpoint and tests concurrent and interrupted restore cleanup. See [independent promotion checkpoint](PAPER_PROMOTION_CHECKPOINT_V02114.md).
 
 ## v0.2.113 — 2026-11-13 — Reviewed synthetic paper recovery
 
