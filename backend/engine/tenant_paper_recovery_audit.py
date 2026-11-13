@@ -86,18 +86,20 @@ def audit_tenant_paper_ledger(db):
             raise PaperRecoveryDenied(deny)
 
         wallets = db.execute("""SELECT user_id, account_id, seeded_cents,
-            cash_cents FROM tenant_paper_wallets""").fetchall()
+            cash_cents, opened_at FROM tenant_paper_wallets""").fetchall()
         if len(wallets) > 10000:
             raise PaperRecoveryDenied(deny)
         expected = {}
-        for user, account, seed, cash in wallets:
+        for user, account, seed, cash, opened in wallets:
             if (not _canonical_uuid(user) or not _canonical_uuid(account)
                     or type(seed) is not int or type(cash) is not int
                     or not 0 < seed <= 100000000000
                     or not 0 <= cash <= 100000000000):
                 raise PaperRecoveryDenied(deny)
+            opened_time = _event_time(opened)
             expected[(user, account)] = {
                 "cash": seed, "actualCash": cash, "positions": {},
+                "previousCreated": opened_time,
             }
         events = db.execute("""SELECT user_id,account_id,request_id,
             request_sha256,side,asset_class,symbol,quantity,quote_price,
@@ -124,8 +126,14 @@ def audit_tenant_paper_ledger(db):
             # Both the source observation and local paper event must be
             # independently parseable UTC timestamps. A recovered event
             # cannot predate the observation it purports to have used.
-            if _event_time(observed) > _event_time(created):
+            created_time = _event_time(created)
+            if (_event_time(observed) > created_time
+                    or created_time < wallet["previousCreated"]):
+                # An event cannot predate its own paper wallet or an
+                # earlier appended event for the SAME tenant/account. Other
+                # accounts may interleave independently.
                 raise PaperRecoveryDenied(deny)
+            wallet["previousCreated"] = created_time
             qty = _decimal(quantity, positive=True)
             px = _decimal(price, positive=True)
             costs = _decimal(friction)

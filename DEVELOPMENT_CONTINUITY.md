@@ -1,3 +1,11 @@
+## CURRENT development — v0.2.98 dormant paper wallet/event chronology, November 12, 2026 (America/New_York)
+
+**Verified base:** v0.2.97 main `7d8f9b07544cd1a4ab022b26b28b6c31ba629405`, push Actions #43364227347 passed, Render existing service `edgepilot-private-h9tl` deployment `dep-dbr8tb8jo6nc73erc860` LIVE at the same commit, original Starter/1 GB disk. Owner-reported same-account value match and real MSFT quote retrieval are already accepted and must not be repeated for offline changes.
+
+**v0.2.98 scope:** Strict UTC valid calendar wallet opening timestamps and nondecreasing per-(user,account) event append chronology before synthetic archive sealing or restoration, with malicious date/order tests, encrypted-seal rejection and successful repair. Preserve all prior paper cash/reconciliation and quarantine audit, no production paper migration, no live orders, autonomous trading, bank transfers, paid infrastructure or credential changes. See PAPER_WALLET_CHRONOLOGY_V0298.md.
+
+**Next:** Check PR CI, merge verified source, verify push CI and matching unchanged Render deployment. Continue dormant scoped loss-stop and idempotency design, no use of paper quote retention until rights confirmed, and harden crash-cleanup/old-key revocation before production backup/restore authorization.
+
 ## CURRENT development — v0.2.97 dormant paper event-time audit, November 12, 2026 (America/New_York)
 
 **Verified base:** v0.2.96 PR #123 merged at main `c7b3170292f7c98324bcb569c1605664d1edbba7`; PR CI #43363374078 passed, merged-main GitHub Actions #43363596703 passed, and the same Render Starter service `edgepilot-private-h9tl` auto-deployed `dep-dbr8qm942hec73bb4pbg` LIVE. Its 1 GB disk and credentials remain unchanged. Previous owner Public snapshot same-account cent match and MSFT quote acceptance are complete; no new manual acceptance needed for offline source changes.
