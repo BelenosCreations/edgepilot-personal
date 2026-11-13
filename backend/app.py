@@ -758,6 +758,14 @@ def staging_operator_invites():
     except staging_operator.StagingOperatorDenied:
         return fail('Staging operator unavailable',403)
 
+@app.get('/owner')
+def owner_dashboard_page():
+    # Public HTML shell only. All account and portfolio data still require
+    # independent identity cookies, strict owner role, and scoped API checks.
+    # Deliberately NOT a redirect to the legacy global-token dashboard.
+    return send_from_directory(ROOT/'static','owner-dashboard.html')
+
+
 @app.get('/account')
 def identity_account_page():
     # Unprivileged same-origin UI; every API operation still requires verified
