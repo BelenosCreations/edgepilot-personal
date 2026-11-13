@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0c1423">
+<title>EdgePilot | My dashboard</title>
+<style>
+:root{font-family:system-ui,-apple-system,Roboto,sans-serif;color:#edf5fb;background:#0c1423}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;min-height:100vh;padding:env(safe-area-inset-top) 15px max(32px,env(safe-area-inset-bottom))}
+main,header{max-width:790px;margin:auto}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:24px 2px 8px}
+h1{font-size:1.6rem;margin:0}h2{font-size:1.12rem;margin:0 0 12px}
+p{line-height:1.5}
+a{color:#85e4d4;text-decoration-thickness:1px;text-underline-offset:3px}
+.panel{background:#142238;border:1px solid #30455f;border-radius:15px;padding:19px;margin:15px 0}
+.muted{color:#b8c7d5}
+.small{font-size:.85rem}
+nav{display:flex;gap:18px;flex-wrap:wrap}
+button,select{font:inherit;border-radius:9px;border:1px solid #4d8390;color:#fff;background:#205764;min-height:45px;padding:10px 13px}
+button{font-weight:650;cursor:pointer}
+button.primary{color:#071d20;background:#69dbc4;border-color:#69dbc4}
+button:disabled{opacity:.6;cursor:wait}
+select{width:100%;background:#101e32;color:#edf5fb;margin:8px 0 12px}
+label{display:block;font-weight:600;font-size:.9rem;margin-top:12px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.tile{background:#1b2d46;border-radius:12px;padding:15px;min-width:0}
+.tile small{display:block;color:#b8c7d5}
+.metric{font-size:1.8rem;font-weight:760;overflow-wrap:anywhere}
+.chip{display:inline-block;background:#244a42;border-radius:90px;padding:5px 10px;font-size:.8rem;color:#b9fbe5}
+.alert{border-left:3px solid #e3a45d;padding:10px 12px;background:#29313d}
+#status{padding:12px;border-left:3px solid #52bcb5;background:#1b303f;border-radius:7px}
+#status.error{border-color:#f0a57d}
+#positions{list-style:none;margin:0;padding:0}
+#positions li{display:flex;gap:10px;align-items:start;justify-content:space-between;padding:12px 0;border-bottom:1px solid #344761}
+#positions li:last-child{border-bottom:0}
+#positions .position-name{font-weight:700}
+#positions .position-units{color:#b8c7d5;font-size:.9rem}
+#positions .position-value{font-weight:650;text-align:right}
+@media(max-width:460px){.panel{padding:15px}.metric{font-size:1.5rem}.grid{gap:9px}.tile{padding:12px}}
+</style>
+<script src="/assets/owner-dashboard.js" defer></script>
+</head>
+<body>
+<header>
+  <h1>EdgePilot <span style="color:#69dbc4">Home</span></h1>
+  <nav aria-label="EdgePilot navigation">
+    <a href="/account">Account &amp; connections</a>
+    <a href="/">Legacy dashboard</a>
+  </nav>
+</header>
+<main>
+  <p class="muted">Your independently authenticated EdgePilot owner dashboard. Account-scoped observations only.</p>
+  <div id="status" role="status" aria-live="polite">Checking your secure EdgePilot session…</div>
+  <section id="signedOut" class="panel" hidden>
+    <h2>Sign in to continue</h2>
+    <p class="muted">Use your independent EdgePilot owner login, not the original dashboard access token.</p>
+    <a href="/account">Open secure EdgePilot sign-in</a>
+  </section>
+  <section id="dashboard" hidden>
+    <section class="panel">
+      <div style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+        <h2 style="margin:0">My portfolio snapshot</h2>
+        <span class="chip">Public API · read-only</span>
+      </div>
+      <p id="intro" class="muted small">No brokerage balances have been requested in this session.</p>
+      <div class="grid" aria-label="Current selected account overview">
+        <div class="tile"><small>Selected account value</small><div class="metric" id="portfolioValue">Not loaded</div></div>
+        <div class="tile"><small>Open positions</small><div class="metric" id="portfolioPositions">Not loaded</div></div>
+      </div>
+      <label for="accountChoice">Verified Public account</label>
+      <select id="accountChoice" aria-label="Select your verified Public account"><option value="">Loading verified accounts…</option></select>
+      <div style="display:flex;gap:9px;flex-wrap:wrap">
+        <button id="loadPortfolio" type="button" class="primary" disabled>Retrieve read-only snapshot</button>
+        <button id="reloadAccounts" type="button">Refresh linked accounts</button>
+      </div>
+      <p id="snapshotTime" class="muted small">No snapshot loaded. Values are not automatically refreshed.</p>
+      <p class="small muted">This is a single selected Public brokerage account, not your total net worth or a historical performance chart. Retrieving a snapshot uses the current provider response; no scheduled requests are made.</p>
+    </section>
+    <section class="panel">
+      <h2>Open positions</h2>
+      <ul id="positions" aria-label="Read-only account positions"></ul>
+      <p class="muted small">Units may be shares, fractional crypto holdings, contracts or another instrument quantity. Account value is not profit or loss.</p>
+    </section>
+    <section class="panel">
+      <h2>Trading safeguards</h2>
+      <p class="alert">Live trading, autonomous orders and bank transfers remain disabled. This page cannot issue orders or transfer funds.</p>
+      <p class="muted small">Market analysis, reliable price histories, account performance and risk-controlled paper trading remain separate development milestones. No chart or returns are fabricated from a single snapshot.</p>
+      <button type="button" id="signOut">Sign out of EdgePilot</button>
+    </section>
+  </section>
+</main>
+</body>
+</html>
