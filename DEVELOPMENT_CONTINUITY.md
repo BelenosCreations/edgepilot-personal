@@ -1,3 +1,13 @@
+## CURRENT development — v0.2.93 failed owner MSFT quote, browser parser hotfix, November 12, 2026
+
+**Verified starting point:** v0.2.92 main `9789ebd7afd3070d407818315f55afaea9f39159`, PR #119 merged and post-merge GitHub Actions run #43353225389 succeeded. Existing Render deployment `dep-dbr7eqs9v7es739t6es0` was live at the exact SHA; no new service/disk. The owner reported inability to retrieve an `msft` quote on the independently authenticated dashboard.
+
+**Verified defect:** The v0.2.90/v0.2.92 browser validator `readSourceTime` mistakenly used doubled literal backslashes in a regex, rejecting ISO-8601 timestamps from a successful Public quote before the browser would display source prices. This is a confirmed defect but NOT proof that the user's actual source request succeeded or that their account has `marketdata` entitlement. The UI previously collapsed source denial and client validation into the same generic message; no private upstream response or readable request records established the exact provider result.
+
+**v0.2.93 work:** Correct ISO timestamp validation and execute the **shipped JS parser** in regression tests using synthetic MSFT quote values. Compatible with Public's documented quote examples that omit bid/ask timestamps while explicitly marking those prices undated and `twoSidedFresh=false`; last timestamp remains compulsory. Separate HTTP refusal vs local validation error in UI without disclosing account/token/provider response body. Do not retry background or read private credentials. Preserve all prior tenant, encryption, recovery and dormant paper safety.
+
+**Next:** Verify PR CI, merge, check post-merge GitHub Actions and existing Render. Owner reopens `/owner`, selects **Stock / ETF**, types `MSFT` and manually clicks **Retrieve source quote**. If still unavailable, ask for the sanitized status text or HTTP code—not balances, API keys, account IDs or tokens—to distinguish provider entitlement/network from parsing. Public's official quote endpoint requires `marketdata` scope; do not claim the scope is present until confirmed. No paid service, live orders, paper execution, bank transfers or autonomous brokerage orders.
+
 ## CURRENT development — v0.2.92 dormant historical provenance contract, November 12, 2026
 
 **Verified starting checkpoint:** v0.2.91 PR #118 merged into main at `4954978e9663c3e40efdb8f383b9f9c20899112c`; PR GitHub Actions run #43352205155 and post-merge main run #43352452991 passed. Existing Render `edgepilot-private-h9tl` deployment `dep-dbr7boe7bikc73ekujk0` reported `live` on exactly that SHA, with the original Starter service/disk. Source-only comparison is available, but real owner-device match and real provider quote scope still require user acceptance.

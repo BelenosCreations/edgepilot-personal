@@ -82,7 +82,11 @@ def _entry(data, symbol, kind, received):
     for side in ("bid", "ask"):
         if row.get(side) is not None:
             p = _price(row[side])
-            at = _timestamp(row.get(side + "Timestamp"), received)
+            # Public documents some quote samples without bid/ask timestamp.
+            # Price remains source-reported, but never gains a freshness claim.
+            raw_side_time = row.get(side + "Timestamp")
+            at = (_timestamp(raw_side_time, received)
+                  if raw_side_time is not None else None)
             if side == "bid":
                 bid, bid_at = p, at
             else:
