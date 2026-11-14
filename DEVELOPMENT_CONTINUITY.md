@@ -5,21 +5,21 @@ Use this section for the next development session. The entries below record prio
 ## Copyable resume instruction
 
 ```text
-EdgePilot Continuity 003
+EdgePilot Continuity 004
 
 Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on main in BelenosCreations/edgepilot-personal, independently verify the GitHub and Render checkpoint, and follow the next steps and restrictions in that file.
 ```
 
 ## Verification and checkpoint
 
-- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.140 from the merged PR for `development/v0.2.140-publication-cleanup-readback`. A later verified main checkpoint takes precedence.
-- Verified v0.2.139 baseline. PR #167 head `21c2324a34b459d14f05dd4d1206da4a43398d47` passed [Actions #43623109230](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43623109230). Main `aae8c8b3d65ddf27fa08e8c1f630cae398690ebf` passed [Actions #43623298760](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43623298760), matched live Render deployment `dep-dbs9ustbedkc73bv3bf0`, and returned HTTP 200 from `/healthz`. No PRs were open.
-- v0.2.140 checks the selected staging directory during opening and revalidates the published file and independent evidence after staging unlink and sync. See [milestone notes](PAPER_PUBLICATION_CLEANUP_READBACK_V02140.md).
+- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.141 from the merged PR for `development/v0.2.141-publication-retirement-review`. A later verified main checkpoint takes precedence.
+- Verified v0.2.140 baseline. PR #168 head `05da065d751b840ddbe65511dae09d85432fd009` passed [Actions #43624034102](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43624034102). Main `d7fd1120d51e04b5a91d7b1cac5a3a0886888ba3` passed [Actions #43624197628](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43624197628), matched live Render deployment `dep-dbsa3k15efls73ehm3i0`, and returned HTTP 200 from `/healthz`. No PRs were open.
+- v0.2.141 verifies the exact publication and evidence after staging-directory retirement and rechecks the staging name before unlink. See [milestone notes](PAPER_PUBLICATION_RETIREMENT_V02141.md).
 
 ## Next safe development batch
 
-1. Rehearse changes to the published name or independent evidence during retirement of the empty staging directory, after the staged file has been synced and removed. Verify fresh exact readback after a process exit or directory retirement error.
-2. Review same-name staging changes at the final unlink boundary. Exercise interruption and concurrent cooperating cleanup while preserving ambiguous and unrelated files. Keep tenant archive evidence independent and authenticated paper preflight detached from execution. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
+1. Rehearse moving the reviewed staging directory during retirement, including when the original path is reused. Review how to preserve operator files if a directory or stage changes during a destructive filesystem operation.
+2. Exercise simultaneous readback and cooperating cleanup across process interruptions. Require exact evidence after retries and keep tenant archive evidence independent and authenticated paper preflight detached from execution. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
 3. Continue source-attributed and session-only Public research under the user's instruction to assume provider permission. Use real history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance). Earlier snapshot and MSFT quote acceptance still apply.
 
 ## Restrictions and workflow
@@ -30,6 +30,10 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Increment the EdgePilot Continuity sequence at the top of the copy block. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.140 — 2026-11-14 — Publication cleanup readback
+
+Offline terminal receipt and active checkpoint cleanup verify the selected directory during opening and recheck the publication and independent evidence after unlink and sync. See [publication cleanup readback](PAPER_PUBLICATION_CLEANUP_READBACK_V02140.md).
 
 ## v0.2.139 — 2026-11-14 — Publication directory identity
 
