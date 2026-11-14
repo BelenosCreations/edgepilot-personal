@@ -72,6 +72,19 @@ class OwnerMarketHistoryTests(unittest.TestCase):
         self.assertEqual(observed["bars"][0]["volume"], "1.000000000000000001")
         self.assertTrue(self.history_calls[0][0].endswith("/CRYPTO/BTC/MONTH"))
 
+    def test_monthly_equity_history_keeps_the_provider_period_and_series(self):
+        payload = json.loads(self.payload(symbol="MSFT", period="MONTH"))
+        payload["regularMarket"]["expectedBars"] = 22
+        payload["totalExpectedBars"] = 44
+        self.provider(json.dumps(payload))
+        observed = self.history(symbol="MSFT", period="MONTH")
+        self.assertTrue(self.history_calls[0][0].endswith("/EQUITY/MSFT/MONTH"))
+        self.assertEqual((observed["provider"], observed["source"], observed["period"]),
+                         ("Public API", "Get bars v2", "MONTH"))
+        self.assertEqual(observed["sourceExpectedBars"], 22)
+        self.assertFalse(observed["dataPersisted"])
+        self.assertFalse(observed["paperFillEligible"])
+
     def test_failure_and_mismatched_instrument_refuse(self):
         for payload, status in ((self.payload(), 302), (self.payload(symbol="MSFT"), 200),
                                 ("{}", 200), ("not json", 200)):
