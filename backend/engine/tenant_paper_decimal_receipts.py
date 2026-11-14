@@ -494,7 +494,10 @@ class DecimalRecoveryReceipt:
         with self._store._pin(reviewed_receipt) as tip:
             if tip != reviewed_receipt:
                 recovery._deny()
-            local = receipts._open() if os.path.lexists(receipts.path) else nullcontext()
+            local = nullcontext()
+            if os.path.lexists(receipts.path):
+                recheck_local = _evidence_recheck(receipts.path)
+                local = receipts._open()
             with local as db, witness._open(write=False) as journal:
                 self._require_terminal(witness, journal, tip, operator_record)
                 if db is None:
@@ -503,11 +506,29 @@ class DecimalRecoveryReceipt:
                 else:
                     previous, pending = receipts._read_state(db)
                     witness._read(journal, previous, exact=False)
-                    recheck_evidence()
-                    if previous != tip or pending:
+                    repair_required = pending or previous != tip
+                    if repair_required:
                         receipts._save(db, tip, pending=False)
+                    recheck_local()
+                    recheck_evidence()
+                    if repair_required:
                         db.commit()
                 return tip
+
+    def inspect_terminal_handoff(self, receipts, witness, *, reviewed_receipt, operator_record):
+        """Read back an existing local receipt against independently reviewed terminal evidence."""
+        self._verify_separation(receipts, witness)
+        recheck_evidence = _evidence_recheck(self._store.path, receipts.path, witness.path)
+        with (self._store._pin(reviewed_receipt) as tip,
+              receipts._open(read_only=True) as local,
+              witness._open(write=False) as journal):
+            if tip != reviewed_receipt:
+                recovery._deny()
+            self._require_terminal(witness, journal, tip, operator_record)
+            previous, pending = receipts._read_state(local)
+            witness._read(journal, previous, exact=False)
+            recheck_evidence()
+            return {"receipt": tip, "localRepairRequired": pending or previous != tip}
 
     def inspect_local_terminal(self, receipts, witness, *, reviewed_receipt, operator_record):
         """Verify a published terminal receipt after interruption without changing files."""

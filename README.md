@@ -1,3 +1,5 @@
+**v0.2.133** — Offline terminal handoff readback verifies whether the local receipt still needs repair. Repeated repair preserves the signed terminal evidence, and active checkpoint review refuses a stale receipt after a competing commit. See [terminal handoff readback](PAPER_TERMINAL_HANDOFF_READBACK_V02133.md).
+
 **v0.2.132** — Offline recovery verifies signed evidence before retaining an independently reviewed terminal receipt after an interrupted handoff. Tests also cover an independent writer temporarily blocking active checkpoint readback and cleanup. See [interrupted receipt review](PAPER_INTERRUPTED_RECEIPT_REVIEW_V02132.md).
 
 **v0.2.131** — Offline checkpoint recovery can require a separately retained receipt before recreating, inspecting, or cleaning up a checkpoint. The authenticated paper preflight remains a read-only projection. See [independent checkpoint evidence](PAPER_INDEPENDENT_CHECKPOINT_EVIDENCE_V02131.md).

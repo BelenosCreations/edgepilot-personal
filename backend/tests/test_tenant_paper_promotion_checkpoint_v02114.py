@@ -697,13 +697,66 @@ class PromotionCheckpointTests(unittest.TestCase):
         self.assertFalse(self.store_path.samefile(original))
         original.replace(self.store_path)
         self.assertEqual(independent._store.latest(), active)
-        self.assertEqual(independent.retain_terminal(
-            self.pins, self.store, expected_receipt=active, reviewed_receipt=terminal,
-            operator_record=quarantine), terminal)
+        pid = os.fork()
+        if pid == 0:
+            try:
+                independent.retain_terminal(
+                    self.pins, self.store, expected_receipt=active, reviewed_receipt=terminal,
+                    operator_record=quarantine)
+                os._exit(95)
+            finally:
+                os._exit(96)
+        _, status = os.waitpid(pid, 0)
+        self.assertEqual(os.waitstatus_to_exitcode(status), 95)
+        self.assertEqual(independent._store.latest(), terminal)
+        reviewed_terminal = dict(reviewed_receipt=terminal, operator_record=quarantine)
+
+        def read_handoff(**review):
+            return independent.inspect_terminal_handoff(self.pins, self.store, **review)
+
+        independently_retained = independent._store.path.read_bytes()
+        for _ in range(2):
+            self.assertEqual(read_handoff(**reviewed_terminal),
+                             {"receipt": terminal, "localRepairRequired": True})
+            self.assertEqual(self.pin_path.read_bytes(), frozen)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            read_handoff(**(reviewed_terminal | {"operator_record": self.promotion}))
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            read_handoff(**(reviewed_terminal | {"reviewed_receipt": None}))
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            independent.repair_local_terminal(
+                self.pins, self.store, **(reviewed_terminal | {"reviewed_receipt": active}))
+        self.assertEqual(self.pin_path.read_bytes(), frozen)
+
+        held_local = self.pin_path.with_suffix(".held")
+        save_local = self.pins._save
+
+        def replace_local_during_repair(db, tip, *, pending):
+            save_local(db, tip, pending=pending)
+            self.pin_path.rename(held_local)
+            self.pin_path.write_bytes(frozen)
+            self.pin_path.chmod(0o600)
+
+        with patch.object(self.pins, "_save", replace_local_during_repair):
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                independent.repair_local_terminal(self.pins, self.store, **reviewed_terminal)
+        self.assertEqual(self.pin_path.read_bytes(), frozen)
+        held_local.replace(self.pin_path)
+        self.assertEqual(read_handoff(**reviewed_terminal),
+                         {"receipt": terminal, "localRepairRequired": True})
+
         self.assertEqual(independent.repair_local_terminal(
-            self.pins, self.store, reviewed_receipt=terminal, operator_record=quarantine),
-            terminal)
+            self.pins, self.store, **reviewed_terminal), terminal)
         self.assertEqual(self.pins.latest(), terminal)
+        repaired = self.pin_path.read_bytes()
+        for _ in range(2):
+            self.assertEqual(read_handoff(**reviewed_terminal),
+                             {"receipt": terminal, "localRepairRequired": False})
+            self.assertEqual(independent.repair_local_terminal(
+                self.pins, self.store, **reviewed_terminal), terminal)
+            self.assertEqual(self.pin_path.read_bytes(), repaired)
+            self.assertEqual(self.store_path.read_bytes(), signed_bytes)
+            self.assertEqual(independent._store.path.read_bytes(), independently_retained)
 
         for path, content in old_files.items():
             path.write_bytes(content)
@@ -805,6 +858,57 @@ class PromotionCheckpointTests(unittest.TestCase):
         self.assertFalse(stage.exists())
         for _ in range(2):
             self.assertEqual(inspect(), {"receipt": tip, "additionalLinkPresent": False})
+
+    def test_active_checkpoint_operations_refuse_an_independent_commit_while_waiting(self):
+        stage, exported, active = self.reviewed_staging_link()
+        independent = self.retain_independent_recovery_receipt(active)
+        evidence = self.recovery_evidence() | {"recovery_receipt": independent}
+        unrelated = stage.with_name("operator-note")
+        unrelated.write_bytes(b"preserve")
+        published = self.checkpoint_path.read_bytes()
+        record, terminal, _ = self.advance_signed_witness(active)
+        store = independent._store
+        pin, save = store._pin, store._save
+        attempting_pin = Barrier(3, timeout=5)
+        operations = []
+
+        def mark_pin(*args, **kwargs):
+            attempting_pin.wait()
+            return pin(*args, **kwargs)
+
+        def inspect():
+            return self.checkpoint.inspect_recovered(exported, trusted_receipt=active, **evidence)
+
+        def cleanup():
+            self.checkpoint.cleanup_recovered_stage(stage, exported, trusted_receipt=active,
+                                                    **evidence)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            def hold_commit(db, tip, *, pending):
+                save(db, tip, pending=pending)
+                waiting = [pool.submit(inspect), pool.submit(cleanup)]
+                operations.extend(waiting)
+                attempting_pin.wait()
+                for operation in waiting:
+                    with self.assertRaises(TimeoutError):
+                        operation.result(timeout=0.05)
+                self.assertTrue(stage.samefile(self.checkpoint_path))
+
+            with (patch.object(store, "_save", hold_commit),
+                  patch.object(store, "_pin", mark_pin),
+                  patch.object(self.pins, "_open", wraps=self.pins._open) as open_local):
+                self.assertEqual(independent.retain_terminal(
+                    self.pins, self.store, expected_receipt=active, reviewed_receipt=terminal,
+                    operator_record=record), terminal)
+                self.assertEqual(len(operations), 2)
+                for operation in operations:
+                    with self.assertRaises(recovery.DecimalRecoveryDenied):
+                        operation.result(timeout=5)
+                open_local.assert_not_called()
+        self.assertEqual(store.latest(), terminal)
+        self.assertTrue(stage.samefile(self.checkpoint_path))
+        self.assertEqual(self.checkpoint_path.read_bytes(), published)
+        self.assertEqual(unrelated.read_bytes(), b"preserve")
 
     def recover_checkpoint(self, exported, tip):
         return receipts.DecimalPromotionCheckpoint.recover(

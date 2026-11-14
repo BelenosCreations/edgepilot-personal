@@ -8,14 +8,14 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 
 ## Verification and checkpoint
 
-- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.132 from the merged PR for `development/v0.2.132-interrupted-receipt-review`. A later verified main checkpoint takes precedence.
-- Verified v0.2.131 baseline. PR #159 head `f2620d125aaa98befc7a999b8e26af93dd03b1f1` passed [Actions #43590390753](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43590390753). Main `93aec3c4ee2892fc6f6cb33f683e3c702f6e2339` passed [Actions #43590580624](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43590580624), matched live Render deployment `dep-dbs4e049v7es73bfkqp0`, and returned HTTP 200 from `/healthz`. No PRs were open.
-- v0.2.132 rehearses process exit after the witness commits and verifies exact signed review before retaining an independent terminal receipt. See [milestone notes](PAPER_INTERRUPTED_RECEIPT_REVIEW_V02132.md).
+- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.133 from the merged PR for `development/v0.2.133-terminal-handoff-readback`. A later verified main checkpoint takes precedence.
+- Verified v0.2.132 baseline. PR #160 head `9fdd11ae0b2519de3bb490e961bdeb59730dc016` passed [Actions #43592329780](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43592329780). Main `d9777361c7c4024a696dfb37f193d3389db4e724` passed [Actions #43592546621](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43592546621), matched live Render deployment `dep-dbs4pvdckfvc73d6rip0`, and returned HTTP 200 from `/healthz`. No PRs were open.
+- v0.2.133 distinguishes pending local repair from a completed terminal handoff and preserves stale staging candidates when the independent receipt advances. See [milestone notes](PAPER_TERMINAL_HANDOFF_READBACK_V02133.md).
 
 ## Next safe development batch
 
-1. Rehearse process exit after the independent terminal receipt commits and before the frozen local receipt is repaired. Require reviewed readback to distinguish pending local repair from a complete handoff and preserve exact signed evidence across repeated repair attempts.
-2. Rehearse an independent receipt transaction committing while active checkpoint readback and reviewed cleanup wait. Verify stale evidence refusal and preserve the selected link, unrelated candidates, exact archive pins, and repeated second-generation readback. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open. Keep authenticated paper preflight detached from execution.
+1. Rehearse terminal local repair exiting immediately after its commit and verify reviewed readback on reopen. Distinguish a missing local receipt from ambiguous local evidence under the exact independent receipt and signed witness, while preserving the existing staged recovery path.
+2. Audit the operator steps across terminal receipt recovery and exact-pin tenant archive recovery. Verify an incorrect archive pin or an unrelated staging candidate cannot be accepted even after successful terminal repair. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open. Keep authenticated paper preflight detached from execution.
 3. Continue source-attributed and session-only Public research under the user's instruction to assume provider permission. Use real history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance). Earlier snapshot and MSFT quote acceptance still apply.
 
 ## Restrictions and workflow
@@ -26,6 +26,10 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.132 — 2026-11-14 — Interrupted receipt review
+
+Offline recovery verifies exact signed review after a process exits between the witness commit and terminal receipt retention. See [interrupted receipt review](PAPER_INTERRUPTED_RECEIPT_REVIEW_V02132.md).
 
 ## v0.2.131 — 2026-11-14 — Independent checkpoint evidence
 

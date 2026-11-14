@@ -1,3 +1,13 @@
+## v0.2.133 — 2026-11-14 America/New_York — Terminal handoff readback
+
+**Added** — Read-only offline handoff inspection reports whether an existing local receipt needs repair. It requires the exact independent receipt and signed terminal record and verifies that the local receipt belongs to that witness history.
+
+**Changed** — Repair rechecks the existing local receipt, independent receipt, and signed witness after staging the update and before commit.
+
+**Tests** — All 915 local tests passed, including 143 focused tests. Rehearsed process exit after independent retention, a local receipt replacement before repair commit, repeated exact repair, and an independent commit while active checkpoint inspection and cleanup wait. Preserved pinned archive readback and checked that monthly synthetic Public history refreshes with source attribution.
+
+**Limitations** — Rollback of every retained copy, cross-resource power-loss consistency, and real Public history verification on the owner's device remain open.
+
 ## v0.2.132 — 2026-11-14 America/New_York — Interrupted receipt review
 
 **Changed** — Offline terminal receipt retention rechecks the independent receipt and signed witness files after exact review and before committing the receipt. A replaced witness leaves the transaction uncommitted.
