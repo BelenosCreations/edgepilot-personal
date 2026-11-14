@@ -888,6 +888,132 @@ class PromotionCheckpointTests(unittest.TestCase):
         self.assertEqual(retained.inspect_local_terminal(self.pins, self.store, **evidence),
                          {"receipt": evidence["reviewed_receipt"], "additionalLinkPresent": True})
 
+    def test_terminal_cleanup_rechecks_exact_publication_and_evidence_after_unlink(self):
+        retained, evidence, stage, _ = self.terminal_cleanup_fixture()
+        self.assert_cleanup_final_review(
+            self.pin_path, stage, retained._store.path,
+            partial(retained.inspect_local_terminal, self.pins, self.store, **evidence),
+            partial(retained.cleanup_local_terminal_stage, stage, self.pins, self.store, **evidence),
+            evidence["reviewed_receipt"])
+
+    def test_checkpoint_cleanup_rechecks_exact_publication_and_evidence_after_unlink(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        independent = self.retain_independent_recovery_receipt(tip)
+        evidence = self.recovery_evidence() | {"recovery_receipt": independent}
+        self.assert_cleanup_final_review(
+            self.checkpoint_path, stage, independent._store.path,
+            partial(self.checkpoint.inspect_recovered, exported, trusted_receipt=tip, **evidence),
+            partial(self.checkpoint.cleanup_recovered_stage, stage, exported,
+                    trusted_receipt=tip, **evidence),
+            tip)
+
+    def assert_cleanup_final_review(self, target, stage, independent, inspect, cleanup, tip):
+        sync, unlink = os.fsync, os.unlink
+        expected = {"receipt": tip, "additionalLinkPresent": False}
+        published = target.read_bytes()
+        note = stage.with_name("operator-note")
+        note.write_bytes(b"preserve")
+
+        # A replacement directory can contain the exact link. Cleanup must
+        # refuse it if the directory changed while opening the selection.
+        folder = stage.parent
+        held_folder = folder.with_name(folder.name + ".held")
+        open_path = os.open
+
+        def displace_on_open(path, *args, **kwargs):
+            if path == folder:
+                folder.rename(held_folder)
+                folder.mkdir(mode=0o700)
+                (held_folder / stage.name).rename(stage)
+            return open_path(path, *args, **kwargs)
+
+        with (patch.object(receipts.os, "open", displace_on_open),
+              self.assertRaises(recovery.DecimalRecoveryDenied)):
+            cleanup()
+        self.assertTrue(stage.samefile(target))
+        self.assertEqual((held_folder / note.name).read_bytes(), b"preserve")
+        stage.rename(held_folder / stage.name)
+        folder.rmdir()
+        held_folder.rename(folder)
+
+        for event in ("destination at unlink", "destination at sync", "evidence at sync",
+                      "sidecar at sync", "stage at sync", "process exit"):
+            with self.subTest(event=event):
+                saved_target = target.with_suffix(".held")
+                saved_evidence = independent.with_suffix(".held")
+                sidecar = target.with_name(target.name + "-wal")
+
+                def replace_target():
+                    target.rename(saved_target)
+                    target.write_bytes(published)
+                    target.chmod(0o600)
+
+                def unlink_then_replace(*args, **kwargs):
+                    unlink(*args, **kwargs)
+                    replace_target()
+
+                def interfere_at_sync(fd):
+                    sync(fd)
+                    if not os.path.samestat(os.fstat(fd), folder.stat()):
+                        return
+                    if event == "destination at sync":
+                        replace_target()
+                    elif event == "evidence at sync":
+                        independent.rename(saved_evidence)
+                    elif event == "sidecar at sync":
+                        sidecar.write_bytes(b"ambiguous sidecar")
+                    elif event == "stage at sync":
+                        stage.write_bytes(b"unrelated candidate")
+                    elif event == "process exit":
+                        os._exit(95)
+
+                def run_cleanup():
+                    if event == "destination at unlink":
+                        with patch.object(receipts.os, "unlink", unlink_then_replace):
+                            cleanup()
+                    else:
+                        with patch.object(receipts.os, "fsync", interfere_at_sync):
+                            cleanup()
+
+                if event == "process exit":
+                    pid = os.fork()
+                    if pid == 0:
+                        try:
+                            run_cleanup()
+                        finally:
+                            os._exit(96)
+                    _, status = os.waitpid(pid, 0)
+                    self.assertEqual(os.waitstatus_to_exitcode(status), 95)
+                else:
+                    with self.assertRaises(recovery.DecimalRecoveryDenied):
+                        run_cleanup()
+                if saved_target.exists():
+                    # Fresh readback can accept the authenticated identical
+                    # replacement even though the interrupted operation refused it.
+                    self.assertEqual(inspect(), expected)
+                    self.assertFalse(saved_target.samefile(target))
+                    saved_target.replace(target)
+                if saved_evidence.exists():
+                    with self.assertRaises(recovery.DecimalRecoveryDenied):
+                        inspect()
+                    saved_evidence.rename(independent)
+                if sidecar.exists():
+                    with self.assertRaises(recovery.DecimalRecoveryDenied):
+                        inspect()
+                    self.assertEqual(sidecar.read_bytes(), b"ambiguous sidecar")
+                    sidecar.unlink()
+                if stage.exists():
+                    self.assertEqual(stage.read_bytes(), b"unrelated candidate")
+                    with self.assertRaises(recovery.DecimalRecoveryDenied):
+                        cleanup()
+                    self.assertEqual(stage.read_bytes(), b"unrelated candidate")
+                    stage.unlink()
+                self.assertEqual(inspect(), expected)
+                self.assertEqual(target.read_bytes(), published)
+                self.assertEqual(note.read_bytes(), b"preserve")
+                if event != "process exit":
+                    os.link(target, stage)
+
     def test_terminal_review_refuses_late_publication_and_stage_sidecars(self):
         retained, evidence, terminal_stage, _ = self.terminal_cleanup_fixture()
         self.assert_cleanup_preserves_late_sidecars(

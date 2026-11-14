@@ -95,10 +95,12 @@ vm.runInNewContext(fs.readFileSync(process.argv[1], "utf8"), {
   const refresh = el("loadHistory").fire("click");
   assert.equal(el("historyRows").children.length, 0);
   const newMonth = result("MONTH");
+  newMonth.sourceExpectedBars = 0;
   newMonth.bars[0].close = "201.15";
   pending.shift().resolve(reply(200, newMonth));
   await refresh;
-  assert.match(el("historyEvidence").textContent, /Public API · MSFT · One month/);
+  assert.match(el("historyEvidence").textContent,
+               /Public API · MSFT · One month · 1 displayed bar · 0 expected by Public/);
   assert.equal(el("historyRows").children[0].children[4].textContent, "201.15");
 
   const obsoleteSymbol = el("loadHistory").fire("click");
@@ -160,6 +162,13 @@ vm.runInNewContext(fs.readFileSync(process.argv[1], "utf8"), {
   const wrongSource = el("loadHistory").fire("click");
   pending.shift().resolve(reply(200, {...result("WEEK"), source: "Other source"}));
   await wrongSource;
+  assert.equal(el("historyRows").children.length, 0);
+  assert.equal(el("historyTable").hidden, true);
+  assert.equal(el("status").textContent, "Public history response could not be verified.");
+
+  const persisted = el("loadHistory").fire("click");
+  pending.shift().resolve(reply(200, {...result("WEEK"), dataPersisted: true}));
+  await persisted;
   assert.equal(el("historyRows").children.length, 0);
   assert.equal(el("historyTable").hidden, true);
   assert.equal(el("status").textContent, "Public history response could not be verified.");
