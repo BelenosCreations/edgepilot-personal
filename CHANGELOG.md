@@ -1,3 +1,11 @@
+## v0.2.137 — 2026-11-14 America/New_York — Publication readback integrity
+
+**Changed** — Terminal receipt and active checkpoint readback verify the published file identity and link count after checking independent evidence. Active checkpoint readback also refuses SQLite sidecars that appear during review.
+
+**Tests** — All 925 local tests passed, including 113 focused tests. Readback refuses unlink, byte-identical replacement and staging link removal during review. Terminal and checkpoint cleanup preserve late-arriving sidecars at either path. Synthetic weekly Public history keeps the expected count tied to the regular series.
+
+**Limitations** — Owner-device Public history acceptance, combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
+
 ## v0.2.136 — 2026-11-14 America/New_York — Terminal publication review
 
 **Changed** — Terminal handoff inspection, publication readback, and reviewed cleanup recheck SQLite sidecars after verifying the independent evidence.
