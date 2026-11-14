@@ -1,3 +1,11 @@
+## v0.2.141 — 2026-11-14 America/New_York — Staging-directory retirement review
+
+**Changed** — Offline terminal receipt and active checkpoint publication recheck the exact destination and independent evidence after staging-directory retirement. Cleanup verifies the staging name after the sidecar check before unlink.
+
+**Tests** — All 932 local tests passed, including 112 focused tests. Rehearsals cover replacement of the destination and staging directory, missing independent evidence, a new staging name, interrupted directory removal and competing cleanup. Synthetic weekly history refuses a response that only contains extended or overnight series.
+
+**Limitations** — Filesystem operations retain small race windows. Owner-device Public history acceptance, combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
+
 ## v0.2.140 — 2026-11-14 America/New_York — Publication cleanup readback
 
 **Changed** — Offline terminal receipt and active checkpoint cleanup refuse a staging directory replaced while opening it. After staging unlink and directory sync, cleanup rechecks the published file, independent evidence, both directories and late staging names or SQLite sidecars.

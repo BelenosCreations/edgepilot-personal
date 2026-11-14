@@ -66,6 +66,20 @@ def _require_directory_identity(path, expected):
         recovery._deny()
 
 
+def _require_same_file(expected, current):
+    if (not os.path.samestat(expected, current) or current.st_ctime_ns != expected.st_ctime_ns
+            or current.st_nlink != expected.st_nlink):
+        recovery._deny()
+
+
+def _require_absent(path, *, dir_fd=None):
+    try:
+        os.stat(path, dir_fd=dir_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        return
+    recovery._deny()
+
+
 class DecimalReceiptStore:
     """A separately operated receipt pin and persistent rotation reservation."""
 
@@ -207,9 +221,7 @@ class DecimalReceiptStore:
                 if self._read(db, pending=False) != receipt:
                     recovery._deny()
                 after = self.path.lstat()
-                if (not os.path.samestat(before, after) or before.st_ctime_ns != after.st_ctime_ns
-                        or before.st_nlink != after.st_nlink):
-                    recovery._deny()
+                _require_same_file(before, after)
                 _require_directory_identity(self.path.parent, directory)
                 yield after
                 _require_directory_identity(self.path.parent, directory)
@@ -221,10 +233,7 @@ class DecimalReceiptStore:
             recheck_evidence()
             _require_no_sidecars(self.path)
             current = self.path.lstat()
-            if (not os.path.samestat(verified, current)
-                    or verified.st_ctime_ns != current.st_ctime_ns
-                    or verified.st_nlink != current.st_nlink):
-                recovery._deny()
+            _require_same_file(verified, current)
             return {"receipt": receipt.copy(), "additionalLinkPresent": current.st_nlink == 2}
 
     @contextmanager
@@ -267,15 +276,15 @@ class DecimalReceiptStore:
                 linked = False
                 with stage._read_published(receipt) as verified:
                     def require_verified_stage():
+                        _require_directory_identity(self.path.parent, destination)
+                        _require_directory_identity(folder, staging)
+                        _require_no_sidecars(self.path, stage.path)
                         current = os.stat(filename, dir_fd=folder_fd, follow_symlinks=False)
                         if (verified.st_nlink != 1 or current.st_nlink != 1
                                 or current.st_ctime_ns != verified.st_ctime_ns
                                 or not os.path.samestat(verified, current)
                                 or not os.path.samestat(verified, os.fstat(stage_fd))):
                             recovery._deny()
-                        _require_directory_identity(self.path.parent, destination)
-                        _require_directory_identity(folder, staging)
-                        _require_no_sidecars(self.path, stage.path)
 
                     recheck_evidence()
                     require_verified_stage()
@@ -298,18 +307,31 @@ class DecimalReceiptStore:
                             or published.st_mtime_ns != verified.st_mtime_ns
                             or published.st_size != verified.st_size):
                         recovery._deny()
-                    self._unlink_published_stage(
+                    publication = self._unlink_published_stage(
                         stage.path, folder_fd, destination, published, recheck_evidence)
                 _require_directory_identity(self.path.parent, destination)
                 _require_directory_identity(folder, staging)
+                removed = False
                 try:
                     folder.rmdir()
+                    removed = True
                 except OSError as error:
                     # A nonempty staging directory can remain after publication.
                     if error.errno != errno.ENOTEMPTY:
                         raise
                 if not linked:
                     recovery._deny()
+                recheck_evidence()
+                _require_directory_identity(self.path.parent, destination)
+                if removed:
+                    if os.fstat(folder_fd).st_nlink != 0:
+                        recovery._deny()
+                    _require_absent(folder)
+                else:
+                    _require_directory_identity(folder, staging)
+                    _require_absent(filename, dir_fd=folder_fd)
+                _require_no_sidecars(self.path, stage.path)
+                _require_same_file(publication, self.path.lstat())
         except OSError:
             recovery._deny()
 
@@ -322,14 +344,13 @@ class DecimalReceiptStore:
         _require_directory_identity(self.path.parent, destination)
         staging = os.fstat(folder_fd)
         _require_directory_identity(stage_path.parent, staging)
+        _require_no_sidecars(self.path, stage_path)
         current = self.path.lstat()
         link = os.stat(stage_path.name, dir_fd=folder_fd, follow_symlinks=False)
-        if (verified.st_nlink != 2 or current.st_nlink != 2
-                or current.st_ctime_ns != verified.st_ctime_ns
-                or not os.path.samestat(verified, current)
-                or not os.path.samestat(verified, link)):
+        if verified.st_nlink != 2:
             recovery._deny()
-        _require_no_sidecars(self.path, stage_path)
+        _require_same_file(verified, current)
+        _require_same_file(verified, link)
         os.unlink(stage_path.name, dir_fd=folder_fd)
         unlinked = self.path.lstat()
         os.fsync(folder_fd)
@@ -338,17 +359,14 @@ class DecimalReceiptStore:
         _require_directory_identity(stage_path.parent, staging)
         _require_no_sidecars(self.path, stage_path)
         current = self.path.lstat()
-        if (not os.path.samestat(verified, unlinked) or not os.path.samestat(unlinked, current)
-                or current.st_nlink != 1 or current.st_ctime_ns != unlinked.st_ctime_ns
+        _require_same_file(unlinked, current)
+        if (not os.path.samestat(verified, current) or current.st_nlink != 1
                 or current.st_mtime_ns != verified.st_mtime_ns
                 or current.st_size != verified.st_size or current.st_mode != verified.st_mode
                 or current.st_uid != verified.st_uid):
             recovery._deny()
-        try:
-            os.stat(stage_path.name, dir_fd=folder_fd, follow_symlinks=False)
-        except FileNotFoundError:
-            return
-        recovery._deny()
+        _require_absent(stage_path.name, dir_fd=folder_fd)
+        return current
 
     def publish(self, witness, proposed):
         """Reserve before publishing a record and retain only its exact successor."""
