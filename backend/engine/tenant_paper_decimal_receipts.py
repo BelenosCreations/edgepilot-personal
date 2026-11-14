@@ -58,6 +58,14 @@ def _require_no_sidecars(*paths):
         recovery._deny()
 
 
+def _require_directory_identity(path, expected):
+    current = path.lstat()
+    if (not stat.S_ISDIR(current.st_mode) or not os.path.samestat(expected, current)
+            or current.st_uid != os.getuid() or stat.S_IMODE(current.st_mode) != 0o700
+            or path != path.resolve(strict=True)):
+        recovery._deny()
+
+
 class DecimalReceiptStore:
     """A separately operated receipt pin and persistent rotation reservation."""
 
@@ -193,6 +201,7 @@ class DecimalReceiptStore:
     @contextmanager
     def _read_published(self, receipt):
         try:
+            directory = self.path.parent.lstat()
             before = self.path.lstat()
             with self._open(read_only=True) as db:
                 if self._read(db, pending=False) != receipt:
@@ -201,7 +210,9 @@ class DecimalReceiptStore:
                 if (not os.path.samestat(before, after) or before.st_ctime_ns != after.st_ctime_ns
                         or before.st_nlink != after.st_nlink):
                     recovery._deny()
+                _require_directory_identity(self.path.parent, directory)
                 yield after
+                _require_directory_identity(self.path.parent, directory)
         except OSError:
             recovery._deny()
 
@@ -227,6 +238,7 @@ class DecimalReceiptStore:
             # Cleanup takes this lock before the evidence locks. Refuse an active
             # publisher immediately, even while it holds those evidence locks.
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            _require_directory_identity(self.path.parent, info)
             yield fd
         finally:
             os.close(fd)
@@ -234,18 +246,23 @@ class DecimalReceiptStore:
     def _publish_staged(self, receipt, recheck_evidence, *, prefix, filename):
         try:
             self._check_directory()
-            if os.path.lexists(self.path):
-                recovery._deny()
-            folder = Path(tempfile.mkdtemp(prefix=prefix, dir=self.path.parent))
-            stage = DecimalReceiptStore(folder / filename, receipt_key=self.key,
-                                        _protocol=self._protocol)
-            with stage._lock_staging_directory() as folder_fd, ExitStack() as descriptors:
+            with ExitStack() as descriptors:
+                destination_fd = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+                descriptors.callback(os.close, destination_fd)
+                destination = os.fstat(destination_fd)
+                _require_directory_identity(self.path.parent, destination)
+                if os.path.lexists(self.path):
+                    recovery._deny()
+                folder = Path(tempfile.mkdtemp(prefix=prefix, dir=self.path.parent))
+                stage = DecimalReceiptStore(folder / filename, receipt_key=self.key,
+                                            _protocol=self._protocol)
+                folder_fd = descriptors.enter_context(stage._lock_staging_directory())
+                staging = os.fstat(folder_fd)
+                _require_directory_identity(self.path.parent, destination)
                 stage._initialize(receipt)
                 stage_fd = os.open(filename, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
                                    dir_fd=folder_fd)
                 descriptors.callback(os.close, stage_fd)
-                destination_fd = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-                descriptors.callback(os.close, destination_fd)
                 linked = False
                 with stage._read_published(receipt) as verified:
                     def require_verified_stage():
@@ -253,11 +270,10 @@ class DecimalReceiptStore:
                         if (verified.st_nlink != 1 or current.st_nlink != 1
                                 or current.st_ctime_ns != verified.st_ctime_ns
                                 or not os.path.samestat(verified, current)
-                                or not os.path.samestat(verified, os.fstat(stage_fd))
-                                or not os.path.samestat(os.fstat(folder_fd), folder.lstat())
-                                or not os.path.samestat(os.fstat(destination_fd),
-                                                        self.path.parent.lstat())):
+                                or not os.path.samestat(verified, os.fstat(stage_fd))):
                             recovery._deny()
+                        _require_directory_identity(self.path.parent, destination)
+                        _require_directory_identity(folder, staging)
                         _require_no_sidecars(self.path, stage.path)
 
                     recheck_evidence()
@@ -271,17 +287,20 @@ class DecimalReceiptStore:
                     except FileExistsError:
                         # Retire only our exact unpublished stage after losing
                         # the exclusive link. Leave other names for review.
+                        recheck_evidence()
                         require_verified_stage()
                         os.unlink(filename, dir_fd=folder_fd)
                 if linked:
+                    _require_directory_identity(self.path.parent, destination)
                     published = self.path.lstat()
                     if (not os.path.samestat(published, verified)
                             or published.st_mtime_ns != verified.st_mtime_ns
                             or published.st_size != verified.st_size):
                         recovery._deny()
-                    self._unlink_published_stage(stage.path, folder_fd, published, recheck_evidence)
-                if not os.path.samestat(os.fstat(folder_fd), folder.lstat()):
-                    recovery._deny()
+                    self._unlink_published_stage(
+                        stage.path, folder_fd, destination, published, recheck_evidence)
+                _require_directory_identity(self.path.parent, destination)
+                _require_directory_identity(folder, staging)
                 try:
                     folder.rmdir()
                 except OSError as error:
@@ -293,22 +312,27 @@ class DecimalReceiptStore:
         except OSError:
             recovery._deny()
 
-    def _unlink_published_stage(self, stage_path, folder_fd, verified, recheck_evidence):
+    def _unlink_published_stage(self, stage_path, folder_fd, destination, verified, recheck_evidence):
         # Sync the destination before removing the other name. A failure after
         # unlink requires exact readback because the removal may have happened.
+        _require_directory_identity(self.path.parent, destination)
         _sync_directory(self.path.parent)
         recheck_evidence()
+        _require_directory_identity(self.path.parent, destination)
+        staging = os.fstat(folder_fd)
+        _require_directory_identity(stage_path.parent, staging)
         current = self.path.lstat()
         link = os.stat(stage_path.name, dir_fd=folder_fd, follow_symlinks=False)
         if (verified.st_nlink != 2 or current.st_nlink != 2
                 or current.st_ctime_ns != verified.st_ctime_ns
                 or not os.path.samestat(verified, current)
-                or not os.path.samestat(verified, link)
-                or not os.path.samestat(os.fstat(folder_fd), stage_path.parent.lstat())):
+                or not os.path.samestat(verified, link)):
             recovery._deny()
         _require_no_sidecars(self.path, stage_path)
         os.unlink(stage_path.name, dir_fd=folder_fd)
         os.fsync(folder_fd)
+        _require_directory_identity(self.path.parent, destination)
+        _require_directory_identity(stage_path.parent, staging)
 
     def publish(self, witness, proposed):
         """Reserve before publishing a record and retain only its exact successor."""
@@ -610,11 +634,13 @@ class DecimalRecoveryReceipt:
             recovery._deny()
         stage = DecimalReceiptStore(stage_path, receipt_key=receipts.key)
         try:
+            destination = target.parent.lstat()
             with (stage._lock_staging_directory() as folder_fd,
                   self._verified_terminal(receipts, witness, reviewed_receipt, operator_record)
                   as (tip, recheck_evidence),
                   receipts._read_published(tip) as verified):
-                receipts._unlink_published_stage(stage_path, folder_fd, verified, recheck_evidence)
+                receipts._unlink_published_stage(
+                    stage_path, folder_fd, destination, verified, recheck_evidence)
         except OSError:
             recovery._deny()
 
@@ -719,6 +745,7 @@ class DecimalPromotionCheckpoint:
             recovery._deny()
         stage = DecimalPromotionCheckpoint(stage_path, checkpoint_key=self._store.key)
         try:
+            destination = target.parent.lstat()
             with stage._store._lock_staging_directory() as folder_fd, self._verified_recovery(
                     exported, trusted_receipt=trusted_receipt, receipts=receipts, witness=witness,
                     ledger_path=ledger_path, reserved_receipt=reserved_receipt,
@@ -727,7 +754,7 @@ class DecimalPromotionCheckpoint:
                     recovery_receipt=recovery_receipt) as recheck_evidence:
                 with self._store._read_published(trusted_receipt) as verified:
                     self._store._unlink_published_stage(
-                        stage_path, folder_fd, verified, recheck_evidence)
+                        stage_path, folder_fd, destination, verified, recheck_evidence)
         except OSError:
             recovery._deny()
 

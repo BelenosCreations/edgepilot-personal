@@ -735,6 +735,159 @@ class PromotionCheckpointTests(unittest.TestCase):
         self.assertEqual({path: path.read_bytes() for path in preserved}, preserved)
         self.assertEqual({path: path.read_bytes() for path in evidence}, evidence)
 
+    def test_terminal_publication_preserves_relocated_directories_and_changed_loser(self):
+        retained, evidence, _, _ = self.terminal_recovery_evidence()
+        self.assert_publication_directory_review(
+            self.pin_path, ".decimal-terminal-receipt-*/receipt.db",
+            partial(retained.repair_local_terminal, self.pins, self.store, **evidence),
+            partial(retained.inspect_local_terminal, self.pins, self.store, **evidence),
+            lambda stage: retained.cleanup_local_terminal_stage(
+                stage, self.pins, self.store, **evidence),
+            evidence["reviewed_receipt"], (self.store_path, retained._store.path))
+
+    def test_checkpoint_publication_preserves_relocated_directories_and_changed_loser(self):
+        self.prepare_checkpoint()
+        tip = self.promote()
+        exported = self.checkpoint.export(expected_receipt=tip)
+        independent = self.retain_independent_recovery_receipt(tip)
+        self.checkpoint_path.unlink()
+        evidence = self.recovery_evidence() | {"recovery_receipt": independent}
+        self.assert_publication_directory_review(
+            self.checkpoint_path, ".edgepilot-checkpoint-*/checkpoint.db",
+            partial(receipts.DecimalPromotionCheckpoint.recover,
+                    self.checkpoint_path, exported, trusted_receipt=tip,
+                    checkpoint_key=self.checkpoint_key, **evidence),
+            partial(self.checkpoint.inspect_recovered, exported, trusted_receipt=tip, **evidence),
+            lambda stage: self.checkpoint.cleanup_recovered_stage(
+                stage, exported, trusted_receipt=tip, **evidence),
+            tip, (self.pin_path, self.store_path, self.path, independent._store.path))
+
+    def assert_publication_directory_review(
+            self, target, pattern, publish, inspect, cleanup, tip, evidence_paths):
+        link = os.link
+        expected = {"receipt": tip, "additionalLinkPresent": True}
+        evidence = {path: path.read_bytes() for path in evidence_paths}
+        for moved_directory in ("staging", "destination"):
+            for move_before_link in (True, False):
+                with self.subTest(directory=moved_directory, before_link=move_before_link):
+                    prior = set(target.parent.glob(pattern))
+                    moved = []
+
+                    def relocate(*args, **kwargs):
+                        stage, = set(target.parent.glob(pattern)) - prior
+                        directory = stage.parent if moved_directory == "staging" else target.parent
+                        held = directory.with_name(directory.name + ".relocated")
+                        if not move_before_link:
+                            link(*args, **kwargs)
+                        directory.rename(held)
+                        directory.mkdir(mode=0o700)
+                        note = directory / "operator-note"
+                        note.write_bytes(b"unrelated replacement")
+                        moved.append((stage, directory, held, note))
+                        if move_before_link:
+                            link(*args, **kwargs)
+
+                    with (patch.object(receipts.os, "link", relocate),
+                          self.assertRaises(recovery.DecimalRecoveryDenied)):
+                        publish()
+                    (stage, directory, held, note), = moved
+                    held_stage = held / stage.relative_to(directory)
+                    published = target if moved_directory == "staging" else held / target.name
+                    self.assertTrue(held_stage.samefile(published))
+                    if moved_directory == "staging":
+                        self.assertEqual(inspect(), expected)
+                    else:
+                        with self.assertRaises(recovery.DecimalRecoveryDenied):
+                            inspect()
+                    with self.assertRaises(recovery.DecimalRecoveryDenied):
+                        cleanup(stage)
+                    self.assertTrue(held_stage.samefile(published))
+                    self.assertEqual(note.read_bytes(), b"unrelated replacement")
+                    note.rename(held / note.name)
+                    directory.rmdir()
+                    held.rename(directory)
+                    self.assertEqual(inspect(), expected)
+                    cleanup(stage)
+                    self.assertFalse(stage.exists())
+                    self.assertEqual(inspect(), expected | {"additionalLinkPresent": False})
+                    self.assertEqual((directory / note.name).read_bytes(), b"unrelated replacement")
+                    (directory / note.name).unlink()
+                    target.unlink()
+
+        prior = set(target.parent.glob(pattern))
+        losing_stages = []
+
+        def arrive_then_replace(*args, **kwargs):
+            stage, = set(target.parent.glob(pattern)) - prior
+            replacement = stage.with_suffix(".copy")
+            shutil.copyfile(stage, target)
+            target.chmod(0o600)
+            stage.rename(replacement)
+            stage.write_bytes(b"unreviewed stage")
+            stage.chmod(0o600)
+            note = stage.with_name("operator-note")
+            note.write_bytes(b"unrelated")
+            losing_stages.append((stage, replacement, note))
+            link(*args, **kwargs)
+
+        with (patch.object(receipts.os, "link", arrive_then_replace),
+              self.assertRaises(recovery.DecimalRecoveryDenied)):
+            publish()
+        (stage, original_stage, note), = losing_stages
+        self.assertEqual(inspect(), expected | {"additionalLinkPresent": False})
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            cleanup(stage)
+        self.assertEqual(original_stage.read_bytes(), target.read_bytes())
+        self.assertEqual(stage.read_bytes(), b"unreviewed stage")
+        self.assertEqual(note.read_bytes(), b"unrelated")
+        self.assertEqual({path: path.read_bytes() for path in evidence}, evidence)
+        target.unlink()
+        prior = set(target.parent.glob(pattern))
+        independent = evidence_paths[-1]
+        held_evidence = independent.with_suffix(".held")
+
+        def arrive_then_move_evidence(*args, **kwargs):
+            candidate, = set(target.parent.glob(pattern)) - prior
+            shutil.copyfile(candidate, target)
+            target.chmod(0o600)
+            independent.rename(held_evidence)
+            link(*args, **kwargs)
+
+        with (patch.object(receipts.os, "link", arrive_then_move_evidence),
+              self.assertRaises(recovery.DecimalRecoveryDenied)):
+            publish()
+        candidate, = set(target.parent.glob(pattern)) - prior
+        self.assertEqual(candidate.read_bytes(), target.read_bytes())
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            inspect()
+        held_evidence.rename(independent)
+        self.assertEqual(inspect(), expected | {"additionalLinkPresent": False})
+        self.assertEqual({path: path.read_bytes() for path in evidence}, evidence)
+
+    def test_terminal_readback_revalidates_destination_permissions(self):
+        retained, evidence, stage, _ = self.terminal_cleanup_fixture()
+        make_recheck = receipts._evidence_recheck
+        parent = self.pin_path.parent
+
+        def change_after_review(*paths):
+            recheck = make_recheck(*paths)
+
+            def change_directory():
+                recheck()
+                parent.chmod(0o750)
+
+            return change_directory
+
+        try:
+            with (patch.object(receipts, "_evidence_recheck", change_after_review),
+                  self.assertRaises(recovery.DecimalRecoveryDenied)):
+                retained.inspect_local_terminal(self.pins, self.store, **evidence)
+        finally:
+            parent.chmod(0o700)
+        self.assertTrue(stage.samefile(self.pin_path))
+        self.assertEqual(retained.inspect_local_terminal(self.pins, self.store, **evidence),
+                         {"receipt": evidence["reviewed_receipt"], "additionalLinkPresent": True})
+
     def test_terminal_review_refuses_late_publication_and_stage_sidecars(self):
         retained, evidence, terminal_stage, _ = self.terminal_cleanup_fixture()
         self.assert_cleanup_preserves_late_sidecars(

@@ -4,18 +4,22 @@ Use this section for the next development session. The entries below record prio
 
 ## Copyable resume instruction
 
+```text
+EdgePilot Continuity 002
+
 Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on main in BelenosCreations/edgepilot-personal, independently verify the GitHub and Render checkpoint, and follow the next steps and restrictions in that file.
+```
 
 ## Verification and checkpoint
 
-- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.138 from the merged PR for `development/v0.2.138-verified-staging-publication`. A later verified main checkpoint takes precedence.
-- Verified v0.2.137 baseline. PR #165 head `f715081c7a8b3410e7710236c1096edca07792d6` passed [Actions #43604564400](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43604564400). Main `06562d046e8c3b4a60b2187b2d72dc6041eaf932` passed [Actions #43604795118](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43604795118), matched live Render deployment `dep-dbs6unp5efls73edg0ag`, and returned HTTP 200 from `/healthz`. No PRs were open.
-- v0.2.138 links the verified staged file in terminal receipt and active checkpoint recovery. It preserves refused staging candidates and permits fresh exact review. See [milestone notes](PAPER_VERIFIED_STAGING_PUBLICATION_V02138.md).
+- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.139 from the merged PR for `development/v0.2.139-publication-directory-identity`. A later verified main checkpoint takes precedence.
+- Verified v0.2.138 baseline. PR #166 head `83b9d0cb82b2b761b19398151c8057752c5d2557` passed [Actions #43618849508](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43618849508). Main `1e630c50b2e85d2f565e11f5ff8b98f939050aee` passed [Actions #43619103374](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43619103374), matched live Render deployment `dep-dbs99anf3r2c73e562dg`, and returned HTTP 200 from `/healthz`. No PRs were open.
+- v0.2.139 checks reviewed directory identity across publication and cleanup and preserves losing stages if independent evidence changes. See [milestone notes](PAPER_PUBLICATION_DIRECTORY_IDENTITY_V02139.md).
 
 ## Next safe development batch
 
-1. Rehearse replacement or relocation of the staging or destination directory while publication holds directory descriptors. Exercise interruptions around the exclusive link and verify that readback and cleanup require the exact reviewed paths and evidence.
-2. Rehearse a competing destination arrival when the losing stage changes before retirement. Verify that cleanup preserves ambiguous and unrelated files and that fresh review recognizes the exact publication. Keep tenant archive evidence independent and authenticated paper preflight detached from execution. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
+1. Rehearse changes to the published SQLite name during staging unlink and directory sync. Revalidate the exact destination and independent evidence before reporting successful cleanup. Include exact readback after sync failure or process exit.
+2. Rehearse a directory move between selecting the cleanup path and opening its descriptor, including an interrupted cleanup followed by fresh review. Preserve ambiguous files, independent tenant archive evidence and authenticated paper preflight detached from execution. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
 3. Continue source-attributed and session-only Public research under the user's instruction to assume provider permission. Use real history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance). Earlier snapshot and MSFT quote acceptance still apply.
 
 ## Restrictions and workflow
@@ -23,9 +27,13 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - Keep production paper fills, live trading, autonomous brokerage orders and bank transfers disabled. Preserve accounts, credentials, encrypted secrets, multi-user architecture, production storage and existing recovery. Use fabricated observations only in synthetic tests.
 - Retain Render service `edgepilot-private-h9tl` (`srv-dbocnb3m8hqs7386trvg`), Starter, the existing 1 GB disk, and automatic deployment from main. Add no paid services or configuration changes.
 - Work autonomously in substantial batches. Update VERSION, README, CHANGELOG, milestone notes and this handoff. Run focused and full tests. Merge only after exact-head PR CI succeeds, then independently verify merged-main CI, exact Render deploy and health.
-- At the next logical checkpoint, refresh this top section in place. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
+- At the next logical checkpoint, refresh this top section in place. Increment the EdgePilot Continuity sequence at the top of the copy block. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.138 — 2026-11-14 — Verified staging publication
+
+Offline terminal receipt and active checkpoint recovery link the exact file verified in staging and preserve refused candidates. See [verified staging publication](PAPER_VERIFIED_STAGING_PUBLICATION_V02138.md).
 
 ## v0.2.137 — 2026-11-14 — Publication readback integrity
 

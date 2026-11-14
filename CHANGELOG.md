@@ -1,3 +1,11 @@
+## v0.2.139 — 2026-11-14 America/New_York — Publication directory identity
+
+**Changed** — Offline terminal receipt and active checkpoint publication verify that open directory descriptors still refer to the reviewed paths. Readback checks destination directory identity and permissions, and a losing publication rechecks independent evidence before retiring its stage.
+
+**Tests** — All 930 local tests passed, including 109 focused tests. Rehearsals relocate or replace the staging and destination directories around the exclusive link, preserve a changed losing stage and unrelated files, and require exact evidence for fresh readback and cleanup. The synthetic weekly Public history regression checks the regular-hours request and session-only response.
+
+**Limitations** — Publication uses Linux procfs. Combined rollback of all retained evidence, cross-resource power-loss consistency and owner-device Public history acceptance remain open.
+
 ## v0.2.138 — 2026-11-14 America/New_York — Verified staging publication
 
 **Changed** — Offline terminal receipt and active checkpoint recovery recheck staging identity and SQLite sidecars, then publish the verified file through its open descriptor. A changed candidate is preserved for review.
