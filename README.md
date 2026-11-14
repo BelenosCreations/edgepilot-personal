@@ -1,3 +1,5 @@
+**v0.2.136** — Two cooperating repairs converge on one terminal receipt in the offline rehearsal. If the publisher exits with a staging link, exact readback allows reviewed cleanup. Readback and cleanup also check for SQLite sidecars that appear during review. See [terminal publication review](PAPER_TERMINAL_PUBLICATION_REVIEW_V02136.md).
+
 **v0.2.135** — Offline handoff inspection waits for a local receipt repair to commit or roll back. The missing-receipt path checks the destination and SQLite sidecars after reviewing the signed evidence. See [terminal repair ordering](PAPER_TERMINAL_REPAIR_ORDERING_V02135.md).
 
 **v0.2.134** — Operators can verify a completed local terminal receipt repair after the process exits. The offline rehearsal distinguishes a missing receipt from ambiguous evidence and verifies that tenant archive recovery still requires its own exact pin. See [terminal repair readback](PAPER_TERMINAL_REPAIR_READBACK_V02134.md).

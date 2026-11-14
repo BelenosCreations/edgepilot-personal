@@ -1,3 +1,11 @@
+## v0.2.136 — 2026-11-14 America/New_York — Terminal publication review
+
+**Changed** — Terminal handoff inspection, publication readback, and reviewed cleanup recheck SQLite sidecars after verifying the independent evidence.
+
+**Tests** — All 921 local tests passed, including 109 focused tests. Two cooperating repairs converge on a single receipt. Publication interrupted after linking remains available for exact readback and reviewed cleanup. A late SQLite sidecar leaves the published receipt and staging link intact. Synthetic owner history preserves the regular-series expected count after excluding the chart lead-in.
+
+**Limitations** — Real Public history acceptance on the owner's device, combined rollback of all retained evidence, and cross-resource power-loss consistency remain open.
+
 ## v0.2.135 — 2026-11-14 America/New_York — Terminal repair ordering
 
 **Changed** — Offline handoff inspection checks whether the missing local receipt or a sidecar appeared after the independent evidence was rechecked. Staged publication checks for SQLite sidecars immediately before the exclusive link.

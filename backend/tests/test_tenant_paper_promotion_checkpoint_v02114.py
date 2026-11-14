@@ -425,6 +425,133 @@ class PromotionCheckpointTests(unittest.TestCase):
         self.assertEqual(repair(), terminal)
         self.assertEqual(inspect(), {"receipt": terminal, "localRepairRequired": False})
 
+    def test_cooperating_terminal_repairs_converge_on_one_publication(self):
+        retained, evidence, _, _ = self.terminal_recovery_evidence()
+        terminal = evidence["reviewed_receipt"]
+        repair = partial(retained.repair_local_terminal, self.pins, self.store, **evidence)
+        inspect = partial(retained.inspect_local_terminal, self.pins, self.store, **evidence)
+        link = os.link
+        original_evidence = {path: path.read_bytes() for path in
+                             (self.store_path, retained._store.path)}
+
+        for interrupted in (False, True):
+            with self.subTest(interrupted=interrupted):
+                parent, child = socket.socketpair()
+                with parent, child:
+                    parent.settimeout(5)
+                    child.settimeout(5)
+                    pid = os.fork()
+                    if pid == 0:
+                        parent.close()
+
+                        def pause_after_link(*args, **kwargs):
+                            link(*args, **kwargs)
+                            child.sendall(b"R")
+                            if child.recv(1) != b"X":
+                                os._exit(93)
+                            if interrupted:
+                                os._exit(92)
+
+                        try:
+                            with patch.object(receipts.os, "link", pause_after_link):
+                                repair()
+                            os._exit(91)
+                        finally:
+                            os._exit(93)
+                    child.close()
+                    attempting = Event()
+                    open_independent = retained._store._open
+
+                    def mark_repair(**options):
+                        attempting.set()
+                        return open_independent(**options)
+
+                    with ThreadPoolExecutor(max_workers=1) as pool:
+                        released = False
+                        try:
+                            self.assertEqual(parent.recv(1), b"R")
+                            stage, = self.pin_path.parent.glob(".decimal-terminal-receipt-*/receipt.db")
+                            original = self.pin_path.stat()
+                            content = self.pin_path.read_bytes()
+                            self.assertTrue(stage.samefile(self.pin_path))
+                            with patch.object(retained._store, "_open", mark_repair):
+                                pending = pool.submit(repair)
+                                self.assertTrue(attempting.wait(timeout=3))
+                                with self.assertRaises(TimeoutError):
+                                    pending.result(timeout=0.05)
+                                parent.sendall(b"X")
+                                released = True
+                        finally:
+                            if not released:
+                                os.kill(pid, signal.SIGKILL)
+                            _, status = os.waitpid(pid, 0)
+                        self.assertEqual(os.waitstatus_to_exitcode(status), 92 if interrupted else 91)
+                        if interrupted:
+                            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                                pending.result(timeout=5)
+                        else:
+                            self.assertEqual(pending.result(timeout=5), terminal)
+
+                self.assertEqual(inspect(), {"receipt": terminal, "additionalLinkPresent": interrupted})
+                self.assertEqual(stage.exists(), interrupted)
+                if interrupted:
+                    self.assertTrue(stage.samefile(self.pin_path))
+                    retained.cleanup_local_terminal_stage(stage, self.pins, self.store, **evidence)
+                    self.assertEqual(repair(), terminal)
+                self.assertTrue(os.path.samestat(self.pin_path.stat(), original))
+                self.assertEqual(self.pin_path.read_bytes(), content)
+                self.assertEqual(inspect(), {"receipt": terminal, "additionalLinkPresent": False})
+                self.assertEqual({path: path.read_bytes() for path in original_evidence}, original_evidence)
+                self.pin_path.unlink()
+
+    def test_terminal_publication_refuses_sidecars_arriving_during_readback_or_cleanup(self):
+        retained, evidence, stage, _ = self.terminal_cleanup_fixture()
+        terminal = evidence["reviewed_receipt"]
+        readback = partial(retained.inspect_local_terminal, self.pins, self.store, **evidence)
+        handoff = partial(retained.inspect_terminal_handoff, self.pins, self.store, **evidence)
+        cleanup = partial(retained.cleanup_local_terminal_stage, stage, self.pins, self.store, **evidence)
+        original, published = self.pin_path.stat(), self.pin_path.read_bytes()
+        evidence_recheck = receipts._evidence_recheck
+        foreign = b"unreviewed SQLite sidecar"
+
+        for operation in (readback, handoff, cleanup):
+            for suffix in ("-journal", "-wal", "-shm"):
+                with self.subTest(operation=operation.func.__name__, suffix=suffix):
+                    sidecar = self.pin_path.with_name(self.pin_path.name + suffix)
+
+                    def recheck_then_create(*paths):
+                        recheck = evidence_recheck(*paths)
+
+                        def create_sidecar():
+                            recheck()
+                            if retained._store.path in paths:
+                                sidecar.write_bytes(foreign)
+
+                        return create_sidecar
+
+                    try:
+                        with (patch.object(receipts, "_evidence_recheck", recheck_then_create),
+                              self.assertRaises(recovery.DecimalRecoveryDenied)):
+                            operation()
+                        self.assertEqual(sidecar.read_bytes(), foreign)
+                        self.assertTrue(stage.samefile(self.pin_path))
+                        self.assertTrue(os.path.samestat(self.pin_path.stat(), original))
+                        self.assertEqual(self.pin_path.read_bytes(), published)
+                        for review in (readback, handoff, cleanup):
+                            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                                review()
+                        self.assertEqual(sidecar.read_bytes(), foreign)
+                        self.assertTrue(stage.samefile(self.pin_path))
+                    finally:
+                        sidecar.unlink(missing_ok=True)
+                    self.assertEqual(readback(), {"receipt": terminal, "additionalLinkPresent": True})
+
+        cleanup()
+        self.assertFalse(stage.exists())
+        self.assertTrue(os.path.samestat(self.pin_path.stat(), original))
+        self.assertEqual(self.pin_path.read_bytes(), published)
+        self.assertEqual(readback(), {"receipt": terminal, "additionalLinkPresent": False})
+
     def test_terminal_stage_cleanup_refuses_active_publisher_and_inexact_evidence(self):
         retained, evidence, old_witness, terminal_witness = self.terminal_recovery_evidence()
 
