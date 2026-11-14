@@ -93,7 +93,7 @@ def _stage_inventory(parent, prefix, filename, publication):
                 if not name.startswith(prefix):
                     continue
                 info = os.stat(name, dir_fd=fd, follow_symlinks=False)
-                recorded.append(info.st_ctime_ns)
+                recorded.append((info.st_dev, info.st_ino, info.st_ctime_ns))
                 entry = {"name": name, "device": info.st_dev, "inode": info.st_ino,
                          "state": "unreviewed", "entries": None, "publicationLink": False}
                 inventory.append(entry)
@@ -108,7 +108,9 @@ def _stage_inventory(parent, prefix, filename, publication):
                     entry["state"] = "populated" if names else "empty"
                     if filename in names:
                         stage = os.stat(filename, dir_fd=child, follow_symlinks=False)
-                        entry["publicationLink"] = os.path.samestat(publication, stage)
+                        recorded.append((stage.st_dev, stage.st_ino, stage.st_ctime_ns))
+                        entry["publicationLink"] = (publication is not None
+                                                    and os.path.samestat(publication, stage))
                     _require_same_file(info, os.fstat(child))
                 finally:
                     os.close(child)
@@ -272,7 +274,15 @@ class DecimalReceiptStore:
         except OSError:
             recovery._deny()
 
-    def _inspect_published(self, receipt, recheck_evidence, *, stage_names=None):
+    def _inspect_publication(self, receipt, recheck_evidence, *, stage_names=None,
+                             allow_missing=False):
+        if stage_names is not None and allow_missing:
+            try:
+                self.path.lstat()
+            except FileNotFoundError:
+                return self._inspect_missing_publication(receipt, recheck_evidence, stage_names)
+            except OSError:
+                recovery._deny()
         with self._read_published(receipt) as verified:
             result = {"receipt": receipt.copy(), "additionalLinkPresent": verified.st_nlink == 2}
             if stage_names is not None:
@@ -281,6 +291,19 @@ class DecimalReceiptStore:
             _require_no_sidecars(self.path)
             _require_same_file(verified, self.path.lstat())
             return result
+
+    def _inspect_missing_publication(self, receipt, recheck_evidence, stage_names):
+        try:
+            directory = self.path.parent.lstat()
+            self._check_missing_target()
+            stages = _stage_inventory(self.path.parent, *stage_names, None)
+            recheck_evidence()
+            self._check_missing_target()
+            _require_directory_identity(self.path.parent, directory)
+            _require_same_file(directory, self.path.parent.lstat())
+            return {"receipt": receipt.copy(), "publicationMissing": True, "stages": stages}
+        except OSError:
+            recovery._deny()
 
     @contextmanager
     def _lock_staging_directory(self):
@@ -373,6 +396,9 @@ class DecimalReceiptStore:
             recovery._deny()
         _require_same_file(verified, current)
         _require_same_file(verified, link)
+        # Reject a name substituted during review. The staging lock serializes
+        # cooperating writers across the final pathname check and unlink.
+        _require_same_file(link, os.stat(stage_path.name, dir_fd=folder_fd, follow_symlinks=False))
         os.unlink(stage_path.name, dir_fd=folder_fd)
         unlinked = self.path.lstat()
         os.fsync(folder_fd)
@@ -676,11 +702,12 @@ class DecimalRecoveryReceipt:
 
     def inspect_local_terminal(self, receipts, witness, *, reviewed_receipt, operator_record,
                                include_stages=False):
-        """Verify a published terminal receipt after interruption without changing files."""
+        """Read back a terminal receipt or inventory stages for a missing publication."""
         with self._verified_terminal(
                 receipts, witness, reviewed_receipt, operator_record) as (tip, recheck_evidence):
             names = (_TERMINAL_STAGE_PREFIX, "receipt.db") if include_stages else None
-            return receipts._inspect_published(tip, recheck_evidence, stage_names=names)
+            return receipts._inspect_publication(
+                tip, recheck_evidence, stage_names=names, allow_missing=True)
 
     def cleanup_local_terminal_stage(self, staging_path, receipts, witness, *, reviewed_receipt,
                                      operator_record):
@@ -784,7 +811,7 @@ class DecimalPromotionCheckpoint:
     def inspect_recovered(self, exported, *, trusted_receipt, receipts, witness, ledger_path,
                           reserved_receipt, prepared_receipt, operator_record, journal_key,
                           anchor_key, recovery_receipt=None, include_stages=False):
-        """Read back an exact published candidate after an interrupted recovery."""
+        """Read back a checkpoint or inventory stages with a separate receipt pin."""
         with self._verified_recovery(
                 exported, trusted_receipt=trusted_receipt, receipts=receipts, witness=witness,
                 ledger_path=ledger_path, reserved_receipt=reserved_receipt,
@@ -792,7 +819,9 @@ class DecimalPromotionCheckpoint:
                 journal_key=journal_key, anchor_key=anchor_key,
                 recovery_receipt=recovery_receipt) as recheck_evidence:
             names = (_CHECKPOINT_STAGE_PREFIX, "checkpoint.db") if include_stages else None
-            return self._store._inspect_published(trusted_receipt, recheck_evidence, stage_names=names)
+            return self._store._inspect_publication(
+                trusted_receipt, recheck_evidence, stage_names=names,
+                allow_missing=recovery_receipt is not None)
 
     def cleanup_recovered_stage(self, staging_path, exported, *, trusted_receipt, receipts,
                                 witness, ledger_path, reserved_receipt, prepared_receipt,
