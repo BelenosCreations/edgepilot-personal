@@ -5,6 +5,8 @@ import errno
 import os
 from pathlib import Path
 import shutil
+import signal
+import socket
 import sqlite3
 import tempfile
 from threading import Barrier, Event
@@ -1005,14 +1007,11 @@ class PromotionCheckpointTests(unittest.TestCase):
 
     def test_checkpoint_cleanup_holds_signed_witness_commit_until_review_finishes(self):
         stage, exported, tip = self.reviewed_staging_link()
-        quarantine = recovery.quarantine_decimal_recovery(
-            record=self.promotion, trusted_tip=recovery.evidence_tip(self.promotion),
-            operator_key=self.operator, reason="INTEGRITY_FAILURE")
         updated = self.assert_recovery_reader_holds_writer_commit(
             lambda: self.cleanup_stage(stage, exported, tip),
-            lambda: self.store.publish(quarantine, expected_receipt=tip), self.store, "_append")
+            lambda: self.advance_signed_witness(tip), self.store, "_append")
         self.assertFalse(stage.exists())
-        self.assertEqual(self.store.read(trusted_receipt=updated), (quarantine, updated, False))
+        self.assertEqual(self.store.read(trusted_receipt=updated[1]), updated)
         with self.assertRaises(recovery.DecimalRecoveryDenied):
             self.checkpoint.inspect_recovered(exported, trusted_receipt=tip,
                                               **self.recovery_evidence())
@@ -1021,16 +1020,137 @@ class PromotionCheckpointTests(unittest.TestCase):
         stage, exported, tip = self.reviewed_staging_link()
         fill = self.assert_recovery_reader_holds_writer_commit(
             lambda: self.cleanup_stage(stage, exported, tip),
-            lambda: ledger.decimal_fill(
-                self.path, hmac_key=self.replacement, request_id=str(uuid4()), side="BUY",
-                asset_class="stock", symbol="MSFT", quantity="0.25",
-                assumed_unit_price="2.00", **self.scope),
-            ledger, "_step")
+            self.append_synthetic_ledger_fill, ledger, "_step")
         self.assertFalse(stage.exists())
         self.assertFalse(fill["duplicate"])
         with self.assertRaises(recovery.DecimalRecoveryDenied):
             self.checkpoint.inspect_recovered(exported, trusted_receipt=tip,
                                               **self.recovery_evidence())
+
+    def advance_signed_witness(self, tip):
+        record = recovery.quarantine_decimal_recovery(
+            record=self.promotion, trusted_tip=recovery.evidence_tip(self.promotion),
+            operator_key=self.operator, reason="INTEGRITY_FAILURE")
+        updated = self.store.publish(record, expected_receipt=tip)
+        return record, updated, False
+
+    def append_synthetic_ledger_fill(self):
+        return ledger.decimal_fill(
+            self.path, hmac_key=self.replacement, request_id=str(uuid4()), side="BUY",
+            asset_class="stock", symbol="MSFT", quantity="0.25",
+            assumed_unit_price="2.00", **self.scope)
+
+    def assert_stale_checkpoint_operations_refused(self, stage, exported, tip, unrelated,
+                                                  *, stage_present):
+        original, content = self.checkpoint_path.stat(), self.checkpoint_path.read_bytes()
+        missing = self.checkpoint_path.with_name("missing-checkpoint.db")
+        folders = set(self.checkpoint_path.parent.iterdir())
+        for operation in (
+                lambda: self.checkpoint.inspect_recovered(
+                    exported, trusted_receipt=tip, **self.recovery_evidence()),
+                lambda: self.cleanup_stage(stage, exported, tip),
+                lambda: receipts.DecimalPromotionCheckpoint.recover(
+                    missing, exported, trusted_receipt=tip,
+                    checkpoint_key=self.checkpoint_key, **self.recovery_evidence())):
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                operation()
+            self.assertFalse(missing.exists())
+            self.assertEqual(set(self.checkpoint_path.parent.iterdir()), folders)
+            self.assertTrue(os.path.samestat(self.checkpoint_path.stat(), original))
+            self.assertEqual(self.checkpoint_path.read_bytes(), content)
+            self.assertEqual(stage.exists(), stage_present)
+            if stage_present:
+                self.assertTrue(stage.samefile(self.checkpoint_path))
+            self.assertEqual(unrelated.read_bytes(), b"unrelated evidence")
+
+    def test_checkpoint_recovery_refuses_witness_commit_before_review(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        unrelated = stage.with_name("operator-note")
+        unrelated.write_bytes(b"unrelated evidence")
+        updated = self.advance_signed_witness(tip)
+        self.assertEqual(self.store.read(trusted_receipt=updated[1]), updated)
+        self.assert_stale_checkpoint_operations_refused(
+            stage, exported, tip, unrelated, stage_present=True)
+
+    def test_checkpoint_recovery_refuses_ledger_commit_before_review(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        unrelated = stage.with_name("operator-note")
+        unrelated.write_bytes(b"unrelated evidence")
+        self.assertFalse(self.append_synthetic_ledger_fill()["duplicate"])
+        self.assert_stale_checkpoint_operations_refused(
+            stage, exported, tip, unrelated, stage_present=True)
+
+    def exit_at_cleanup_unlink_with_writer(self, cleanup, writer, recorder, method, *, unlink_first):
+        parent, child = socket.socketpair()
+        with parent, child:
+            parent.settimeout(5)
+            child.settimeout(5)
+            pid = os.fork()
+            if pid == 0:
+                parent.close()
+                unlink = os.unlink
+
+                def stop_at_unlink(*args, **kwargs):
+                    if unlink_first:
+                        unlink(*args, **kwargs)
+                    child.sendall(b"R")
+                    os._exit(95 if child.recv(1) == b"X" else 96)
+
+                try:
+                    with patch.object(receipts.os, "unlink", stop_at_unlink):
+                        cleanup()
+                finally:
+                    os._exit(96)
+            child.close()
+            began = Event()
+            write = getattr(recorder, method)
+
+            def mark_started(*args, **kwargs):
+                result = write(*args, **kwargs)
+                began.set()
+                return result
+
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                with patch.object(recorder, method, mark_started):
+                    try:
+                        self.assertEqual(parent.recv(1), b"R")
+                        pending = pool.submit(writer)
+                        self.assertTrue(began.wait(timeout=3))
+                        with self.assertRaises(TimeoutError):
+                            pending.result(timeout=0.05)
+                        parent.sendall(b"X")
+                    except BaseException:
+                        try:
+                            os.kill(pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+                        raise
+                    finally:
+                        _, status = os.waitpid(pid, 0)
+                    self.assertEqual(os.waitstatus_to_exitcode(status), 95)
+                    return pending.result(timeout=5)
+
+    def test_checkpoint_cleanup_exit_before_unlink_releases_signed_witness_writer(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        unrelated = stage.with_name("operator-note")
+        unrelated.write_bytes(b"unrelated evidence")
+        updated = self.exit_at_cleanup_unlink_with_writer(
+            lambda: self.cleanup_stage(stage, exported, tip),
+            lambda: self.advance_signed_witness(tip), self.store, "_append", unlink_first=False)
+        self.assertEqual(self.store.read(trusted_receipt=updated[1]), updated)
+        self.assert_stale_checkpoint_operations_refused(
+            stage, exported, tip, unrelated, stage_present=True)
+
+    def test_checkpoint_cleanup_exit_after_unlink_releases_ledger_writer(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        unrelated = stage.with_name("operator-note")
+        unrelated.write_bytes(b"unrelated evidence")
+        result = self.exit_at_cleanup_unlink_with_writer(
+            lambda: self.cleanup_stage(stage, exported, tip),
+            self.append_synthetic_ledger_fill, ledger, "_step", unlink_first=True)
+        self.assertFalse(result["duplicate"])
+        self.assert_stale_checkpoint_operations_refused(
+            stage, exported, tip, unrelated, stage_present=False)
 
     def assert_reviewed_cleanup_checks(self, target, stage, evidence_path, cleanup, inspect, tip):
         original, content = target.stat(), target.read_bytes()

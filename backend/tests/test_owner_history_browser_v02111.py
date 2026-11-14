@@ -157,6 +157,13 @@ vm.runInNewContext(fs.readFileSync(process.argv[1], "utf8"), {
   assert.equal(el("historyTable").hidden, true);
   assert.equal(el("status").textContent, "Public history response could not be verified.");
 
+  const wrongSource = el("loadHistory").fire("click");
+  pending.shift().resolve(reply(200, {...result("WEEK"), source: "Other source"}));
+  await wrongSource;
+  assert.equal(el("historyRows").children.length, 0);
+  assert.equal(el("historyTable").hidden, true);
+  assert.equal(el("status").textContent, "Public history response could not be verified.");
+
   const expired = el("loadHistory").fire("click");
   el("quoteSymbol").fire("input");
   pending.shift().resolve(reply(401, {}));

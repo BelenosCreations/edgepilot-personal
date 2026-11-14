@@ -711,6 +711,11 @@ class PinnedPaperRestoreTests(unittest.TestCase):
             self.assertEqual(self.destination.read_bytes(), published)
         self.assertFalse(stage.exists())
         self.assertEqual(unrelated_stage.read_bytes(), b"separate restore candidate")
+        with self.assertRaises(backup.OfflineBackupDenied):
+            backup.cleanup_pinned_paper_staging_link(
+                second_token, self.archive_key, self.destination, unrelated_stage,
+                policies=second_policies, trusted_pin=second_pin)
+        self.assertEqual(unrelated_stage.read_bytes(), b"separate restore candidate")
         self.assertTrue(os.path.samestat(published_inode, self.destination.stat()))
         self.assertEqual(self.destination.read_bytes(), published)
         self.assertEqual(inspect(second_token, second_pin, second_policies),
