@@ -223,24 +223,35 @@ class DecimalReceiptStore:
                     os.unlink(stage.path.name, dir_fd=folder_fd)
                     folder.rmdir()
                     recovery._deny()
-                # Retain both names if syncing or verifying the publication fails.
-                _sync_directory(self.path.parent)
                 published = self.path.lstat()
-                staged = os.stat(stage.path.name, dir_fd=folder_fd, follow_symlinks=False)
-                if (published.st_nlink != 2 or not os.path.samestat(published, verified)
+                if (not os.path.samestat(published, verified)
                         or published.st_mtime_ns != verified.st_mtime_ns
-                        or published.st_size != verified.st_size
-                        or not os.path.samestat(published, staged)
-                        or not os.path.samestat(os.fstat(folder_fd), folder.lstat())
-                        or any(os.path.lexists(str(path) + suffix)
-                               for path in (self.path, stage.path) for suffix in _SIDECARS)):
+                        or published.st_size != verified.st_size):
                     recovery._deny()
-                recheck_evidence()
-                os.unlink(stage.path.name, dir_fd=folder_fd)
-                os.fsync(folder_fd)
+                self._unlink_published_stage(stage.path, folder_fd, published, recheck_evidence)
+                if not os.path.samestat(os.fstat(folder_fd), folder.lstat()):
+                    recovery._deny()
                 folder.rmdir()
         except OSError:
             recovery._deny()
+
+    def _unlink_published_stage(self, stage_path, folder_fd, verified, recheck_evidence):
+        # Sync the destination before removing the other name. A failure after
+        # unlink requires exact readback because the removal may have happened.
+        _sync_directory(self.path.parent)
+        current = self.path.lstat()
+        link = os.stat(stage_path.name, dir_fd=folder_fd, follow_symlinks=False)
+        if (verified.st_nlink != 2 or current.st_nlink != 2
+                or current.st_ctime_ns != verified.st_ctime_ns
+                or not os.path.samestat(verified, current)
+                or not os.path.samestat(verified, link)
+                or not os.path.samestat(os.fstat(folder_fd), stage_path.parent.lstat())
+                or any(os.path.lexists(str(path) + suffix)
+                       for path in (self.path, stage_path) for suffix in _SIDECARS)):
+            recovery._deny()
+        recheck_evidence()
+        os.unlink(stage_path.name, dir_fd=folder_fd)
+        os.fsync(folder_fd)
 
     def publish(self, witness, proposed):
         """Reserve before publishing a record and retain only its exact successor."""
@@ -511,21 +522,7 @@ class DecimalRecoveryReceipt:
                   self._verified_terminal(receipts, witness, reviewed_receipt, operator_record)
                   as (tip, recheck_evidence),
                   receipts._read_published(tip) as verified):
-                # Make the destination name durable before removing its other link.
-                _sync_directory(target.parent)
-                current = target.lstat()
-                link = os.stat(stage_path.name, dir_fd=folder_fd, follow_symlinks=False)
-                if (verified.st_nlink != 2 or current.st_nlink != 2
-                        or current.st_ctime_ns != verified.st_ctime_ns
-                        or not os.path.samestat(verified, current)
-                        or not os.path.samestat(verified, link)
-                        or not os.path.samestat(os.fstat(folder_fd), stage_path.parent.lstat())
-                        or any(os.path.lexists(str(path) + suffix)
-                               for path in (target, stage_path) for suffix in _SIDECARS)):
-                    recovery._deny()
-                recheck_evidence()
-                os.unlink(stage_path.name, dir_fd=folder_fd)
-                os.fsync(folder_fd)
+                receipts._unlink_published_stage(stage_path, folder_fd, verified, recheck_evidence)
         except OSError:
             recovery._deny()
 
@@ -636,20 +633,8 @@ class DecimalPromotionCheckpoint:
                     prepared_receipt=prepared_receipt, operator_record=operator_record,
                     journal_key=journal_key, anchor_key=anchor_key) as recheck_evidence:
                 with self._store._read_published(trusted_receipt) as verified:
-                    _sync_directory(target.parent)
-                    current = target.lstat()
-                    link = os.stat(stage_path.name, dir_fd=folder_fd, follow_symlinks=False)
-                    if (verified.st_nlink != 2 or current.st_nlink != 2
-                            or current.st_ctime_ns != verified.st_ctime_ns
-                            or not os.path.samestat(verified, current)
-                            or not os.path.samestat(verified, link)
-                            or not os.path.samestat(os.fstat(folder_fd), stage_path.parent.lstat())
-                            or any(os.path.lexists(str(path) + suffix)
-                                   for path in (target, stage_path) for suffix in _SIDECARS)):
-                        recovery._deny()
-                    recheck_evidence()
-                    os.unlink(stage_path.name, dir_fd=folder_fd)
-                    os.fsync(folder_fd)
+                    self._store._unlink_published_stage(
+                        stage_path, folder_fd, verified, recheck_evidence)
         except OSError:
             recovery._deny()
 

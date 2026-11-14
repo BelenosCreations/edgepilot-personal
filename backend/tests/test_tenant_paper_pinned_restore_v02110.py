@@ -649,6 +649,26 @@ class PinnedPaperRestoreTests(unittest.TestCase):
                              {"quarantineVerified": True, "additionalLinkPresent": True})
             self.assertTrue(stage.samefile(self.destination))
 
+        held_stage = stage.with_suffix(".saved")
+        sync_directory = os.fsync
+
+        def swap_reviewed_stage(fd):
+            sync_directory(fd)
+            stage.rename(held_stage)
+            stage.write_bytes(published)
+            stage.chmod(0o600)
+
+        with patch.object(backup.os, "fsync", side_effect=swap_reviewed_stage):
+            with self.assertRaises(backup.OfflineBackupDenied):
+                cleanup(second_token, second_pin, second_policies)
+        self.assertFalse(stage.samefile(self.destination))
+        self.assertTrue(held_stage.samefile(self.destination))
+        self.assertEqual(stage.read_bytes(), published)
+        held_stage.replace(stage)
+        for _ in range(2):
+            self.assertEqual(inspect(second_token, second_pin, second_policies),
+                             {"quarantineVerified": True, "additionalLinkPresent": True})
+
         for operation in (inspect, cleanup):
             for token, pin, policies in ((first_token, second_pin, self.policies),
                                          (first_token, first_pin, self.policies),

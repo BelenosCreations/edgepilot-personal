@@ -1,3 +1,11 @@
+## v0.2.127 — 2026-11-13 America/New_York — Publication cleanup and readback
+
+**Changed** — Offline terminal receipt repair and active checkpoint recovery use the same staging cleanup checks during publication and operator review. Cleanup syncs the destination directory, checks the published and staged paths and recovery evidence, unlinks the selected staging name, and syncs the staging directory.
+
+**Tests** — All 898 local regressions passed, with 120 tests in the focused set. They cover process exit and sync failure after unlink, writer contention, replaced publication paths, repeated second-generation archive readback at the exact pin, and fresh source-attributed owner history on repeat retrieval.
+
+**Limitations** — Combined rollback, cross-resource power loss and real owner-device Public history acceptance remain open. Production execution remains disabled.
+
 ## v0.2.126 — 2026-11-13 America/New_York — Active checkpoint publication
 
 **Changed** — Offline active checkpoint and terminal receipt recovery share staged publication. Evidence is checked before linking and again after destination sync. Interrupted publication retains the staging link for explicit inspection and cleanup. Active checkpoint cleanup syncs the destination directory before unlink.

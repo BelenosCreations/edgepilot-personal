@@ -92,6 +92,15 @@ vm.runInNewContext(fs.readFileSync(process.argv[1], "utf8"), {
   await month;
   assert.match(el("historyEvidence").textContent, /MSFT · One month/);
 
+  const refresh = el("loadHistory").fire("click");
+  assert.equal(el("historyRows").children.length, 0);
+  const newMonth = result("MONTH");
+  newMonth.bars[0].close = "201.15";
+  pending.shift().resolve(reply(200, newMonth));
+  await refresh;
+  assert.match(el("historyEvidence").textContent, /Public API · MSFT · One month/);
+  assert.equal(el("historyRows").children[0].children[4].textContent, "201.15");
+
   const stale = el("loadHistory").fire("click");
   el("historyPeriod").value = "WEEK";
   el("historyPeriod").fire("change");

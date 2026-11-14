@@ -8,14 +8,14 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 
 ## Verification and checkpoint
 
-- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.126 from the merged PR for `development/v0.2.126-checkpoint-publication`. A later verified main checkpoint takes precedence.
-- Verified v0.2.125 baseline. PR #153 head `3d3d1da0dd570fb50f1ad64a7de3ed92135a44d2` passed [Actions #43497719350](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43497719350). Main `e5588f4a25dc65e17c0080b239df8f6be0720a85` passed [Actions #43498097693](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43498097693), matched live Render deployment `dep-dbrmqfqjnfac73aulmpg`, and returned HTTP 200 from `/healthz`. No PRs were open.
-- v0.2.126 checks evidence on both sides of active checkpoint publication and retains interrupted candidates for exact review. See [milestone notes](PAPER_CHECKPOINT_PUBLICATION_V02126.md).
+- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.127 from the merged PR for `development/v0.2.127-publication-cleanup`. A later verified main checkpoint takes precedence.
+- Verified v0.2.126 baseline. PR #154 head `2ea205d6f5646291ee6465f1c4d217757bd538ad` passed [Actions #43540239995](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43540239995). Main `9023906d12651dd8f31667b32840f401156fd5a3` passed [Actions #43540440294](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43540440294), matched live Render deployment `dep-dbrrgom8bjmc73ds3tug`, and returned HTTP 200 from `/healthz`. No PRs were open.
+- v0.2.127 exercises interrupted publication cleanup and rejects changed publication paths under review. See [milestone notes](PAPER_PUBLICATION_CLEANUP_V02127.md).
 
 ## Next safe development batch
 
-1. Rehearse interruption during the shared publication cleanup after destination sync. Cover process exit or sync failure after unlink, and verify exact readback for terminal receipts and active checkpoints. Preserve unrelated staging names and earlier recovery paths.
-2. Rehearse a cooperating writer contending with recovery evidence transactions and test refused cleanup when the published inode or stage path changes during review. Preserve exact archive pins and repeated second-generation readback. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
+1. Rehearse interruption after staging-directory sync and during staging-directory removal, including a directory that gained unrelated contents. Require exact readback for both types of publication and preserve unrelated names. Review how an operator distinguishes an empty staging directory from an unverified candidate.
+2. Rehearse cleanup contending with a signed witness update and a ledger writer at the evidence snapshot boundary. Require fresh exact verification after the writer proceeds. Preserve second-generation archive pins and recheck a changed stage without deleting other candidates. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
 3. Continue source-attributed and session-only Public research under the user's instruction to assume provider permission. Use real history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance). Earlier snapshot and MSFT quote acceptance still apply.
 
 ## Restrictions and workflow
@@ -26,6 +26,10 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.126 — 2026-11-13 — Active checkpoint publication
+
+Terminal receipts and active checkpoints check evidence at publication and retain interrupted candidates for exact review. See [active checkpoint publication](PAPER_CHECKPOINT_PUBLICATION_V02126.md).
 
 ## v0.2.125 — 2026-11-13 — Publication evidence
 
