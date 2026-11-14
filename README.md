@@ -1,3 +1,5 @@
+**v0.2.138** — Offline terminal receipt and active checkpoint recovery link the exact file verified in staging. A changed staging file or SQLite sidecar interrupts publication, and fresh review preserves unrelated staging files. See [verified staging publication](PAPER_VERIFIED_STAGING_PUBLICATION_V02138.md).
+
 **v0.2.137** — Offline terminal and active checkpoint readback recheck the published file before reporting success. Reviewed cleanup preserves the staging link when a SQLite sidecar appears under either name. See [publication readback integrity](PAPER_PUBLICATION_READBACK_INTEGRITY_V02137.md).
 
 **v0.2.136** — Two cooperating repairs converge on one terminal receipt in the offline rehearsal. If the publisher exits with a staging link, exact readback allows reviewed cleanup. Readback and cleanup also check for SQLite sidecars that appear during review. See [terminal publication review](PAPER_TERMINAL_PUBLICATION_REVIEW_V02136.md).

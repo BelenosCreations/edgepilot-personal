@@ -160,6 +160,13 @@ class OwnerMarketHistoryTests(unittest.TestCase):
         self.assertEqual(observed["sourceExpectedBars"], 9)
         self.assertEqual(observed["barCount"], 1)
         self.assertEqual(len(observed["bars"]), 1)
+        payload["regularMarket"]["expectedBars"] = 0
+        self.provider(json.dumps(payload))
+        zero_expected = self.history()
+        self.assertEqual(zero_expected["sourceExpectedBars"], 0)
+        self.assertEqual(zero_expected["bars"], observed["bars"])
+        self.assertEqual(zero_expected["source"], "Get bars v2")
+        self.assertFalse(zero_expected["dataPersisted"])
         for invalid in (True, -1, "9"):
             payload["regularMarket"]["expectedBars"] = invalid
             self.provider(json.dumps(payload))

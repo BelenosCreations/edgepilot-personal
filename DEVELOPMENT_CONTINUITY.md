@@ -8,14 +8,14 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 
 ## Verification and checkpoint
 
-- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.137 from the merged PR for `development/v0.2.137-publication-readback-integrity`. A later verified main checkpoint takes precedence.
-- Verified v0.2.136 baseline. PR #164 head `5e9c45501b671d225a92671332aae70ab5bee213` passed [Actions #43601022645](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43601022645). Main `0986cb42ff67b0d8d950ffd2567c33bf206fbff5` passed [Actions #43601271145](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43601271145), matched live Render deployment `dep-dbs6bep5efls73ecnr0g`, and returned HTTP 200 from `/healthz`. No PRs were open.
-- v0.2.137 rechecks terminal and active checkpoint publication identity after verifying independent evidence. Reviewed cleanup preserves staging names when sidecars appear. See [milestone notes](PAPER_PUBLICATION_READBACK_INTEGRITY_V02137.md).
+- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.138 from the merged PR for `development/v0.2.138-verified-staging-publication`. A later verified main checkpoint takes precedence.
+- Verified v0.2.137 baseline. PR #165 head `f715081c7a8b3410e7710236c1096edca07792d6` passed [Actions #43604564400](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43604564400). Main `06562d046e8c3b4a60b2187b2d72dc6041eaf932` passed [Actions #43604795118](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43604795118), matched live Render deployment `dep-dbs6unp5efls73edg0ag`, and returned HTTP 200 from `/healthz`. No PRs were open.
+- v0.2.138 links the verified staged file in terminal receipt and active checkpoint recovery. It preserves refused staging candidates and permits fresh exact review. See [milestone notes](PAPER_VERIFIED_STAGING_PUBLICATION_V02138.md).
 
 ## Next safe development batch
 
-1. Rehearse changed local publication during the transition from private stage verification to exclusive linking. Verify that a byte-identical replacement or late SQLite sidecar under the staging name cannot become an accepted publication.
-2. Compare terminal and active checkpoint publication behavior following refusal. Rehearse fresh review when exact evidence is restored and preserve unrelated stage files. Keep tenant archive evidence independent and authenticated paper preflight detached from execution. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
+1. Rehearse replacement or relocation of the staging or destination directory while publication holds directory descriptors. Exercise interruptions around the exclusive link and verify that readback and cleanup require the exact reviewed paths and evidence.
+2. Rehearse a competing destination arrival when the losing stage changes before retirement. Verify that cleanup preserves ambiguous and unrelated files and that fresh review recognizes the exact publication. Keep tenant archive evidence independent and authenticated paper preflight detached from execution. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
 3. Continue source-attributed and session-only Public research under the user's instruction to assume provider permission. Use real history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance). Earlier snapshot and MSFT quote acceptance still apply.
 
 ## Restrictions and workflow
@@ -26,6 +26,10 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.137 — 2026-11-14 — Publication readback integrity
+
+Offline terminal and active checkpoint readback recheck the published file after verifying independent evidence. Reviewed cleanup preserves staging names when sidecars appear. See [publication readback integrity](PAPER_PUBLICATION_READBACK_INTEGRITY_V02137.md).
 
 ## v0.2.136 — 2026-11-14 — Terminal publication review
 
