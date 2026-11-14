@@ -4,6 +4,7 @@ from contextlib import contextmanager
 import os
 from pathlib import Path
 import shutil
+import sqlite3
 import tempfile
 from threading import Barrier
 import unittest
@@ -824,6 +825,143 @@ class PromotionCheckpointTests(unittest.TestCase):
         self.assertEqual(self.checkpoint.inspect_recovered(
             exported, trusted_receipt=tip, **self.recovery_evidence()),
             {"receipt": tip, "additionalLinkPresent": False})
+
+    def assert_publication_cleanup_interruption(self, target, pattern, publish, inspect, tip):
+        unrelated = target.parent / pattern.replace("*", "unrelated")
+        unrelated.parent.mkdir(mode=0o700)
+        unrelated.write_bytes(b"separate staging candidate")
+        fsync = os.fsync
+
+        for process_exit in (True, False):
+            with self.subTest(process_exit=process_exit):
+                def stop_after_stage_unlink(fd):
+                    if not target.exists() or os.path.samestat(os.fstat(fd), target.parent.stat()):
+                        fsync(fd)
+                        return
+                    self.assertEqual(target.stat().st_nlink, 1)
+                    if process_exit:
+                        os._exit(95)
+                    raise OSError("synthetic staging sync failure after unlink")
+
+                def interrupt_publication():
+                    with patch.object(receipts.os, "fsync", side_effect=stop_after_stage_unlink):
+                        publish()
+
+                if process_exit:
+                    pid = os.fork()
+                    if pid == 0:
+                        try:
+                            interrupt_publication()
+                        finally:
+                            os._exit(96)
+                    _, status = os.waitpid(pid, 0)
+                    self.assertEqual(os.waitstatus_to_exitcode(status), 95)
+                else:
+                    with self.assertRaises(recovery.DecimalRecoveryDenied):
+                        interrupt_publication()
+
+                original, content = target.stat(), target.read_bytes()
+                self.assertEqual(list(target.parent.glob(pattern)), [unrelated])
+                for _ in range(2):
+                    self.assertEqual(inspect(), {"receipt": tip, "additionalLinkPresent": False})
+                self.assertTrue(os.path.samestat(target.stat(), original))
+                self.assertEqual(target.read_bytes(), content)
+                self.assertEqual(unrelated.read_bytes(), b"separate staging candidate")
+                if process_exit:
+                    target.unlink()
+
+    def test_terminal_publication_cleanup_interruption_after_unlink(self):
+        retained, evidence, _, _ = self.terminal_recovery_evidence()
+        self.assert_publication_cleanup_interruption(
+            self.pin_path, ".decimal-terminal-receipt-*/receipt.db",
+            lambda: retained.repair_local_terminal(self.pins, self.store, **evidence),
+            lambda: retained.inspect_local_terminal(self.pins, self.store, **evidence),
+            evidence["reviewed_receipt"])
+        self.assertEqual(self.pins.latest(), evidence["reviewed_receipt"])
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            retained.inspect_local_terminal(self.pins, self.store, **(
+                evidence | {"operator_record": self.promotion}))
+
+    def test_checkpoint_publication_cleanup_interruption_after_unlink(self):
+        self.prepare_checkpoint()
+        tip = self.promote()
+        exported = self.checkpoint.export(expected_receipt=tip)
+        self.checkpoint_path.unlink()
+        self.assert_publication_cleanup_interruption(
+            self.checkpoint_path, ".edgepilot-checkpoint-*/checkpoint.db",
+            lambda: self.recover_checkpoint(exported, tip),
+            lambda: self.checkpoint.inspect_recovered(
+                exported, trusted_receipt=tip, **self.recovery_evidence()),
+            tip)
+        self.assertEqual(self.checkpoint.latest(), tip)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.checkpoint.inspect_recovered(
+                exported | {"mac": "0" * 64}, trusted_receipt=tip, **self.recovery_evidence())
+
+    def assert_reviewed_cleanup_checks(self, target, stage, evidence_path, cleanup, inspect, tip):
+        original, content = target.stat(), target.read_bytes()
+        sync = receipts._sync_directory
+
+        def write_evidence():
+            with sqlite3.connect(evidence_path, timeout=0) as writer:
+                writer.execute("BEGIN IMMEDIATE")
+                self.assertEqual(writer.execute(
+                    "UPDATE retained_receipt SET pending=pending WHERE id=1").rowcount, 1)
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            for replacement in (target, stage, stage.parent):
+                saved = replacement.with_name(replacement.name + ".saved")
+
+                def replace_during_review(directory):
+                    sync(directory)
+                    with self.assertRaisesRegex(sqlite3.OperationalError, "database is locked"):
+                        pool.submit(write_evidence).result(timeout=5)
+                    replacement.rename(saved)
+                    if replacement == stage.parent:
+                        replacement.symlink_to(saved, target_is_directory=True)
+                    else:
+                        replacement.write_bytes(content)
+                        replacement.chmod(0o600)
+
+                with self.subTest(replacement=replacement):
+                    with patch.object(receipts, "_sync_directory", replace_during_review):
+                        with self.assertRaises(recovery.DecimalRecoveryDenied):
+                            cleanup()
+                    if replacement == stage.parent:
+                        self.assertTrue(stage.samefile(target))
+                        self.assertTrue((saved / stage.name).samefile(target))
+                        replacement.unlink()
+                    else:
+                        self.assertEqual(replacement.read_bytes(), content)
+                        self.assertFalse(replacement.samefile(saved))
+                    saved.replace(replacement)
+                    self.assertTrue(stage.samefile(target))
+                    self.assertTrue(os.path.samestat(target.stat(), original))
+                    self.assertEqual(inspect(), {"receipt": tip, "additionalLinkPresent": True})
+                    pool.submit(write_evidence).result(timeout=5)
+
+        cleanup()
+        self.assertFalse(stage.exists())
+        self.assertTrue(os.path.samestat(target.stat(), original))
+        self.assertEqual(target.read_bytes(), content)
+        self.assertEqual(inspect(), {"receipt": tip, "additionalLinkPresent": False})
+
+    def test_terminal_cleanup_refuses_replaced_publication_names_under_evidence_lock(self):
+        retained, evidence, stage, _ = self.terminal_cleanup_fixture()
+        self.assert_reviewed_cleanup_checks(
+            self.pin_path, stage, retained._store.path,
+            lambda: retained.cleanup_local_terminal_stage(stage, self.pins, self.store, **evidence),
+            lambda: retained.inspect_local_terminal(self.pins, self.store, **evidence),
+            evidence["reviewed_receipt"])
+
+    def test_checkpoint_cleanup_refuses_replaced_publication_names_under_evidence_lock(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        self.assert_reviewed_cleanup_checks(
+            self.checkpoint_path, stage, self.pin_path,
+            lambda: self.cleanup_stage(stage, exported, tip),
+            lambda: self.checkpoint.inspect_recovered(
+                exported, trusted_receipt=tip, **self.recovery_evidence()),
+            tip)
 
     def test_checkpoint_publication_rechecks_evidence_on_both_sides_of_link(self):
         self.prepare_checkpoint()

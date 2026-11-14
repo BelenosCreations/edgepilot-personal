@@ -1,3 +1,5 @@
+**v0.2.127** — Offline receipt and checkpoint recovery share the same checks when removing a staging link. Tests cover process exit after unlink, a failed directory sync, and refusal when a reviewed path changes. See [publication cleanup and readback](PAPER_PUBLICATION_CLEANUP_V02127.md).
+
 **v0.2.126** — Offline active checkpoint recovery now keeps a staging link for exact review if evidence changes after publication. Terminal receipts and active checkpoints share the same staged publication and evidence checks. See [active checkpoint publication](PAPER_CHECKPOINT_PUBLICATION_V02126.md).
 
 **v0.2.125** — Offline terminal receipt publication rechecks independent evidence before linking and after syncing. Active checkpoint readback refuses evidence that disappears or changes during review. See [publication evidence](PAPER_PUBLICATION_EVIDENCE_V02125.md).
