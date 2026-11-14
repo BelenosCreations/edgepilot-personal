@@ -1,5 +1,6 @@
 """Independent receipt storage for the offline synthetic Decimal rehearsal."""
 from contextlib import closing, contextmanager, ExitStack, nullcontext
+import errno
 import fcntl
 import hmac
 import os
@@ -231,7 +232,12 @@ class DecimalReceiptStore:
                 self._unlink_published_stage(stage.path, folder_fd, published, recheck_evidence)
                 if not os.path.samestat(os.fstat(folder_fd), folder.lstat()):
                     recovery._deny()
-                folder.rmdir()
+                try:
+                    folder.rmdir()
+                except OSError as error:
+                    # A nonempty staging directory can remain after publication.
+                    if error.errno != errno.ENOTEMPTY:
+                        raise
         except OSError:
             recovery._deny()
 

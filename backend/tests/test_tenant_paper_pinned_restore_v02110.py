@@ -650,6 +650,8 @@ class PinnedPaperRestoreTests(unittest.TestCase):
             self.assertTrue(stage.samefile(self.destination))
 
         held_stage = stage.with_suffix(".saved")
+        unrelated_stage = stage.with_name(backup._STAGE_PREFIX + "separate.db")
+        unrelated_stage.write_bytes(b"separate restore candidate")
         sync_directory = os.fsync
 
         def swap_reviewed_stage(fd):
@@ -708,6 +710,7 @@ class PinnedPaperRestoreTests(unittest.TestCase):
             self.assertEqual(stage.exists(), link_remains)
             self.assertEqual(self.destination.read_bytes(), published)
         self.assertFalse(stage.exists())
+        self.assertEqual(unrelated_stage.read_bytes(), b"separate restore candidate")
         self.assertTrue(os.path.samestat(published_inode, self.destination.stat()))
         self.assertEqual(self.destination.read_bytes(), published)
         self.assertEqual(inspect(second_token, second_pin, second_policies),

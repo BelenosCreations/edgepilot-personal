@@ -101,6 +101,16 @@ vm.runInNewContext(fs.readFileSync(process.argv[1], "utf8"), {
   assert.match(el("historyEvidence").textContent, /Public API · MSFT · One month/);
   assert.equal(el("historyRows").children[0].children[4].textContent, "201.15");
 
+  const obsoleteSymbol = el("loadHistory").fire("click");
+  el("quoteSymbol").value = "spy";
+  el("quoteSymbol").fire("input");
+  pending.shift().resolve(reply(200, result("MONTH")));
+  await obsoleteSymbol;
+  assert.equal(el("historyTable").hidden, true);
+  assert.equal(el("historyRows").children.length, 0);
+  assert.equal(el("historyEvidence").textContent, "No history loaded.");
+  el("quoteSymbol").value = "msft";
+
   const stale = el("loadHistory").fire("click");
   el("historyPeriod").value = "WEEK";
   el("historyPeriod").fire("change");

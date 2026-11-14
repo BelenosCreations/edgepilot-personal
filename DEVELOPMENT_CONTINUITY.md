@@ -8,14 +8,14 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 
 ## Verification and checkpoint
 
-- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.127 from the merged PR for `development/v0.2.127-publication-cleanup`. A later verified main checkpoint takes precedence.
-- Verified v0.2.126 baseline. PR #154 head `2ea205d6f5646291ee6465f1c4d217757bd538ad` passed [Actions #43540239995](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43540239995). Main `9023906d12651dd8f31667b32840f401156fd5a3` passed [Actions #43540440294](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43540440294), matched live Render deployment `dep-dbrrgom8bjmc73ds3tug`, and returned HTTP 200 from `/healthz`. No PRs were open.
-- v0.2.127 exercises interrupted publication cleanup and rejects changed publication paths under review. See [milestone notes](PAPER_PUBLICATION_CLEANUP_V02127.md).
+- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.128 from the merged PR for `development/v0.2.128-staging-retirement`. A later verified main checkpoint takes precedence.
+- Verified v0.2.127 baseline. PR #155 head `e3da8876880b1070f4a1cf0b3c1688f3599cc321` passed [Actions #43543755949](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43543755949). Main `eb6b9f444c57386e44df619039e9445aa65748b0` passed [Actions #43544007049](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43544007049), matched live Render deployment `dep-dbrs2767bikc73ed9eo0`, and returned HTTP 200 from `/healthz`. No PRs were open.
+- v0.2.128 exercises staging directory removal and verifies fresh readback after cooperating witness and ledger writes. See [milestone notes](PAPER_STAGING_DIRECTORY_V02128.md).
 
 ## Next safe development batch
 
-1. Rehearse interruption after staging-directory sync and during staging-directory removal, including a directory that gained unrelated contents. Require exact readback for both types of publication and preserve unrelated names. Review how an operator distinguishes an empty staging directory from an unverified candidate.
-2. Rehearse cleanup contending with a signed witness update and a ledger writer at the evidence snapshot boundary. Require fresh exact verification after the writer proceeds. Preserve second-generation archive pins and recheck a changed stage without deleting other candidates. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
+1. Rehearse the inverse order at the recovery evidence snapshot boundary. Allow the signed witness update or synthetic ledger write to commit first and require old inspection, publication and cleanup attempts to refuse with all candidates preserved.
+2. Rehearse a process exit with a pending cooperating writer and verify what becomes visible when the recovery locks are released. Preserve the exact archive pin, repeated second-generation readback and unrelated candidates. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
 3. Continue source-attributed and session-only Public research under the user's instruction to assume provider permission. Use real history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance). Earlier snapshot and MSFT quote acceptance still apply.
 
 ## Restrictions and workflow
@@ -26,6 +26,10 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.127 — 2026-11-13 — Publication cleanup and readback
+
+Offline terminal receipt and active checkpoint recovery share staging cleanup checks during publication and operator review. See [publication cleanup and readback](PAPER_PUBLICATION_CLEANUP_V02127.md).
 
 ## v0.2.126 — 2026-11-13 — Active checkpoint publication
 

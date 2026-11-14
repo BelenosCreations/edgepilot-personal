@@ -1,3 +1,11 @@
+## v0.2.128 — 2026-11-13 America/New_York — Staging directory recovery
+
+**Fixed** — Offline terminal receipt and active checkpoint publication can succeed when unrelated files prevent removal of the staging directory after the published database and staging cleanup have been synced. Other directory-removal errors still require exact readback.
+
+**Tests** — All 902 local tests passed, with 124 in the focused set. Coverage includes process exit before and after directory removal, a removal error, and witness and ledger writers that wait for the recovery snapshot to release before committing. After either commit, the previous evidence is refused. The second-generation archive preserves a neighboring staging candidate, and the browser discards late Public history after a symbol change.
+
+**Limitations** — Combined rollback, power-loss consistency across resources, and real owner-device Public history acceptance remain open. Production execution remains disabled.
+
 ## v0.2.127 — 2026-11-13 America/New_York — Publication cleanup and readback
 
 **Changed** — Offline terminal receipt repair and active checkpoint recovery use the same staging cleanup checks during publication and operator review. Cleanup syncs the destination directory, checks the published and staged paths and recovery evidence, unlinks the selected staging name, and syncs the staging directory.
