@@ -84,6 +84,12 @@ class OwnerMarketHistoryTests(unittest.TestCase):
         self.assertEqual(observed["sourceExpectedBars"], 22)
         self.assertFalse(observed["dataPersisted"])
         self.assertFalse(observed["paperFillEligible"])
+        payload["regularMarket"]["bars"][0]["close"] = "9.200"
+        self.provider(json.dumps(payload))
+        refreshed = self.history(symbol="MSFT", period="MONTH")
+        self.assertEqual(refreshed["bars"][0]["close"], "9.200")
+        self.assertEqual(refreshed["source"], "Get bars v2")
+        self.assertFalse(refreshed["dataPersisted"])
 
     def test_failure_and_mismatched_instrument_refuse(self):
         for payload, status in ((self.payload(), 302), (self.payload(symbol="MSFT"), 200),
