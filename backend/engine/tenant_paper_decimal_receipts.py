@@ -313,19 +313,21 @@ class DecimalReceiptStore:
                 _require_directory_identity(folder, staging)
                 removed = False
                 try:
-                    folder.rmdir()
+                    os.rmdir(folder.name, dir_fd=destination_fd)
                     removed = True
                 except OSError as error:
                     # A nonempty staging directory can remain after publication.
                     if error.errno != errno.ENOTEMPTY:
                         raise
+                if removed:
+                    if os.fstat(folder_fd).st_nlink != 0:
+                        recovery._deny()
+                    os.fsync(destination_fd)
                 if not linked:
                     recovery._deny()
                 recheck_evidence()
                 _require_directory_identity(self.path.parent, destination)
                 if removed:
-                    if os.fstat(folder_fd).st_nlink != 0:
-                        recovery._deny()
                     _require_absent(folder)
                 else:
                     _require_directory_identity(folder, staging)

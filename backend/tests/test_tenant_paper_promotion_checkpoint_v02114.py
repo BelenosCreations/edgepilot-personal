@@ -2053,27 +2053,36 @@ class PromotionCheckpointTests(unittest.TestCase):
 
     def assert_publication_directory_retirement(
             self, target, pattern, publish, inspect, tip, independent):
-        rmdir = Path.rmdir
+        rmdir, fsync = os.rmdir, os.fsync
         separate = target.parent / pattern.replace("*", "separate")
         separate.parent.mkdir(mode=0o700)
         separate.write_bytes(b"separate candidate")
 
         folder_pattern = pattern.split("/")[0]
-        for outcome in ("exit-before", "exit-after", "removal-error", "replace-destination",
-                        "move-evidence", "replace-folder", "populate-stage", "populated"):
+        for outcome in ("exit-before", "exit-after", "exit-after-parent-sync", "removal-error",
+                        "parent-sync-error", "replace-destination", "move-evidence",
+                        "replace-folder", "relocate-folder", "relocate-parent",
+                        "populate-stage", "populated"):
             with self.subTest(outcome=outcome):
                 existing = set(target.parent.glob(folder_pattern))
                 saved_target = target.with_suffix(".held")
                 saved_evidence = independent.with_suffix(".held")
+                moved_folder = target.parent / "relocated-stage"
+                moved_parent = target.parent.with_name(target.parent.name + ".relocated")
+                retirement_removed = False
+                parent_synced = False
                 refused = False
 
-                def retire(folder):
+                def retire(name, *, dir_fd):
+                    nonlocal retirement_removed
+                    folder = target.parent / name
+                    self.assertTrue(os.path.samestat(os.fstat(dir_fd), target.parent.stat()))
                     self.assertEqual(target.stat().st_nlink, 1)
                     self.assertEqual(list(folder.iterdir()), [])
                     if outcome == "exit-before":
                         os._exit(95)
                     if outcome == "exit-after":
-                        rmdir(folder)
+                        rmdir(name, dir_fd=dir_fd)
                         os._exit(95)
                     if outcome == "removal-error":
                         raise OSError(errno.EIO, "synthetic directory removal error")
@@ -2081,26 +2090,54 @@ class PromotionCheckpointTests(unittest.TestCase):
                         target.rename(saved_target)
                         shutil.copyfile(saved_target, target)
                         target.chmod(0o600)
-                        rmdir(folder)
+                        rmdir(name, dir_fd=dir_fd)
                         return
                     if outcome == "move-evidence":
                         independent.rename(saved_evidence)
-                        rmdir(folder)
+                        rmdir(name, dir_fd=dir_fd)
                         return
                     if outcome == "replace-folder":
-                        rmdir(folder)
+                        rmdir(name, dir_fd=dir_fd)
                         folder.mkdir(mode=0o700)
                         (folder / "operator-note").write_bytes(b"keep this file")
                         return
+                    if outcome == "relocate-folder":
+                        folder.rename(moved_folder)
+                        (moved_folder / "original-note").write_bytes(b"original directory")
+                        folder.mkdir(mode=0o700)
+                        (folder / "operator-note").write_bytes(b"keep this file")
+                        rmdir(name, dir_fd=dir_fd)
+                        return
+                    if outcome == "relocate-parent":
+                        target.parent.rename(moved_parent)
+                        target.parent.mkdir(mode=0o700)
+                        folder.mkdir(mode=0o700)
+                        (folder / "operator-note").write_bytes(b"keep this file")
+                        rmdir(name, dir_fd=dir_fd)
+                        return
                     if outcome == "populate-stage":
                         (folder / pattern.split("/")[1]).write_bytes(b"keep this file")
-                        rmdir(folder)
+                        rmdir(name, dir_fd=dir_fd)
                         return
-                    (folder / "operator-note").write_bytes(b"keep this file")
-                    rmdir(folder)
+                    if outcome == "populated":
+                        (folder / "operator-note").write_bytes(b"keep this file")
+                    rmdir(name, dir_fd=dir_fd)
+                    retirement_removed = True
+
+                def review_parent_sync(fd):
+                    nonlocal parent_synced
+                    if retirement_removed:
+                        self.assertTrue(os.path.samestat(os.fstat(fd), target.parent.stat()))
+                        parent_synced = True
+                        if outcome == "parent-sync-error":
+                            raise OSError(errno.EIO, "synthetic retirement sync error")
+                    fsync(fd)
+                    if parent_synced and outcome == "exit-after-parent-sync":
+                        os._exit(95)
 
                 def run_publication():
-                    with patch.object(Path, "rmdir", retire):
+                    with (patch.object(receipts.os, "rmdir", retire),
+                          patch.object(receipts.os, "fsync", review_parent_sync)):
                         publish()
 
                 if outcome == "populated":
@@ -2121,18 +2158,32 @@ class PromotionCheckpointTests(unittest.TestCase):
                     self.assertEqual(os.waitstatus_to_exitcode(status), 95)
 
                 remaining = set(target.parent.glob(folder_pattern)) - existing
-                if outcome in ("exit-after", "replace-destination", "move-evidence"):
+                if outcome == "relocate-parent":
+                    folder, = remaining
+                    self.assertEqual((folder / "operator-note").read_bytes(), b"keep this file")
+                    self.assertFalse((moved_parent / folder.name).exists())
+                    with self.assertRaises(recovery.DecimalRecoveryDenied):
+                        inspect()
+                    folder.rename(moved_parent / folder.name)
+                    target.parent.rmdir()
+                    moved_parent.rename(target.parent)
+                elif outcome in ("exit-after", "exit-after-parent-sync", "parent-sync-error",
+                                 "replace-destination", "move-evidence"):
                     self.assertEqual(remaining, set())
                 else:
                     folder, = remaining
                     files = list(folder.iterdir())
-                    if outcome in ("populated", "replace-folder", "populate-stage"):
+                    if outcome in ("populated", "replace-folder", "relocate-folder", "populate-stage"):
                         kept, = files
                         self.assertEqual(kept.name, pattern.split("/")[1]
                                          if outcome == "populate-stage" else "operator-note")
                         self.assertEqual(kept.read_bytes(), b"keep this file")
                     else:
                         self.assertEqual(files, [])
+                if outcome == "relocate-folder":
+                    self.assertEqual((moved_folder / "original-note").read_bytes(), b"original directory")
+                if outcome == "parent-sync-error":
+                    self.assertTrue(parent_synced)
                 self.assertEqual(separate.read_bytes(), b"separate candidate")
                 if saved_evidence.exists():
                     with self.assertRaises(recovery.DecimalRecoveryDenied):
@@ -2172,6 +2223,83 @@ class PromotionCheckpointTests(unittest.TestCase):
             lambda: self.checkpoint.inspect_recovered(
                 exported, trusted_receipt=tip, **evidence),
             tip, independent._store.path)
+
+    def assert_concurrent_review_after_interrupted_cleanup(self, target, stage, independent,
+                                                           inspect, cleanup, tip):
+        published = target.read_bytes()
+        note = stage.with_name("operator-note")
+        note.write_bytes(b"preserve this file")
+        unlink = os.unlink
+
+        for did_unlink in (False, True):
+            with self.subTest(did_unlink=did_unlink):
+                if did_unlink:
+                    os.link(target, stage)
+
+                def interrupt(*args, **kwargs):
+                    if did_unlink:
+                        unlink(*args, **kwargs)
+                    os._exit(95)
+
+                pid = os.fork()
+                if pid == 0:
+                    try:
+                        with patch.object(receipts.os, "unlink", interrupt):
+                            cleanup()
+                    finally:
+                        os._exit(96)
+                _, status = os.waitpid(pid, 0)
+                self.assertEqual(os.waitstatus_to_exitcode(status), 95)
+
+                held = independent.with_suffix(".held")
+                independent.rename(held)
+                try:
+                    for operation in (inspect, cleanup):
+                        with self.assertRaises(recovery.DecimalRecoveryDenied):
+                            operation()
+                    self.assertEqual(stage.exists(), not did_unlink)
+                finally:
+                    held.rename(independent)
+
+                start = Barrier(3, timeout=5)
+
+                def compete(operation):
+                    start.wait()
+                    return operation()
+
+                with ThreadPoolExecutor(max_workers=3) as pool:
+                    reader = pool.submit(compete, inspect)
+                    attempts = [pool.submit(compete, cleanup) for _ in range(2)]
+                    result = reader.result(timeout=8)
+                    errors = [attempt.exception(timeout=8) for attempt in attempts]
+                self.assertEqual(result["receipt"], tip)
+                if did_unlink:
+                    self.assertFalse(result["additionalLinkPresent"])
+                self.assertEqual(errors.count(None), int(not did_unlink))
+                self.assertEqual(sum(isinstance(error, recovery.DecimalRecoveryDenied)
+                                     for error in errors), 1 + int(did_unlink))
+                self.assertEqual(inspect(), {"receipt": tip, "additionalLinkPresent": False})
+                self.assertFalse(stage.exists())
+                self.assertEqual(target.read_bytes(), published)
+                self.assertEqual(note.read_bytes(), b"preserve this file")
+
+    def test_terminal_readback_and_competing_cleanup_retry_after_process_exit(self):
+        retained, evidence, stage, _ = self.terminal_cleanup_fixture()
+        self.assert_concurrent_review_after_interrupted_cleanup(
+            self.pin_path, stage, retained._store.path,
+            partial(retained.inspect_local_terminal, self.pins, self.store, **evidence),
+            partial(retained.cleanup_local_terminal_stage, stage, self.pins, self.store, **evidence),
+            evidence["reviewed_receipt"])
+
+    def test_checkpoint_readback_and_competing_cleanup_retry_after_process_exit(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        independent = self.retain_independent_recovery_receipt(tip)
+        evidence = self.recovery_evidence() | {"recovery_receipt": independent}
+        self.assert_concurrent_review_after_interrupted_cleanup(
+            self.checkpoint_path, stage, independent._store.path,
+            partial(self.checkpoint.inspect_recovered, exported, trusted_receipt=tip, **evidence),
+            partial(self.checkpoint.cleanup_recovered_stage, stage, exported,
+                    trusted_receipt=tip, **evidence), tip)
 
     def assert_recovery_reader_holds_writer_commit(self, cleanup, writer, recorder, method):
         began = Event()
