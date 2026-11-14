@@ -652,6 +652,16 @@ class PinnedPaperRestoreTests(unittest.TestCase):
         held_stage = stage.with_suffix(".saved")
         unrelated_stage = stage.with_name(backup._STAGE_PREFIX + "separate.db")
         unrelated_stage.write_bytes(b"separate restore candidate")
+        with closing(sqlite3.connect(self.destination, isolation_level=None)) as writer:
+            writer.execute("BEGIN IMMEDIATE")
+            with self.assertRaises(backup.OfflineBackupDenied):
+                cleanup(second_token, second_pin, second_policies)
+            self.assertTrue(stage.samefile(self.destination))
+            writer.rollback()
+        for _ in range(2):
+            self.assertEqual(inspect(second_token, second_pin, second_policies),
+                             {"quarantineVerified": True, "additionalLinkPresent": True})
+        self.assertEqual(unrelated_stage.read_bytes(), b"separate restore candidate")
         sync_directory = os.fsync
 
         def swap_reviewed_stage(fd):

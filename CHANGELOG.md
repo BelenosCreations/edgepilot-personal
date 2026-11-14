@@ -1,3 +1,11 @@
+## v0.2.130 — 2026-11-13 America/New_York — Recovery writer rollback
+
+**Added** — Offline tests exercise signed witness and synthetic ledger writes that roll back while recovery holds verified read snapshots. The exact checkpoint stays readable, and fresh cleanup removes the reviewed staging link. Terminal receipt readback and cleanup wait for an independent receipt writer to release its transaction and then verify the original receipt.
+
+**Tests** — All 909 local tests passed, including 131 focused tests. A busy second-generation restore refuses cleanup and permits repeated exact-pin readback after rollback. Synthetic Public history preserves source attribution and leaves the regular-series expected count absent when only the overall count is supplied.
+
+**Limitations** — Combined rollback, power-loss consistency across resources, and real owner-device Public history acceptance remain open. Production execution remains disabled.
+
 ## v0.2.129 — 2026-11-13 America/New_York — Recovery writer ordering
 
 **Added** — Offline rehearsals confirm that old checkpoint inspection, publication, and cleanup refuse after a signed witness or ledger update commits. Process-exit tests cover a pending writer on each side of staging unlink and verify which link survives after the writer commits.

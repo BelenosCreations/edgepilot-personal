@@ -1027,18 +1027,112 @@ class PromotionCheckpointTests(unittest.TestCase):
             self.checkpoint.inspect_recovered(exported, trusted_receipt=tip,
                                               **self.recovery_evidence())
 
-    def advance_signed_witness(self, tip):
+    def advance_signed_witness(self, tip, *, interrupt=None):
         record = recovery.quarantine_decimal_recovery(
             record=self.promotion, trusted_tip=recovery.evidence_tip(self.promotion),
             operator_key=self.operator, reason="INTEGRITY_FAILURE")
-        updated = self.store.publish(record, expected_receipt=tip)
+        updated = self.store.publish(record, expected_receipt=tip, _interrupt=interrupt)
         return record, updated, False
 
-    def append_synthetic_ledger_fill(self):
+    def append_synthetic_ledger_fill(self, *, fail_before_commit=False):
         return ledger.decimal_fill(
             self.path, hmac_key=self.replacement, request_id=str(uuid4()), side="BUY",
             asset_class="stock", symbol="MSFT", quantity="0.25",
-            assumed_unit_price="2.00", **self.scope)
+            assumed_unit_price="2.00", _fail_before_commit=fail_before_commit, **self.scope)
+
+    def assert_checkpoint_readback_after_writer_rollback(self, recorder, method, writer, denied):
+        stage, exported, tip = self.reviewed_staging_link()
+        unrelated = stage.with_name("operator-note")
+        unrelated.write_bytes(b"keep this file")
+        original, content = self.checkpoint_path.stat(), self.checkpoint_path.read_bytes()
+        witness_before, ledger_before = self.store_path.read_bytes(), self.path.read_bytes()
+        read = self.checkpoint._store._read_published
+        write = getattr(recorder, method)
+        attempted = []
+
+        def mark_written(*args, **kwargs):
+            result = write(*args, **kwargs)
+            attempted.append(True)
+            return result
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            @contextmanager
+            def read_with_rollback(receipt):
+                # Recovery has already acquired and verified all evidence snapshots.
+                with read(receipt) as info:
+                    with self.assertRaises(denied):
+                        pool.submit(writer, tip).result(timeout=5)
+                    yield info
+
+            with (patch.object(recorder, method, mark_written),
+                  patch.object(self.checkpoint._store, "_read_published", read_with_rollback)):
+                self.assert_checkpoint_readback(stage, exported, tip, original, content, linked=True)
+
+        self.assertEqual(attempted, [True])
+        self.assertEqual(self.store_path.read_bytes(), witness_before)
+        self.assertEqual(self.path.read_bytes(), ledger_before)
+        self.assertTrue(stage.samefile(self.checkpoint_path))
+        self.cleanup_stage(stage, exported, tip)
+        self.assert_checkpoint_readback(stage, exported, tip, original, content, linked=False)
+        self.assertEqual(unrelated.read_bytes(), b"keep this file")
+
+    def test_checkpoint_readback_and_cleanup_survive_signed_witness_rollback(self):
+        self.assert_checkpoint_readback_after_writer_rollback(
+            self.store, "_append",
+            lambda tip: self.advance_signed_witness(tip, interrupt="before_commit"),
+            recovery.DecimalRecoveryDenied)
+
+    def test_checkpoint_readback_and_cleanup_survive_ledger_rollback(self):
+        self.assert_checkpoint_readback_after_writer_rollback(
+            ledger, "_step", lambda _: self.append_synthetic_ledger_fill(fail_before_commit=True),
+            ledger.DecimalAtomicDenied)
+
+    def test_terminal_readback_and_cleanup_wait_for_independent_receipt_rollback(self):
+        retained, evidence, stage, _ = self.terminal_cleanup_fixture()
+        independent = retained._store
+        tip = evidence["reviewed_receipt"]
+        unrelated = stage.with_name("operator-note")
+        unrelated.write_bytes(b"keep this file")
+        original, content = self.pin_path.stat(), self.pin_path.read_bytes()
+        independent_before = independent.path.read_bytes()
+        pin = independent._pin
+
+        def inspect():
+            return retained.inspect_local_terminal(self.pins, self.store, **evidence)
+
+        def cleanup():
+            retained.cleanup_local_terminal_stage(stage, self.pins, self.store, **evidence)
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            for operation in (inspect, cleanup):
+                with self.subTest(operation=operation.__name__):
+                    trying = Event()
+
+                    def pin_under_contention(*args, **kwargs):
+                        trying.set()
+                        return pin(*args, **kwargs)
+
+                    with patch.object(independent, "_pin", pin_under_contention):
+                        with independent._open() as transaction:
+                            independent._save(transaction, tip, pending=True)
+                            self.assertEqual(independent._read_state(transaction), (tip, True))
+                            pending = pool.submit(operation)
+                            self.assertTrue(trying.wait(timeout=3))
+                            with self.assertRaises(TimeoutError):
+                                pending.result(timeout=0.05)
+                            self.assertTrue(stage.samefile(self.pin_path))
+                            transaction.rollback()
+                        result = pending.result(timeout=5)
+                        if operation is inspect:
+                            self.assertEqual(result, {"receipt": tip, "additionalLinkPresent": True})
+                    self.assertEqual(independent.path.read_bytes(), independent_before)
+                    self.assertEqual(independent.latest(), tip)
+                    self.assertTrue(os.path.samestat(self.pin_path.stat(), original))
+                    self.assertEqual(self.pin_path.read_bytes(), content)
+                    self.assertEqual(unrelated.read_bytes(), b"keep this file")
+
+        self.assertFalse(stage.exists())
+        self.assertEqual(inspect(), {"receipt": tip, "additionalLinkPresent": False})
 
     def assert_stale_checkpoint_operations_refused(self, stage, exported, tip, unrelated,
                                                   *, stage_present):

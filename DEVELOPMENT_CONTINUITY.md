@@ -8,14 +8,14 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 
 ## Verification and checkpoint
 
-- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.129 from the merged PR for `development/v0.2.129-recovery-writer-order`. A later verified main checkpoint takes precedence.
-- Verified v0.2.128 baseline. PR #156 head `3e8416f94e393cc53b399ae07d654cb579f9a154` passed [Actions #43545236231](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43545236231). Main `9d993052ed7ffaf5198ab7127189ee53e50a94d9` passed [Actions #43545500051](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43545500051), matched live Render deployment `dep-dbrs9jqjnfac73bkfh70`, and returned HTTP 200 from `/healthz`. No PRs were open.
-- v0.2.129 checks stale evidence after a writer commits before review or after a recovery process exits. See [milestone notes](PAPER_RECOVERY_WRITER_ORDER_V02129.md).
+- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.130 from the merged PR for `development/v0.2.130-recovery-writer-rollback`. A later verified main checkpoint takes precedence.
+- Verified v0.2.129 baseline. PR #157 head `1f2b489cd9de0851f58ee1048c4240d9a5eacdf4` passed [Actions #43547342854](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43547342854). Main `771cbbd25ec485bf073b0aa5ae52055cfb0ae9b3` passed [Actions #43547537252](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43547537252), matched live Render deployment `dep-dbrsjse417fc73es7m8g`, and returned HTTP 200 from `/healthz`. No PRs were open.
+- v0.2.130 verifies exact active and terminal recovery readback after competing writers roll back. See [milestone notes](PAPER_RECOVERY_WRITER_ROLLBACK_V02130.md).
 
 ## Next safe development batch
 
-1. Rehearse a signed witness or ledger writer rolling back after recovery has acquired its read snapshots. Verify that an unchanged exact checkpoint remains readable and that a fresh cleanup removes only the selected staging link.
-2. Exercise terminal receipt readback and cleanup with an independent receipt writer holding or rolling back a transaction. Preserve the exact archive pin, repeated second-generation readback and unrelated candidates. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
+1. Review the path from authenticated owner paper preflight to the separate offline recovery rehearsal. Identify the remaining evidence and atomicity gaps, and exercise a concrete gap with synthetic recovery fixtures. Keep execution detached from the production fill path.
+2. Evaluate separately retained monotonic evidence for combined rollback and interruption between resource commits. Preserve exact archive pins, repeated second-generation readback and unrelated candidates. Treat combined rollback of all retained evidence and cross-resource power-loss consistency as open until independently demonstrated.
 3. Continue source-attributed and session-only Public research under the user's instruction to assume provider permission. Use real history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance). Earlier snapshot and MSFT quote acceptance still apply.
 
 ## Restrictions and workflow
@@ -26,6 +26,10 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.129 — 2026-11-13 — Recovery writer ordering
+
+Offline recovery refuses stale checkpoint evidence when a competing writer commits before review or after a recovery process exits. See [recovery writer ordering](PAPER_RECOVERY_WRITER_ORDER_V02129.md).
 
 ## v0.2.128 — 2026-11-13 — Staging directory recovery
 
