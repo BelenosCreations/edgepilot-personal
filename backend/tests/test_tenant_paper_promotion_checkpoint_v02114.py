@@ -2221,6 +2221,138 @@ class PromotionCheckpointTests(unittest.TestCase):
             partial(self.checkpoint.inspect_recovered, exported, trusted_receipt=tip, **evidence),
             tip, independent._store.path)
 
+    def assert_missing_publication_inventory(
+            self, target, prefix, filename, publish, inspect, cleanup, evidence_path, tip):
+        empty = target.parent / (prefix + "empty")
+        empty.mkdir(mode=0o700)
+        symlink = target.parent / (prefix + "symlink")
+        symlink.symlink_to(empty)
+
+        pid = os.fork()
+        if pid == 0:
+            try:
+                with patch.object(receipts.os, "link", side_effect=lambda *a, **kw: os._exit(95)):
+                    publish()
+            finally:
+                os._exit(96)
+        _, status = os.waitpid(pid, 0)
+        self.assertEqual(os.waitstatus_to_exitcode(status), 95)
+        stage, = set(target.parent.glob(prefix + "*")) - {empty, symlink}
+        candidate = stage / filename
+        content = candidate.read_bytes()
+        candidate_stat = candidate.stat()
+        self.assertFalse(target.exists())
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            inspect()
+
+        def describe(path, state, entries):
+            info = path.lstat()
+            return {"name": path.name, "device": info.st_dev, "inode": info.st_ino,
+                    "state": state, "entries": entries, "publicationLink": False}
+
+        inventory = [describe(empty, "empty", []), describe(stage, "populated", [filename]),
+                     describe(symlink, "unreviewed", None)]
+        expected = {"receipt": tip, "publicationMissing": True,
+                    "stages": sorted(inventory, key=lambda entry: entry["name"])}
+        self.assertEqual(inspect(include_stages=True), expected)
+
+        inventory_stages = receipts._stage_inventory
+        sidecar = target.with_name(target.name + "-wal")
+        held_evidence = evidence_path.with_suffix(".held")
+        for late_path in (target, sidecar, held_evidence):
+            with self.subTest(late_path=late_path.name):
+                def interfere(*args):
+                    result = inventory_stages(*args)
+                    if late_path == held_evidence:
+                        evidence_path.rename(held_evidence)
+                    else:
+                        late_path.write_bytes(b"unrelated file")
+                    return result
+
+                with (patch.object(receipts, "_stage_inventory", interfere),
+                      self.assertRaises(recovery.DecimalRecoveryDenied)):
+                    inspect(include_stages=True)
+                if late_path == held_evidence:
+                    held_evidence.rename(evidence_path)
+                else:
+                    self.assertEqual(late_path.read_bytes(), b"unrelated file")
+                    late_path.unlink()
+
+        target.symlink_to(candidate)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            inspect(include_stages=True)
+        target.unlink()
+        self.assertEqual(inspect(include_stages=True), expected)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            cleanup(candidate)
+        self.assertEqual(candidate.stat(), candidate_stat)
+        self.assertEqual(candidate.read_bytes(), content)
+        self.assertFalse(target.exists())
+
+    def test_terminal_inventory_after_exit_before_publication(self):
+        retained, evidence, _, _ = self.terminal_recovery_evidence()
+        self.assert_missing_publication_inventory(
+            self.pin_path, ".decimal-terminal-receipt-", "receipt.db",
+            partial(retained.repair_local_terminal, self.pins, self.store, **evidence),
+            partial(retained.inspect_local_terminal, self.pins, self.store, **evidence),
+            lambda stage: retained.cleanup_local_terminal_stage(
+                stage, self.pins, self.store, **evidence),
+            retained._store.path, evidence["reviewed_receipt"])
+
+    def test_checkpoint_inventory_after_exit_before_publication_requires_independent_pin(self):
+        self.prepare_checkpoint()
+        tip = self.promote()
+        exported = self.checkpoint.export(expected_receipt=tip)
+        independent = self.retain_independent_recovery_receipt(tip)
+        self.checkpoint_path.unlink()
+        evidence = self.recovery_evidence() | {"trusted_receipt": tip}
+        inspect = partial(self.checkpoint.inspect_recovered, exported, **evidence)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            inspect(include_stages=True)
+        self.assert_missing_publication_inventory(
+            self.checkpoint_path, ".edgepilot-checkpoint-", "checkpoint.db",
+            partial(receipts.DecimalPromotionCheckpoint.recover, self.checkpoint_path, exported,
+                    checkpoint_key=self.checkpoint_key, recovery_receipt=independent, **evidence),
+            partial(inspect, recovery_receipt=independent),
+            lambda stage: self.checkpoint.cleanup_recovered_stage(
+                stage, exported, recovery_receipt=independent, **evidence),
+            independent._store.path, tip)
+
+    def assert_final_unlink_recheck_preserves_replacement(self, target, stage, cleanup):
+        stat_path = os.stat
+        folder = stage.parent.stat()
+        held = stage.with_suffix(".held")
+
+        def substitute_after_first_stat(path, *args, **kwargs):
+            observed = stat_path(path, *args, **kwargs)
+            fd = kwargs.get("dir_fd")
+            if path == stage.name and fd is not None and os.path.samestat(os.fstat(fd), folder):
+                if not held.exists():
+                    stage.rename(held)
+                    stage.write_bytes(b"preserve replacement")
+            return observed
+
+        with (patch.object(receipts.os, "stat", substitute_after_first_stat),
+              patch.object(receipts.os, "unlink", side_effect=AssertionError("Unexpected unlink")),
+              self.assertRaises(recovery.DecimalRecoveryDenied)):
+            cleanup()
+        self.assertTrue(held.samefile(target))
+        self.assertEqual(stage.read_bytes(), b"preserve replacement")
+
+    def test_terminal_cleanup_refuses_substitution_after_stage_stat(self):
+        retained, evidence, stage, _ = self.terminal_cleanup_fixture()
+        self.assert_final_unlink_recheck_preserves_replacement(
+            self.pin_path, stage, partial(retained.cleanup_local_terminal_stage, stage,
+                                          self.pins, self.store, **evidence))
+
+    def test_checkpoint_cleanup_refuses_substitution_after_stage_stat(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        independent = self.retain_independent_recovery_receipt(tip)
+        self.assert_final_unlink_recheck_preserves_replacement(
+            self.checkpoint_path, stage,
+            partial(self.checkpoint.cleanup_recovered_stage, stage, exported, trusted_receipt=tip,
+                    recovery_receipt=independent, **self.recovery_evidence()))
+
     def assert_concurrent_review_after_interrupted_cleanup(self, target, stage, independent,
                                                            inspect, cleanup, tip):
         published = target.read_bytes()

@@ -5,21 +5,21 @@ Use this section for the next development session. The entries below record prio
 ## Copyable resume instruction
 
 ```text
-EdgePilot Continuity 006
+EdgePilot Continuity 007
 
 Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on main in BelenosCreations/edgepilot-personal, independently verify the GitHub and Render checkpoint, and follow the next steps and restrictions in that file.
 ```
 
 ## Verification and checkpoint
 
-- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.143 from the merged PR for `development/v0.2.143-preserved-stage-inventory`. A later verified main checkpoint takes precedence.
-- Verified v0.2.142 baseline. PR #170 head `b662fbc79e4f06fba8c0fe5e4f21910da0e362c4` passed [Actions #43648387220](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43648387220). Main `0ea7557bd478388bcd0c6ecd5f5312bbfa43f289` passed [Actions #43648554455](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43648554455), matched live Render deployment `dep-dbse2j95efls73emn0gg`, and returned HTTP 200 from `/healthz`. No PRs were open.
-- v0.2.143 preserves staging directories and provides an opt-in, authenticated inventory. See [milestone notes](PAPER_PRESERVED_STAGE_INVENTORY_V02143.md).
+- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.144 from the merged PR for `development/v0.2.144-missing-publication-inventory`. A later verified main checkpoint takes precedence.
+- Verified v0.2.143 baseline. PR #171 head `0cc48db2a0d4e45a15d4fbd1638e16e4dcd9b6cf` passed [Actions #43650509935](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43650509935). Main `c9056fb6f957a0c2642d509b7180cbdd95aad77d` passed [Actions #43650689902](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43650689902), matched live Render deployment `dep-dbsee9lckfvc73diomlg`, and returned HTTP 200 from `/healthz`. No PRs were open.
+- v0.2.144 adds metadata inventory for missing publications with exact independent evidence and rechecks the stage name before unlink. See [milestone notes](PAPER_MISSING_PUBLICATION_INVENTORY_V02144.md).
 
 ## Next safe development batch
 
-1. Rehearse exact inventory when the publication is absent after an interrupted attempt. Determine whether authenticated independent evidence can support a read-only inventory while the destination is missing. Keep ambiguous stage names and files available for review.
-2. Rehearse a same-name file replacement immediately before explicit staging unlink. Preserve independently retained tenant archive evidence and keep authenticated paper preflight detached from execution. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
+1. Rehearse concurrent offline review when a cooperating publisher is still staging or creates the destination during a missing-publication scan. Confirm that stale independent pins and renamed stage directories fail closed while stage contents stay available for review.
+2. Keep the reported inventory limited to names and metadata unless separately authenticated evidence justifies a stronger claim. Preserve the independently retained tenant archive pin and keep authenticated paper preflight detached from execution. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
 3. Continue source-attributed and session-only Public research under the user's instruction to assume provider permission. Use real history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance). Earlier snapshot and MSFT quote acceptance still apply.
 
 ## Restrictions and workflow
@@ -30,6 +30,10 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Increment the EdgePilot Continuity sequence at the top of the copy block. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.143 — 2026-11-14 — Preserved staging inventory
+
+Offline receipt and checkpoint recovery preserves staging directories and provides authenticated publication inventory. See [preserved staging inventory](PAPER_PRESERVED_STAGE_INVENTORY_V02143.md).
 
 ## v0.2.142 — 2026-11-14 — Staging-directory removal and sync
 

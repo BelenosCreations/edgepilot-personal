@@ -1,3 +1,11 @@
+## v0.2.144 — 2026-11-14 America/New_York — Inventory after publication interruption
+
+**Changed** — Offline terminal receipt and active checkpoint readback can inventory staging directories with a missing destination using exact independent evidence. Cleanup checks the selected stage name again immediately before unlink.
+
+**Tests** — Synthetic process exits before publication leave read-only inventory available. The rehearsal refuses late destinations, SQLite sidecars, missing evidence and a substituted stage file. Public history regression covers source attribution and clearing data when the session or selection changes.
+
+**Limitations** — Inventory lists stage metadata. Cleanup requires an authenticated publication. Pathname verification and unlink remain separate filesystem operations. Combined rollback of all retained evidence, cross-resource power-loss consistency and owner-device Public history acceptance remain open.
+
 ## v0.2.143 — 2026-11-14 America/New_York — Preserved staging inventory
 
 **Changed** — Offline receipt and checkpoint recovery retain their staging directories after cleanup and keep the candidate when exclusive publication loses a race. Authenticated readback can inventory the matching entries without following symlinks.
