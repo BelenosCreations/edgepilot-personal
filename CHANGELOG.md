@@ -1,3 +1,11 @@
+## v0.2.143 — 2026-11-14 America/New_York — Preserved staging inventory
+
+**Changed** — Offline receipt and checkpoint recovery retain their staging directories after cleanup and keep the candidate when exclusive publication loses a race. Authenticated readback can inventory the matching entries without following symlinks.
+
+**Tests** — All 934 local tests passed, including 114 focused tests. Rehearsals preserve an empty same-name replacement, refuse a changing inventory, and verify fresh readback after parent sync interruptions. Synthetic Public history preserves the source bars and excludes provider gain/loss fields.
+
+**Limitations** — Empty stages accumulate until manually reviewed. The inventory covers the matching direct children and requires a currently authenticated publication. Cross-resource power-loss consistency, combined rollback of all retained evidence, and owner-device Public history acceptance remain open.
+
 ## v0.2.142 — 2026-11-14 America/New_York — Staging-directory removal and sync
 
 **Changed** — Offline terminal receipt and active checkpoint recovery remove the staging directory relative to the held destination directory. After successful removal, they sync that directory before final publication review.
