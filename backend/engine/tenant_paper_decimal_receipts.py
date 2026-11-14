@@ -239,24 +239,47 @@ class DecimalReceiptStore:
             folder = Path(tempfile.mkdtemp(prefix=prefix, dir=self.path.parent))
             stage = DecimalReceiptStore(folder / filename, receipt_key=self.key,
                                         _protocol=self._protocol)
-            with stage._lock_staging_directory() as folder_fd:
+            with stage._lock_staging_directory() as folder_fd, ExitStack() as descriptors:
                 stage._initialize(receipt)
-                try:
-                    with stage._read_published(receipt) as verified:
-                        recheck_evidence()
-                        _require_no_sidecars(self.path)
-                        os.link(stage.path, self.path, follow_symlinks=False)
-                except FileExistsError:
-                    # An exclusive-link loser has only its own unpublished stage.
-                    os.unlink(stage.path.name, dir_fd=folder_fd)
-                    folder.rmdir()
-                    recovery._deny()
-                published = self.path.lstat()
-                if (not os.path.samestat(published, verified)
-                        or published.st_mtime_ns != verified.st_mtime_ns
-                        or published.st_size != verified.st_size):
-                    recovery._deny()
-                self._unlink_published_stage(stage.path, folder_fd, published, recheck_evidence)
+                stage_fd = os.open(filename, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                                   dir_fd=folder_fd)
+                descriptors.callback(os.close, stage_fd)
+                destination_fd = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+                descriptors.callback(os.close, destination_fd)
+                linked = False
+                with stage._read_published(receipt) as verified:
+                    def require_verified_stage():
+                        current = os.stat(filename, dir_fd=folder_fd, follow_symlinks=False)
+                        if (verified.st_nlink != 1 or current.st_nlink != 1
+                                or current.st_ctime_ns != verified.st_ctime_ns
+                                or not os.path.samestat(verified, current)
+                                or not os.path.samestat(verified, os.fstat(stage_fd))
+                                or not os.path.samestat(os.fstat(folder_fd), folder.lstat())
+                                or not os.path.samestat(os.fstat(destination_fd),
+                                                        self.path.parent.lstat())):
+                            recovery._deny()
+                        _require_no_sidecars(self.path, stage.path)
+
+                    recheck_evidence()
+                    require_verified_stage()
+                    try:
+                        # Linux linkat follows the descriptor, so replacement of
+                        # the staging name cannot substitute a different inode.
+                        os.link(f"/proc/self/fd/{stage_fd}", self.path.name,
+                                dst_dir_fd=destination_fd, follow_symlinks=True)
+                        linked = True
+                    except FileExistsError:
+                        # Retire only our exact unpublished stage after losing
+                        # the exclusive link. Leave other names for review.
+                        require_verified_stage()
+                        os.unlink(filename, dir_fd=folder_fd)
+                if linked:
+                    published = self.path.lstat()
+                    if (not os.path.samestat(published, verified)
+                            or published.st_mtime_ns != verified.st_mtime_ns
+                            or published.st_size != verified.st_size):
+                        recovery._deny()
+                    self._unlink_published_stage(stage.path, folder_fd, published, recheck_evidence)
                 if not os.path.samestat(os.fstat(folder_fd), folder.lstat()):
                     recovery._deny()
                 try:
@@ -265,6 +288,8 @@ class DecimalReceiptStore:
                     # A nonempty staging directory can remain after publication.
                     if error.errno != errno.ENOTEMPTY:
                         raise
+                if not linked:
+                    recovery._deny()
         except OSError:
             recovery._deny()
 

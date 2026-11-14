@@ -1,3 +1,11 @@
+## v0.2.138 — 2026-11-14 America/New_York — Verified staging publication
+
+**Changed** — Offline terminal receipt and active checkpoint recovery recheck staging identity and SQLite sidecars, then publish the verified file through its open descriptor. A changed candidate is preserved for review.
+
+**Tests** — All 927 local tests passed, including 114 focused tests. Both recovery paths refuse byte-identical replacement and late sidecars, allow fresh exact review, and preserve independent evidence and unrelated staging files. Synthetic Public history preserves a reported zero regular-series expected count.
+
+**Limitations** — Publication uses Linux procfs. Owner-device Public history acceptance, combined rollback of all retained evidence, and cross-resource power-loss consistency remain open.
+
 ## v0.2.137 — 2026-11-14 America/New_York — Publication readback integrity
 
 **Changed** — Terminal receipt and active checkpoint readback verify the published file identity and link count after checking independent evidence. Active checkpoint readback also refuses SQLite sidecars that appear during review.

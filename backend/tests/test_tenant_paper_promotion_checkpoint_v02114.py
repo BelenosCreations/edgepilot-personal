@@ -611,6 +611,130 @@ class PromotionCheckpointTests(unittest.TestCase):
             self.checkpoint_path, stage, independent._store.path, inspect,
             {"receipt": tip, "additionalLinkPresent": True})
 
+    def test_terminal_publication_refuses_unreviewed_stage(self):
+        retained, evidence, _, _ = self.terminal_recovery_evidence()
+        self.assert_unreviewed_stage_refused(
+            self.pin_path, ".decimal-terminal-receipt-*/receipt.db",
+            partial(retained.repair_local_terminal, self.pins, self.store, **evidence),
+            partial(retained.inspect_local_terminal, self.pins, self.store, **evidence),
+            lambda stage: retained.cleanup_local_terminal_stage(
+                stage, self.pins, self.store, **evidence),
+            evidence["reviewed_receipt"],
+            (self.store_path, retained._store.path))
+        self.assertEqual(retained.inspect_terminal_handoff(self.pins, self.store, **evidence),
+                         {"receipt": evidence["reviewed_receipt"], "localRepairRequired": False})
+
+    def test_active_checkpoint_publication_refuses_unreviewed_stage(self):
+        self.prepare_checkpoint()
+        tip = self.promote()
+        exported = self.checkpoint.export(expected_receipt=tip)
+        independent = self.retain_independent_recovery_receipt(tip)
+        self.checkpoint_path.unlink()
+        evidence = self.recovery_evidence() | {"recovery_receipt": independent}
+        self.assert_unreviewed_stage_refused(
+            self.checkpoint_path, ".edgepilot-checkpoint-*/checkpoint.db",
+            partial(receipts.DecimalPromotionCheckpoint.recover,
+                    self.checkpoint_path, exported, trusted_receipt=tip,
+                    checkpoint_key=self.checkpoint_key, **evidence),
+            partial(self.checkpoint.inspect_recovered, exported, trusted_receipt=tip, **evidence),
+            lambda stage: self.checkpoint.cleanup_recovered_stage(
+                stage, exported, trusted_receipt=tip, **evidence),
+            tip, (self.pin_path, self.store_path, self.path, independent._store.path))
+        self.assertEqual(self.checkpoint.latest(), tip)
+
+    def assert_unreviewed_stage_refused(
+            self, target, pattern, publish, inspect, cleanup, tip, evidence_paths):
+        make_recheck = receipts._evidence_recheck
+        link = os.link
+        evidence = {path: path.read_bytes() for path in evidence_paths}
+        preserved = {}
+
+        for change in ("replace", "-journal", "-wal", "-shm", "replace at link"):
+            with self.subTest(change=change):
+                prior = set(target.parent.glob(pattern))
+                changed = []
+
+                def change_stage(stage):
+                    original = stage.stat()
+                    data = stage.read_bytes()
+                    sibling = stage.with_name("operator-notes.txt")
+                    preserved[sibling] = b"independent staging notes"
+                    sibling.write_bytes(preserved[sibling])
+                    if change.startswith("replace"):
+                        copy = stage.with_suffix(".copy")
+                        copy.write_bytes(data)
+                        copy.chmod(0o600)
+                        copy.replace(stage)
+                        self.assertFalse(os.path.samestat(original, stage.stat()))
+                    else:
+                        sidecar = stage.with_name(stage.name + change)
+                        preserved[sidecar] = b"unreviewed SQLite sidecar"
+                        sidecar.write_bytes(preserved[sidecar])
+                    preserved[stage] = data
+                    changed.append(stage)
+
+                def recheck_then_change(*paths):
+                    recheck = make_recheck(*paths)
+
+                    def recheck_stage():
+                        recheck()
+                        stages = set(target.parent.glob(pattern)) - prior
+                        if stages and not changed:
+                            stage, = stages
+                            change_stage(stage)
+
+                    return recheck_stage
+
+                def replace_then_link(*args, **kwargs):
+                    stage, = set(target.parent.glob(pattern)) - prior
+                    change_stage(stage)
+                    link(*args, **kwargs)
+
+                interference = (patch.object(receipts.os, "link", replace_then_link)
+                                if change == "replace at link" else
+                                patch.object(receipts, "_evidence_recheck", recheck_then_change))
+                with interference, self.assertRaises(recovery.DecimalRecoveryDenied):
+                    publish()
+                self.assertEqual(len(changed), 1)
+                self.assertFalse(target.exists())
+                with self.assertRaises(recovery.DecimalRecoveryDenied):
+                    inspect()
+                self.assertEqual({path: path.read_bytes() for path in preserved}, preserved)
+                self.assertEqual({path: path.read_bytes() for path in evidence}, evidence)
+
+        publish()
+        self.assertEqual(inspect(), {"receipt": tip, "additionalLinkPresent": False})
+        self.assertEqual({path: path.read_bytes() for path in preserved}, preserved)
+        self.assertEqual({path: path.read_bytes() for path in evidence}, evidence)
+
+        # Exercise a sidecar arriving inside the syscall window. The verified
+        # inode may already have a destination name, but cleanup must refuse.
+        target.unlink()
+        stage_paths = set(target.parent.glob(pattern))
+
+        def add_sidecar_then_link(*args, **kwargs):
+            stage, = set(target.parent.glob(pattern)) - stage_paths
+            stage.with_name(stage.name + "-wal").write_bytes(b"late sidecar")
+            link(*args, **kwargs)
+
+        with (patch.object(receipts.os, "link", add_sidecar_then_link),
+              self.assertRaises(recovery.DecimalRecoveryDenied)):
+            publish()
+        stage, = set(target.parent.glob(pattern)) - stage_paths
+        sidecar = stage.with_name(stage.name + "-wal")
+        self.assertTrue(stage.samefile(target))
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            cleanup(stage)
+        self.assertEqual(sidecar.read_bytes(), b"late sidecar")
+        self.assertTrue(stage.samefile(target))
+        sidecar.unlink()
+        self.assertEqual(inspect(), {"receipt": tip, "additionalLinkPresent": True})
+        cleanup(stage)
+        self.assertFalse(stage.exists())
+        self.assertEqual(inspect(), {"receipt": tip, "additionalLinkPresent": False})
+        self.assertEqual({path: path.read_bytes() for path in preserved}, preserved)
+        self.assertEqual({path: path.read_bytes() for path in evidence}, evidence)
+
     def test_terminal_review_refuses_late_publication_and_stage_sidecars(self):
         retained, evidence, terminal_stage, _ = self.terminal_cleanup_fixture()
         self.assert_cleanup_preserves_late_sidecars(
@@ -2272,8 +2396,10 @@ class PromotionCheckpointTests(unittest.TestCase):
         self.checkpoint_path.unlink()
         link = os.link
 
-        def while_publishing(stage, target, **options):
-            link(stage, target, **options)
+        def while_publishing(*args, **kwargs):
+            link(*args, **kwargs)
+            target = self.checkpoint_path
+            stage, = target.parent.glob(".edgepilot-checkpoint-*/checkpoint.db")
             with self.assertRaises(recovery.DecimalRecoveryDenied):
                 self.cleanup_stage(stage, exported, tip)
             self.assertTrue(stage.samefile(target))
