@@ -8,14 +8,14 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 
 ## Verification and checkpoint
 
-- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.135 from the merged PR for `development/v0.2.135-terminal-repair-ordering`. A later verified main checkpoint takes precedence.
-- Verified v0.2.134 baseline. PR #162 head `af58c91060c23059bfae5472508dfa75dd1ed199` passed [Actions #43596490934](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43596490934). Main `3e0c4558ced2e1be0636e7683263114728cab6ea` passed [Actions #43596724809](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43596724809), matched live Render deployment `dep-dbs5hsff3r2c73e0g70g`, and returned HTTP 200 from `/healthz`. No PRs were open.
-- v0.2.135 exercises inspection while a cooperating repair commits or rolls back. The missing-target check refuses a new receipt or SQLite sidecar during review and preserves the staged recovery path. See [milestone notes](PAPER_TERMINAL_REPAIR_ORDERING_V02135.md).
+- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.136 from the merged PR for `development/v0.2.136-terminal-publication-review`. A later verified main checkpoint takes precedence.
+- Verified v0.2.135 baseline. PR #163 head `886e8b6539641080fd80a5dd3e1d6ce3349d4a4e` passed [Actions #43597673260](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43597673260). Main `6d6f1fe391465bf6588e5b5cda93cd01613246b0` passed [Actions #43597904445](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43597904445), matched live Render deployment `dep-dbs5om2jnfac73bt269g`, and returned HTTP 200 from `/healthz`. No PRs were open.
+- v0.2.136 exercises cooperating repairs of a missing receipt and readback after publisher exit. Readback and reviewed cleanup refuse SQLite sidecars that appear during verification. See [milestone notes](PAPER_TERMINAL_PUBLICATION_REVIEW_V02136.md).
 
 ## Next safe development batch
 
-1. Rehearse two cooperating repairs of a missing terminal receipt. Verify that both converge on the same verified publication and that the second process can inspect the published receipt after the first exits with a staging link still present.
-2. Exercise exact receipt readback and reviewed cleanup if a local SQLite sidecar appears after publication. Preserve the published receipt, the staging link and the sidecar until the evidence can be reviewed. Keep tenant archive evidence independent and authenticated paper preflight detached from execution. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
+1. Rehearse a published terminal receipt being replaced or unlinked while exact readback holds the independent receipt and witness. Verify both readback paths detect the changed local publication and that a fresh review can recover once the exact evidence is available.
+2. Exercise a newly arrived SQLite sidecar under the staging name immediately before cleanup. Compare the active checkpoint readback and cleanup paths for the same evidence ordering. Keep tenant archive evidence independent and authenticated paper preflight detached from execution. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
 3. Continue source-attributed and session-only Public research under the user's instruction to assume provider permission. Use real history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance). Earlier snapshot and MSFT quote acceptance still apply.
 
 ## Restrictions and workflow
@@ -26,6 +26,10 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.135 — 2026-11-14 — Terminal repair ordering
+
+Offline inspection waits for a cooperating local repair to commit or roll back. Late-arriving targets and SQLite sidecars are refused during missing-receipt review. See [terminal repair ordering](PAPER_TERMINAL_REPAIR_ORDERING_V02135.md).
 
 ## v0.2.134 — 2026-11-14 — Terminal repair readback
 

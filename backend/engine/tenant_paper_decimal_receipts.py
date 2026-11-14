@@ -53,6 +53,11 @@ def _sync_directory(path):
         os.close(fd)
 
 
+def _require_no_sidecars(*paths):
+    if any(os.path.lexists(str(path) + suffix) for path in paths for suffix in _SIDECARS):
+        recovery._deny()
+
+
 class DecimalReceiptStore:
     """A separately operated receipt pin and persistent rotation reservation."""
 
@@ -127,8 +132,7 @@ class DecimalReceiptStore:
                         (1, 2) if read_only else (1,))):
                 recovery._deny()
             if read_only:
-                if any(os.path.lexists(str(self.path) + suffix) for suffix in _SIDECARS):
-                    recovery._deny()
+                _require_no_sidecars(self.path)
                 with self.path.open("rb") as source:
                     if source.read(20)[18:20] != b"\x01\x01":
                         recovery._deny()
@@ -229,8 +233,7 @@ class DecimalReceiptStore:
                 try:
                     with stage._read_published(receipt) as verified:
                         recheck_evidence()
-                        if any(os.path.lexists(str(self.path) + suffix) for suffix in _SIDECARS):
-                            recovery._deny()
+                        _require_no_sidecars(self.path)
                         os.link(stage.path, self.path, follow_symlinks=False)
                 except FileExistsError:
                     # An exclusive-link loser has only its own unpublished stage.
@@ -258,17 +261,16 @@ class DecimalReceiptStore:
         # Sync the destination before removing the other name. A failure after
         # unlink requires exact readback because the removal may have happened.
         _sync_directory(self.path.parent)
+        recheck_evidence()
         current = self.path.lstat()
         link = os.stat(stage_path.name, dir_fd=folder_fd, follow_symlinks=False)
         if (verified.st_nlink != 2 or current.st_nlink != 2
                 or current.st_ctime_ns != verified.st_ctime_ns
                 or not os.path.samestat(verified, current)
                 or not os.path.samestat(verified, link)
-                or not os.path.samestat(os.fstat(folder_fd), stage_path.parent.lstat())
-                or any(os.path.lexists(str(path) + suffix)
-                       for path in (self.path, stage_path) for suffix in _SIDECARS)):
+                or not os.path.samestat(os.fstat(folder_fd), stage_path.parent.lstat())):
             recovery._deny()
-        recheck_evidence()
+        _require_no_sidecars(self.path, stage_path)
         os.unlink(stage_path.name, dir_fd=folder_fd)
         os.fsync(folder_fd)
 
@@ -553,6 +555,7 @@ class DecimalRecoveryReceipt:
                 witness._read(journal, previous, exact=False)
                 recheck_local()
                 recheck_evidence()
+                _require_no_sidecars(receipts.path)
                 return {"receipt": tip, "localRepairRequired": pending or previous != tip}
 
     def inspect_local_terminal(self, receipts, witness, *, reviewed_receipt, operator_record):
@@ -561,6 +564,7 @@ class DecimalRecoveryReceipt:
                 receipts, witness, reviewed_receipt, operator_record) as (tip, recheck_evidence):
             with receipts._read_published(tip) as info:
                 recheck_evidence()
+                _require_no_sidecars(receipts.path)
                 return {"receipt": tip, "additionalLinkPresent": info.st_nlink == 2}
 
     def cleanup_local_terminal_stage(self, staging_path, receipts, witness, *, reviewed_receipt,
