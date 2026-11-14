@@ -1,3 +1,11 @@
+## v0.2.129 — 2026-11-13 America/New_York — Recovery writer ordering
+
+**Added** — Offline rehearsals confirm that old checkpoint inspection, publication, and cleanup refuse after a signed witness or ledger update commits. Process-exit tests cover a pending writer on each side of staging unlink and verify which link survives after the writer commits.
+
+**Tests** — All 906 local regressions passed, including 128 focused tests. The exact second-generation archive pin still permits repeated readback, while cleanup refuses an unrelated candidate. An owner-history browser regression refuses a response with different source attribution.
+
+**Limitations** — Combined rollback, power-loss consistency across resources, and real owner-device Public history acceptance remain open. Production execution remains disabled.
+
 ## v0.2.128 — 2026-11-13 America/New_York — Staging directory recovery
 
 **Fixed** — Offline terminal receipt and active checkpoint publication can succeed when unrelated files prevent removal of the staging directory after the published database and staging cleanup have been synced. Other directory-removal errors still require exact readback.

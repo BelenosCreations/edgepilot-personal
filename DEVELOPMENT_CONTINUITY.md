@@ -8,14 +8,14 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 
 ## Verification and checkpoint
 
-- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.128 from the merged PR for `development/v0.2.128-staging-retirement`. A later verified main checkpoint takes precedence.
-- Verified v0.2.127 baseline. PR #155 head `e3da8876880b1070f4a1cf0b3c1688f3599cc321` passed [Actions #43543755949](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43543755949). Main `eb6b9f444c57386e44df619039e9445aa65748b0` passed [Actions #43544007049](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43544007049), matched live Render deployment `dep-dbrs2767bikc73ed9eo0`, and returned HTTP 200 from `/healthz`. No PRs were open.
-- v0.2.128 exercises staging directory removal and verifies fresh readback after cooperating witness and ledger writes. See [milestone notes](PAPER_STAGING_DIRECTORY_V02128.md).
+- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.129 from the merged PR for `development/v0.2.129-recovery-writer-order`. A later verified main checkpoint takes precedence.
+- Verified v0.2.128 baseline. PR #156 head `3e8416f94e393cc53b399ae07d654cb579f9a154` passed [Actions #43545236231](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43545236231). Main `9d993052ed7ffaf5198ab7127189ee53e50a94d9` passed [Actions #43545500051](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43545500051), matched live Render deployment `dep-dbrs9jqjnfac73bkfh70`, and returned HTTP 200 from `/healthz`. No PRs were open.
+- v0.2.129 checks stale evidence after a writer commits before review or after a recovery process exits. See [milestone notes](PAPER_RECOVERY_WRITER_ORDER_V02129.md).
 
 ## Next safe development batch
 
-1. Rehearse the inverse order at the recovery evidence snapshot boundary. Allow the signed witness update or synthetic ledger write to commit first and require old inspection, publication and cleanup attempts to refuse with all candidates preserved.
-2. Rehearse a process exit with a pending cooperating writer and verify what becomes visible when the recovery locks are released. Preserve the exact archive pin, repeated second-generation readback and unrelated candidates. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
+1. Rehearse a signed witness or ledger writer rolling back after recovery has acquired its read snapshots. Verify that an unchanged exact checkpoint remains readable and that a fresh cleanup removes only the selected staging link.
+2. Exercise terminal receipt readback and cleanup with an independent receipt writer holding or rolling back a transaction. Preserve the exact archive pin, repeated second-generation readback and unrelated candidates. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
 3. Continue source-attributed and session-only Public research under the user's instruction to assume provider permission. Use real history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance). Earlier snapshot and MSFT quote acceptance still apply.
 
 ## Restrictions and workflow
@@ -26,6 +26,10 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.128 — 2026-11-13 — Staging directory recovery
+
+Offline publication preserves unrelated staging contents and verifies readback after cooperating writes. See [staging directory recovery](PAPER_STAGING_DIRECTORY_V02128.md).
 
 ## v0.2.127 — 2026-11-13 — Publication cleanup and readback
 
