@@ -1,3 +1,11 @@
+## v0.2.132 — 2026-11-14 America/New_York — Interrupted receipt review
+
+**Changed** — Offline terminal receipt retention rechecks the independent receipt and signed witness files after exact review and before committing the receipt. A replaced witness leaves the transaction uncommitted.
+
+**Tests** — All 914 local tests passed, including 142 focused tests. Process exit after the witness commits leaves the local reservation frozen and the independent receipt at its original tip. Exact signed terminal review advances the independent receipt and repairs the local one. Active checkpoint readback and reviewed cleanup resume after an independent writer rolls back. Synthetic Public history excludes the chart lead-in without using the overall expected count for the regular series.
+
+**Limitations** — Rollback of every retained copy, cross-resource power-loss consistency, and real Public history verification on the owner's device remain open.
+
 ## v0.2.131 — 2026-11-14 America/New_York — Independent checkpoint evidence
 
 **Added** — Offline active checkpoint recovery, readback, and reviewed staging cleanup can take a separately retained receipt. This optional check holds the exact receipt through the operation and rechecks its file alongside local evidence.

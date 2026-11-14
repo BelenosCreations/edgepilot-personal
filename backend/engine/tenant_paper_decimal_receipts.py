@@ -473,6 +473,7 @@ class DecimalRecoveryReceipt:
                         operator_record):
         """Retain an explicitly reviewed terminal witness tip after a lost handoff."""
         self._verify_separation(receipts, witness)
+        recheck_evidence = _evidence_recheck(self._store.path, witness.path)
         with self._store._open() as db, witness._open(write=False) as journal:
             current = self._store._read(db, pending=False)
             if current != expected_receipt:
@@ -481,6 +482,8 @@ class DecimalRecoveryReceipt:
             self._require_terminal(witness, journal, reviewed_receipt, operator_record)
             if reviewed_receipt != current:
                 self._store._save(db, reviewed_receipt, pending=False)
+            recheck_evidence()
+            if reviewed_receipt != current:
                 db.commit()
             return reviewed_receipt
 

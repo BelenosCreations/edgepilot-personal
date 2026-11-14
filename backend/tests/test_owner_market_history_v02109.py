@@ -109,9 +109,16 @@ class OwnerMarketHistoryTests(unittest.TestCase):
         payload["leadingFill"] = {
             "startTimestamp": "2026-11-12T17:00:00Z",
             "endTimestamp": "2026-11-12T18:00:00Z",
+            "value": "9.125", "count": 12, "includedInTotalExpectedBars": True,
         }
+        payload["totalExpectedBars"] = 14
         self.provider(json.dumps(payload))
-        self.assertEqual(self.history()["barCount"], 1)
+        observed = self.history()
+        self.assertEqual(observed["barCount"], 1)
+        self.assertEqual(observed["bars"][0]["timestamp"], "2026-11-12T19:00:00+00:00")
+        self.assertIsNone(observed["sourceExpectedBars"])
+        self.assertEqual(observed["source"], "Get bars v2")
+        self.assertFalse(observed["dataPersisted"])
         payload["leadingFill"]["endTimestamp"] = "2026-11-12T16:00:00Z"
         self.provider(json.dumps(payload))
         with self.assertRaises(quote_tests.market.OwnerQuoteUnavailable):
