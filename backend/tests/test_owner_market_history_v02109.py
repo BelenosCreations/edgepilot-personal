@@ -183,6 +183,8 @@ class OwnerMarketHistoryTests(unittest.TestCase):
     def test_weekly_equity_history_excludes_other_provider_series(self):
         payload = json.loads(self.payload())
         row = payload["regularMarket"]["bars"][0]
+        row["gainAmount"] = "1.25"
+        payload["totalGainLoss"] = "10.00"
         payload["totalExpectedBars"] = 24
         for series in ("preMarket", "afterMarket", "preMarketOvernight", "postMarketOvernight"):
             payload[series] = {"expectedBars": 1, "bars": [dict(row, volume=500)]}
@@ -191,7 +193,12 @@ class OwnerMarketHistoryTests(unittest.TestCase):
         self.assertEqual(observed["source"], "Get bars v2")
         self.assertTrue(self.history_calls[0][0].endswith(
             "/EQUITY/SPY/WEEK?tradingSessionToggle=REGULAR_HOURS"))
-        self.assertEqual([bar["volume"] for bar in observed["bars"]], ["1700"])
+        self.assertEqual(observed["bars"], [{
+            "timestamp": "2026-11-12T18:00:00+00:00",
+            "open": "9.000", "high": "9.250", "low": "8.999",
+            "close": "9.125", "volume": "1700",
+        }])
+        self.assertNotIn("totalGainLoss", observed)
         self.assertIsNone(observed["sourceExpectedBars"])
         self.assertFalse(observed["dataPersisted"])
         self.assertTrue(observed["readOnly"])

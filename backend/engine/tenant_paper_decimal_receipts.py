@@ -1,6 +1,5 @@
 """Independent receipt storage for the offline synthetic Decimal rehearsal."""
 from contextlib import closing, contextmanager, ExitStack, nullcontext
-import errno
 import fcntl
 import hmac
 import os
@@ -78,6 +77,51 @@ def _require_absent(path, *, dir_fd=None):
     except FileNotFoundError:
         return
     recovery._deny()
+
+
+def _stage_inventory(parent, prefix, filename, publication):
+    """List matching direct children without following links or opening stage files."""
+    fd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        directory = os.fstat(fd)
+        _require_directory_identity(parent, directory)
+
+        def snapshot():
+            inventory = []
+            recorded = []
+            for name in sorted(os.listdir(fd)):
+                if not name.startswith(prefix):
+                    continue
+                info = os.stat(name, dir_fd=fd, follow_symlinks=False)
+                recorded.append(info.st_ctime_ns)
+                entry = {"name": name, "device": info.st_dev, "inode": info.st_ino,
+                         "state": "unreviewed", "entries": None, "publicationLink": False}
+                inventory.append(entry)
+                if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid()
+                        or stat.S_IMODE(info.st_mode) != 0o700):
+                    continue
+                child = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+                try:
+                    _require_same_file(info, os.fstat(child))
+                    names = sorted(os.listdir(child))
+                    entry["entries"] = names
+                    entry["state"] = "populated" if names else "empty"
+                    if filename in names:
+                        stage = os.stat(filename, dir_fd=child, follow_symlinks=False)
+                        entry["publicationLink"] = os.path.samestat(publication, stage)
+                    _require_same_file(info, os.fstat(child))
+                finally:
+                    os.close(child)
+            return inventory, recorded
+
+        inventory, recorded = snapshot()
+        if snapshot() != (inventory, recorded):
+            recovery._deny()
+        _require_same_file(directory, os.fstat(fd))
+        _require_directory_identity(parent, directory)
+        return inventory
+    finally:
+        os.close(fd)
 
 
 class DecimalReceiptStore:
@@ -228,13 +272,15 @@ class DecimalReceiptStore:
         except OSError:
             recovery._deny()
 
-    def _inspect_published(self, receipt, recheck_evidence):
+    def _inspect_published(self, receipt, recheck_evidence, *, stage_names=None):
         with self._read_published(receipt) as verified:
+            result = {"receipt": receipt.copy(), "additionalLinkPresent": verified.st_nlink == 2}
+            if stage_names is not None:
+                result["stages"] = _stage_inventory(self.path.parent, *stage_names, verified)
             recheck_evidence()
             _require_no_sidecars(self.path)
-            current = self.path.lstat()
-            _require_same_file(verified, current)
-            return {"receipt": receipt.copy(), "additionalLinkPresent": current.st_nlink == 2}
+            _require_same_file(verified, self.path.lstat())
+            return result
 
     @contextmanager
     def _lock_staging_directory(self):
@@ -273,7 +319,6 @@ class DecimalReceiptStore:
                 stage_fd = os.open(filename, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
                                    dir_fd=folder_fd)
                 descriptors.callback(os.close, stage_fd)
-                linked = False
                 with stage._read_published(receipt) as verified:
                     def require_verified_stage():
                         _require_directory_identity(self.path.parent, destination)
@@ -288,50 +333,25 @@ class DecimalReceiptStore:
 
                     recheck_evidence()
                     require_verified_stage()
-                    try:
-                        # Linux linkat follows the descriptor, so replacement of
-                        # the staging name cannot substitute a different inode.
-                        os.link(f"/proc/self/fd/{stage_fd}", self.path.name,
-                                dst_dir_fd=destination_fd, follow_symlinks=True)
-                        linked = True
-                    except FileExistsError:
-                        # Retire only our exact unpublished stage after losing
-                        # the exclusive link. Leave other names for review.
-                        recheck_evidence()
-                        require_verified_stage()
-                        os.unlink(filename, dir_fd=folder_fd)
-                if linked:
-                    _require_directory_identity(self.path.parent, destination)
-                    published = self.path.lstat()
-                    if (not os.path.samestat(published, verified)
-                            or published.st_mtime_ns != verified.st_mtime_ns
-                            or published.st_size != verified.st_size):
-                        recovery._deny()
-                    publication = self._unlink_published_stage(
-                        stage.path, folder_fd, destination, published, recheck_evidence)
+                    # Linux linkat follows the descriptor. If a competitor
+                    # wins the name, retain this candidate for review.
+                    os.link(f"/proc/self/fd/{stage_fd}", self.path.name,
+                            dst_dir_fd=destination_fd, follow_symlinks=True)
                 _require_directory_identity(self.path.parent, destination)
-                _require_directory_identity(folder, staging)
-                removed = False
-                try:
-                    os.rmdir(folder.name, dir_fd=destination_fd)
-                    removed = True
-                except OSError as error:
-                    # A nonempty staging directory can remain after publication.
-                    if error.errno != errno.ENOTEMPTY:
-                        raise
-                if removed:
-                    if os.fstat(folder_fd).st_nlink != 0:
+                published = self.path.lstat()
+                if (not os.path.samestat(published, verified)
+                        or published.st_mtime_ns != verified.st_mtime_ns
+                        or published.st_size != verified.st_size):
                         recovery._deny()
-                    os.fsync(destination_fd)
-                if not linked:
-                    recovery._deny()
+                publication = self._unlink_published_stage(
+                    stage.path, folder_fd, destination, published, recheck_evidence)
+                # rmdir cannot require a particular directory inode. Keep
+                # the empty stage so a same-name replacement is preserved.
+                os.fsync(destination_fd)
                 recheck_evidence()
                 _require_directory_identity(self.path.parent, destination)
-                if removed:
-                    _require_absent(folder)
-                else:
-                    _require_directory_identity(folder, staging)
-                    _require_absent(filename, dir_fd=folder_fd)
+                _require_directory_identity(folder, staging)
+                _require_absent(filename, dir_fd=folder_fd)
                 _require_no_sidecars(self.path, stage.path)
                 _require_same_file(publication, self.path.lstat())
         except OSError:
@@ -654,11 +674,13 @@ class DecimalRecoveryReceipt:
                 recheck_local()
                 return {"receipt": tip, "localRepairRequired": pending or previous != tip}
 
-    def inspect_local_terminal(self, receipts, witness, *, reviewed_receipt, operator_record):
+    def inspect_local_terminal(self, receipts, witness, *, reviewed_receipt, operator_record,
+                               include_stages=False):
         """Verify a published terminal receipt after interruption without changing files."""
         with self._verified_terminal(
                 receipts, witness, reviewed_receipt, operator_record) as (tip, recheck_evidence):
-            return receipts._inspect_published(tip, recheck_evidence)
+            names = (_TERMINAL_STAGE_PREFIX, "receipt.db") if include_stages else None
+            return receipts._inspect_published(tip, recheck_evidence, stage_names=names)
 
     def cleanup_local_terminal_stage(self, staging_path, receipts, witness, *, reviewed_receipt,
                                      operator_record):
@@ -761,7 +783,7 @@ class DecimalPromotionCheckpoint:
 
     def inspect_recovered(self, exported, *, trusted_receipt, receipts, witness, ledger_path,
                           reserved_receipt, prepared_receipt, operator_record, journal_key,
-                          anchor_key, recovery_receipt=None):
+                          anchor_key, recovery_receipt=None, include_stages=False):
         """Read back an exact published candidate after an interrupted recovery."""
         with self._verified_recovery(
                 exported, trusted_receipt=trusted_receipt, receipts=receipts, witness=witness,
@@ -769,7 +791,8 @@ class DecimalPromotionCheckpoint:
                 prepared_receipt=prepared_receipt, operator_record=operator_record,
                 journal_key=journal_key, anchor_key=anchor_key,
                 recovery_receipt=recovery_receipt) as recheck_evidence:
-            return self._store._inspect_published(trusted_receipt, recheck_evidence)
+            names = (_CHECKPOINT_STAGE_PREFIX, "checkpoint.db") if include_stages else None
+            return self._store._inspect_published(trusted_receipt, recheck_evidence, stage_names=names)
 
     def cleanup_recovered_stage(self, staging_path, exported, *, trusted_receipt, receipts,
                                 witness, ledger_path, reserved_receipt, prepared_receipt,

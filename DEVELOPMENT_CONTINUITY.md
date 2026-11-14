@@ -5,21 +5,21 @@ Use this section for the next development session. The entries below record prio
 ## Copyable resume instruction
 
 ```text
-EdgePilot Continuity 005
+EdgePilot Continuity 006
 
 Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on main in BelenosCreations/edgepilot-personal, independently verify the GitHub and Render checkpoint, and follow the next steps and restrictions in that file.
 ```
 
 ## Verification and checkpoint
 
-- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.142 from the merged PR for `development/v0.2.142-retirement-parent-sync`. A later verified main checkpoint takes precedence.
-- Verified v0.2.141 baseline. PR #169 head `5f0bb1d9aa2b0e4f7e192e983de62e29518d0cf7` passed [Actions #43630630249](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43630630249). Main `2fdea20e13d7503edb1302f3bc7eec10d71fdc50` passed [Actions #43630837605](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43630837605), matched live Render deployment `dep-dbsb58s9v7es73bo5qag`, and returned HTTP 200 from `/healthz`. No PRs were open.
-- v0.2.142 removes the staging directory through the held destination directory and syncs it before final verification. Both recovery paths exercise cooperating cleanup and readback after interruption. See [milestone notes](PAPER_RETIREMENT_PARENT_SYNC_V02142.md).
+- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.143 from the merged PR for `development/v0.2.143-preserved-stage-inventory`. A later verified main checkpoint takes precedence.
+- Verified v0.2.142 baseline. PR #170 head `b662fbc79e4f06fba8c0fe5e4f21910da0e362c4` passed [Actions #43648387220](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43648387220). Main `0ea7557bd478388bcd0c6ecd5f5312bbfa43f289` passed [Actions #43648554455](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43648554455), matched live Render deployment `dep-dbse2j95efls73emn0gg`, and returned HTTP 200 from `/healthz`. No PRs were open.
+- v0.2.143 preserves staging directories and provides an opt-in, authenticated inventory. See [milestone notes](PAPER_PRESERVED_STAGE_INVENTORY_V02143.md).
 
 ## Next safe development batch
 
-1. Rehearse an empty same-name replacement during staging-directory removal. Evaluate whether a recovery protocol can preserve the replacement and give operators an exact inventory of leftover stages, including after process exit.
-2. Rehearse a parent sync interruption followed by a same-name stage or publication change. Verify recovery against exact independent evidence and preserve ambiguous files. Keep tenant archive evidence independent and authenticated paper preflight detached from execution. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
+1. Rehearse exact inventory when the publication is absent after an interrupted attempt. Determine whether authenticated independent evidence can support a read-only inventory while the destination is missing. Keep ambiguous stage names and files available for review.
+2. Rehearse a same-name file replacement immediately before explicit staging unlink. Preserve independently retained tenant archive evidence and keep authenticated paper preflight detached from execution. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
 3. Continue source-attributed and session-only Public research under the user's instruction to assume provider permission. Use real history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance). Earlier snapshot and MSFT quote acceptance still apply.
 
 ## Restrictions and workflow
@@ -30,6 +30,10 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Increment the EdgePilot Continuity sequence at the top of the copy block. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.142 — 2026-11-14 — Staging-directory removal and sync
+
+Offline recovery used the open destination directory for staging-directory removal and synced the parent before final verification. See [staging-directory removal and sync](PAPER_RETIREMENT_PARENT_SYNC_V02142.md).
 
 ## v0.2.141 — 2026-11-14 — Staging-directory retirement review
 
