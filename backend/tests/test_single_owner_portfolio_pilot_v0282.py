@@ -82,9 +82,10 @@ class FakePublic:
         if url==public.BASE+"/userapigateway/historicdata/EQUITY/SPY/WEEK?tradingSessionToggle=REGULAR_HOURS":
             assert options=={"allow_redirects":False,"stream":True}
             self.calls.append(("GET","HISTORY"))
+            close = "101.50" if self.calls.count(("GET", "HISTORY")) == 1 else "101.75"
             return self.response({"symbol":"SPY","period":"WEEK","regularMarket":{"bars":[{
                 "timestamp":"2026-10-01T13:30:00Z","open":"101.01","high":"102.00",
-                "low":"100.00","close":"101.50","volume":100}]}})
+                "low":"100.00","close":close,"volume":100}]}})
         if url==public.BASE+"/userapigateway/historicdata/EQUITY/SPY/MONTH":
             assert options=={"allow_redirects":False,"stream":True}
             self.calls.append(("GET","MONTH_HISTORY"))
@@ -163,7 +164,8 @@ assert fake.calls.count(("GET", "MONTH_HISTORY")) == 1
 weekly_again = post(a, history_path, history_request, csrf)
 assert weekly_again.status_code == 200
 assert weekly_again.headers["Cache-Control"] == "no-store"
-assert weekly_again.json == {**history.json, "receivedAt": weekly_again.json["receivedAt"]}
+assert weekly_again.json == {**history.json, "receivedAt": weekly_again.json["receivedAt"],
+                             "bars": [{**history.json["bars"][0], "close": "101.75"}]}
 assert fake.calls.count(("GET", "HISTORY")) == 2
 invalid_history=post(a,history_path,{**history_request,"period":"ALL"},csrf)
 assert invalid_history.status_code==404

@@ -44,6 +44,14 @@ def _evidence_recheck(*paths):
     return recheck
 
 
+def _sync_directory(path):
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
 class DecimalReceiptStore:
     """A separately operated receipt pin and persistent rotation reservation."""
 
@@ -193,6 +201,46 @@ class DecimalReceiptStore:
             yield fd
         finally:
             os.close(fd)
+
+    def _publish_staged(self, receipt, recheck_evidence, *, prefix, filename):
+        try:
+            self._check_directory()
+            if os.path.lexists(self.path):
+                recovery._deny()
+            folder = Path(tempfile.mkdtemp(prefix=prefix, dir=self.path.parent))
+            stage = DecimalReceiptStore(folder / filename, receipt_key=self.key,
+                                        _protocol=self._protocol)
+            with stage._lock_staging_directory() as folder_fd:
+                stage._initialize(receipt)
+                try:
+                    with stage._read_published(receipt) as verified:
+                        if any(os.path.lexists(str(self.path) + suffix) for suffix in _SIDECARS):
+                            recovery._deny()
+                        recheck_evidence()
+                        os.link(stage.path, self.path, follow_symlinks=False)
+                except FileExistsError:
+                    # An exclusive-link loser has only its own unpublished stage.
+                    os.unlink(stage.path.name, dir_fd=folder_fd)
+                    folder.rmdir()
+                    recovery._deny()
+                # Retain both names if syncing or verifying the publication fails.
+                _sync_directory(self.path.parent)
+                published = self.path.lstat()
+                staged = os.stat(stage.path.name, dir_fd=folder_fd, follow_symlinks=False)
+                if (published.st_nlink != 2 or not os.path.samestat(published, verified)
+                        or published.st_mtime_ns != verified.st_mtime_ns
+                        or published.st_size != verified.st_size
+                        or not os.path.samestat(published, staged)
+                        or not os.path.samestat(os.fstat(folder_fd), folder.lstat())
+                        or any(os.path.lexists(str(path) + suffix)
+                               for path in (self.path, stage.path) for suffix in _SIDECARS)):
+                    recovery._deny()
+                recheck_evidence()
+                os.unlink(stage.path.name, dir_fd=folder_fd)
+                os.fsync(folder_fd)
+                folder.rmdir()
+        except OSError:
+            recovery._deny()
 
     def publish(self, witness, proposed):
         """Reserve before publishing a record and retain only its exact successor."""
@@ -430,7 +478,8 @@ class DecimalRecoveryReceipt:
             with local as db, witness._open(write=False) as journal:
                 self._require_terminal(witness, journal, tip, operator_record)
                 if db is None:
-                    self._publish_missing_local(receipts, tip, recheck_evidence)
+                    receipts._publish_staged(tip, recheck_evidence, prefix=_TERMINAL_STAGE_PREFIX,
+                                             filename="receipt.db")
                 else:
                     previous, pending = receipts._read_state(db)
                     witness._read(journal, previous, exact=False)
@@ -463,7 +512,7 @@ class DecimalRecoveryReceipt:
                   as (tip, recheck_evidence),
                   receipts._read_published(tip) as verified):
                 # Make the destination name durable before removing its other link.
-                self._sync_receipt_directory(target.parent)
+                _sync_directory(target.parent)
                 current = target.lstat()
                 link = os.stat(stage_path.name, dir_fd=folder_fd, follow_symlinks=False)
                 if (verified.st_nlink != 2 or current.st_nlink != 2
@@ -496,35 +545,6 @@ class DecimalRecoveryReceipt:
         record, _, _ = witness._read(journal, tip, exact=True)
         if record["status"] != "QUARANTINED" or record != operator_record:
             recovery._deny()
-
-    def _publish_missing_local(self, receipts, tip, recheck_evidence):
-        path = receipts.path
-        try:
-            receipts._check_directory()
-            folder = Path(tempfile.mkdtemp(prefix=_TERMINAL_STAGE_PREFIX, dir=path.parent))
-            stage = DecimalReceiptStore(folder / "receipt.db", receipt_key=receipts.key)
-            with stage._lock_staging_directory():
-                stage._initialize(tip)
-                with stage._read_published(tip):
-                    if any(os.path.lexists(str(path) + suffix) for suffix in _SIDECARS):
-                        recovery._deny()
-                    recheck_evidence()
-                    os.link(stage.path, path, follow_symlinks=False)
-                # On an ambiguous sync failure both names remain for review.
-                self._sync_receipt_directory(path.parent)
-                recheck_evidence()
-                stage.path.unlink()
-                folder.rmdir()
-        except OSError:
-            recovery._deny()
-
-    @staticmethod
-    def _sync_receipt_directory(path):
-        fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-        try:
-            os.fsync(fd)
-        finally:
-            os.close(fd)
 
 
 class DecimalPromotionCheckpoint:
@@ -581,31 +601,11 @@ class DecimalPromotionCheckpoint:
                 exported, trusted_receipt=trusted_receipt, receipts=receipts, witness=witness,
                 ledger_path=ledger_path, reserved_receipt=reserved_receipt,
                 prepared_receipt=prepared_receipt, operator_record=operator_record,
-                journal_key=journal_key, anchor_key=anchor_key):
-            checkpoint._publish_recovered(trusted_receipt)
+                journal_key=journal_key, anchor_key=anchor_key) as recheck_evidence:
+            checkpoint._store._publish_staged(trusted_receipt, recheck_evidence,
+                                              prefix=_CHECKPOINT_STAGE_PREFIX,
+                                              filename="checkpoint.db")
         return checkpoint
-
-    def _publish_recovered(self, receipt):
-        target = self._store.path
-        try:
-            self._store._check_directory()
-            with tempfile.TemporaryDirectory(prefix=_CHECKPOINT_STAGE_PREFIX, dir=target.parent) as folder:
-                stage = DecimalPromotionCheckpoint(Path(folder) / "checkpoint.db",
-                                                   checkpoint_key=self._store.key)
-                with stage._store._lock_staging_directory():
-                    stage._store._initialize(receipt)
-                    with stage._store._read_published(receipt):
-                        if any(os.path.lexists(str(target) + suffix) for suffix in _SIDECARS):
-                            recovery._deny()
-                        os.link(stage._store.path, target, follow_symlinks=False)
-                    stage._store.path.unlink()
-                    fd = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
-                    try:
-                        os.fsync(fd)
-                    finally:
-                        os.close(fd)
-        except OSError:
-            recovery._deny()
 
     def inspect_recovered(self, exported, *, trusted_receipt, receipts, witness, ledger_path,
                           reserved_receipt, prepared_receipt, operator_record, journal_key,
@@ -636,6 +636,7 @@ class DecimalPromotionCheckpoint:
                     prepared_receipt=prepared_receipt, operator_record=operator_record,
                     journal_key=journal_key, anchor_key=anchor_key) as recheck_evidence:
                 with self._store._read_published(trusted_receipt) as verified:
+                    _sync_directory(target.parent)
                     current = target.lstat()
                     link = os.stat(stage_path.name, dir_fd=folder_fd, follow_symlinks=False)
                     if (verified.st_nlink != 2 or current.st_nlink != 2
@@ -643,7 +644,8 @@ class DecimalPromotionCheckpoint:
                             or not os.path.samestat(verified, current)
                             or not os.path.samestat(verified, link)
                             or not os.path.samestat(os.fstat(folder_fd), stage_path.parent.lstat())
-                            or any(os.path.lexists(str(stage_path) + suffix) for suffix in _SIDECARS)):
+                            or any(os.path.lexists(str(path) + suffix)
+                                   for path in (target, stage_path) for suffix in _SIDECARS)):
                         recovery._deny()
                     recheck_evidence()
                     os.unlink(stage_path.name, dir_fd=folder_fd)
