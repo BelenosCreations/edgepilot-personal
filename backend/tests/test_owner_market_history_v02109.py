@@ -127,7 +127,11 @@ class OwnerMarketHistoryTests(unittest.TestCase):
                 self.history()
         del payload["regularMarket"]["expectedBars"]
         self.provider(json.dumps(payload))
-        self.assertIsNone(self.history()["sourceExpectedBars"])
+        observed = self.history()
+        self.assertIsNone(observed["sourceExpectedBars"])
+        self.assertEqual(observed["barCount"], 1)
+        self.assertEqual(observed["provider"], "Public API")
+        self.assertFalse(observed["dataPersisted"])
 
     def test_weekly_equity_history_excludes_other_provider_series(self):
         payload = json.loads(self.payload())
