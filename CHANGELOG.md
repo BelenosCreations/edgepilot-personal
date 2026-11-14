@@ -1,3 +1,11 @@
+## v0.2.140 — 2026-11-14 America/New_York — Publication cleanup readback
+
+**Changed** — Offline terminal receipt and active checkpoint cleanup refuse a staging directory replaced while opening it. After staging unlink and directory sync, cleanup rechecks the published file, independent evidence, both directories and late staging names or SQLite sidecars.
+
+**Tests** — All 932 local tests passed, including 112 focused tests. Rehearsals cover changes during unlink and sync, process exit after sync, and fresh authenticated readback. The synthetic owner history browser test retains source attribution and an expected count of zero and rejects responses marked as persisted.
+
+**Limitations** — A refused result after unlink requires fresh review. Owner-device Public history acceptance, combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
+
 ## v0.2.139 — 2026-11-14 America/New_York — Publication directory identity
 
 **Changed** — Offline terminal receipt and active checkpoint publication verify that open directory descriptors still refer to the reviewed paths. Readback checks destination directory identity and permissions, and a losing publication rechecks independent evidence before retiring its stage.

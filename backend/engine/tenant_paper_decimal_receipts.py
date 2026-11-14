@@ -229,16 +229,17 @@ class DecimalReceiptStore:
 
     @contextmanager
     def _lock_staging_directory(self):
-        self._check_directory()
-        fd = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        folder = self.path.parent
+        selected = folder.lstat()
+        fd = os.open(folder, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
             info = os.fstat(fd)
-            if info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o700:
+            if not os.path.samestat(selected, info):
                 recovery._deny()
             # Cleanup takes this lock before the evidence locks. Refuse an active
             # publisher immediately, even while it holds those evidence locks.
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            _require_directory_identity(self.path.parent, info)
+            _require_directory_identity(folder, selected)
             yield fd
         finally:
             os.close(fd)
@@ -330,9 +331,24 @@ class DecimalReceiptStore:
             recovery._deny()
         _require_no_sidecars(self.path, stage_path)
         os.unlink(stage_path.name, dir_fd=folder_fd)
+        unlinked = self.path.lstat()
         os.fsync(folder_fd)
+        recheck_evidence()
         _require_directory_identity(self.path.parent, destination)
         _require_directory_identity(stage_path.parent, staging)
+        _require_no_sidecars(self.path, stage_path)
+        current = self.path.lstat()
+        if (not os.path.samestat(verified, unlinked) or not os.path.samestat(unlinked, current)
+                or current.st_nlink != 1 or current.st_ctime_ns != unlinked.st_ctime_ns
+                or current.st_mtime_ns != verified.st_mtime_ns
+                or current.st_size != verified.st_size or current.st_mode != verified.st_mode
+                or current.st_uid != verified.st_uid):
+            recovery._deny()
+        try:
+            os.stat(stage_path.name, dir_fd=folder_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            return
+        recovery._deny()
 
     def publish(self, witness, proposed):
         """Reserve before publishing a record and retain only its exact successor."""
