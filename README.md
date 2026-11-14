@@ -1,3 +1,5 @@
+**v0.2.128** — Offline publication can finish while unrelated files remain in its staging directory. Recovery tests cover interruption around directory removal and verify that a later witness or ledger write requires fresh evidence. See [staging directory recovery](PAPER_STAGING_DIRECTORY_V02128.md).
+
 **v0.2.127** — Offline receipt and checkpoint recovery share the same checks when removing a staging link. Tests cover process exit after unlink, a failed directory sync, and refusal when a reviewed path changes. See [publication cleanup and readback](PAPER_PUBLICATION_CLEANUP_V02127.md).
 
 **v0.2.126** — Offline active checkpoint recovery now keeps a staging link for exact review if evidence changes after publication. Terminal receipts and active checkpoints share the same staged publication and evidence checks. See [active checkpoint publication](PAPER_CHECKPOINT_PUBLICATION_V02126.md).

@@ -1,12 +1,13 @@
 """Exercise independently retained promotion evidence under synthetic rollback."""
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+import errno
 import os
 from pathlib import Path
 import shutil
 import sqlite3
 import tempfile
-from threading import Barrier
+from threading import Barrier, Event
 import unittest
 from unittest.mock import patch
 from uuid import uuid4
@@ -897,6 +898,139 @@ class PromotionCheckpointTests(unittest.TestCase):
         with self.assertRaises(recovery.DecimalRecoveryDenied):
             self.checkpoint.inspect_recovered(
                 exported | {"mac": "0" * 64}, trusted_receipt=tip, **self.recovery_evidence())
+
+    def assert_publication_directory_retirement(self, target, pattern, publish, inspect, tip):
+        rmdir = Path.rmdir
+        separate = target.parent / pattern.replace("*", "separate")
+        separate.parent.mkdir(mode=0o700)
+        separate.write_bytes(b"separate candidate")
+
+        folder_pattern = pattern.split("/")[0]
+        for outcome in ("exit-before", "exit-after", "removal-error", "populated"):
+            with self.subTest(outcome=outcome):
+                existing = set(target.parent.glob(folder_pattern))
+
+                def retire(folder):
+                    self.assertEqual(target.stat().st_nlink, 1)
+                    self.assertEqual(list(folder.iterdir()), [])
+                    if outcome == "exit-before":
+                        os._exit(95)
+                    if outcome == "exit-after":
+                        rmdir(folder)
+                        os._exit(95)
+                    if outcome == "removal-error":
+                        raise OSError(errno.EIO, "synthetic directory removal error")
+                    (folder / "operator-note").write_bytes(b"keep this file")
+                    rmdir(folder)
+
+                def run_publication():
+                    with patch.object(Path, "rmdir", retire):
+                        publish()
+
+                if outcome == "populated":
+                    run_publication()
+                elif outcome == "removal-error":
+                    with self.assertRaises(recovery.DecimalRecoveryDenied):
+                        run_publication()
+                else:
+                    pid = os.fork()
+                    if pid == 0:
+                        try:
+                            run_publication()
+                        finally:
+                            os._exit(96)
+                    _, status = os.waitpid(pid, 0)
+                    self.assertEqual(os.waitstatus_to_exitcode(status), 95)
+
+                remaining = set(target.parent.glob(folder_pattern)) - existing
+                if outcome == "exit-after":
+                    self.assertEqual(remaining, set())
+                else:
+                    folder, = remaining
+                    self.assertEqual([path.name for path in folder.iterdir()],
+                                     ["operator-note"] if outcome == "populated" else [])
+                    if outcome == "populated":
+                        self.assertEqual((folder / "operator-note").read_bytes(), b"keep this file")
+                self.assertEqual(separate.read_bytes(), b"separate candidate")
+                for _ in range(2):
+                    self.assertEqual(inspect(), {"receipt": tip, "additionalLinkPresent": False})
+                if outcome != "populated":
+                    target.unlink()
+
+    def test_terminal_publication_survives_staging_directory_retirement(self):
+        retained, evidence, _, _ = self.terminal_recovery_evidence()
+        self.assert_publication_directory_retirement(
+            self.pin_path, ".decimal-terminal-receipt-*/receipt.db",
+            lambda: retained.repair_local_terminal(self.pins, self.store, **evidence),
+            lambda: retained.inspect_local_terminal(self.pins, self.store, **evidence),
+            evidence["reviewed_receipt"])
+
+    def test_checkpoint_publication_survives_staging_directory_retirement(self):
+        self.prepare_checkpoint()
+        tip = self.promote()
+        exported = self.checkpoint.export(expected_receipt=tip)
+        self.checkpoint_path.unlink()
+        self.assert_publication_directory_retirement(
+            self.checkpoint_path, ".edgepilot-checkpoint-*/checkpoint.db",
+            lambda: self.recover_checkpoint(exported, tip),
+            lambda: self.checkpoint.inspect_recovered(
+                exported, trusted_receipt=tip, **self.recovery_evidence()),
+            tip)
+
+    def assert_recovery_reader_holds_writer_commit(self, cleanup, writer, recorder, method):
+        began = Event()
+        sync = receipts._sync_directory
+        write = getattr(recorder, method)
+        jobs = []
+
+        def write_under_lock(*args, **options):
+            result = write(*args, **options)
+            began.set()
+            return result
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            def sync_with_writer(directory):
+                sync(directory)
+                job = pool.submit(writer)
+                jobs.append(job)
+                self.assertTrue(began.wait(timeout=3))
+                with self.assertRaises(TimeoutError):
+                    job.result(timeout=0.05)
+
+            with (patch.object(recorder, method, write_under_lock),
+                  patch.object(receipts, "_sync_directory", sync_with_writer)):
+                cleanup()
+            job, = jobs
+            return job.result(timeout=5)
+
+    def test_checkpoint_cleanup_holds_signed_witness_commit_until_review_finishes(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        quarantine = recovery.quarantine_decimal_recovery(
+            record=self.promotion, trusted_tip=recovery.evidence_tip(self.promotion),
+            operator_key=self.operator, reason="INTEGRITY_FAILURE")
+        updated = self.assert_recovery_reader_holds_writer_commit(
+            lambda: self.cleanup_stage(stage, exported, tip),
+            lambda: self.store.publish(quarantine, expected_receipt=tip), self.store, "_append")
+        self.assertFalse(stage.exists())
+        self.assertEqual(self.store.read(trusted_receipt=updated), (quarantine, updated, False))
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.checkpoint.inspect_recovered(exported, trusted_receipt=tip,
+                                              **self.recovery_evidence())
+
+    def test_checkpoint_cleanup_requires_fresh_exact_ledger_after_writer_commit(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        fill = self.assert_recovery_reader_holds_writer_commit(
+            lambda: self.cleanup_stage(stage, exported, tip),
+            lambda: ledger.decimal_fill(
+                self.path, hmac_key=self.replacement, request_id=str(uuid4()), side="BUY",
+                asset_class="stock", symbol="MSFT", quantity="0.25",
+                assumed_unit_price="2.00", **self.scope),
+            ledger, "_step")
+        self.assertFalse(stage.exists())
+        self.assertFalse(fill["duplicate"])
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.checkpoint.inspect_recovered(exported, trusted_receipt=tip,
+                                              **self.recovery_evidence())
 
     def assert_reviewed_cleanup_checks(self, target, stage, evidence_path, cleanup, inspect, tip):
         original, content = target.stat(), target.read_bytes()
