@@ -1,3 +1,5 @@
+**v0.2.135** — Offline handoff inspection waits for a local receipt repair to commit or roll back. The missing-receipt path checks the destination and SQLite sidecars after reviewing the signed evidence. See [terminal repair ordering](PAPER_TERMINAL_REPAIR_ORDERING_V02135.md).
+
 **v0.2.134** — Operators can verify a completed local terminal receipt repair after the process exits. The offline rehearsal distinguishes a missing receipt from ambiguous evidence and verifies that tenant archive recovery still requires its own exact pin. See [terminal repair readback](PAPER_TERMINAL_REPAIR_READBACK_V02134.md).
 
 **v0.2.133** — Offline terminal handoff readback verifies whether the local receipt still needs repair. Repeated repair preserves the signed terminal evidence, and active checkpoint review refuses a stale receipt after a competing commit. See [terminal handoff readback](PAPER_TERMINAL_HANDOFF_READBACK_V02133.md).

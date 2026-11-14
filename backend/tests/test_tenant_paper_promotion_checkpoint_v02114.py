@@ -330,6 +330,101 @@ class PromotionCheckpointTests(unittest.TestCase):
         self.assertEqual(retained.repair_local_terminal(self.pins, self.store, **evidence), terminal)
         self.assertEqual(inspect(), {"receipt": terminal, "localRepairRequired": False})
 
+    def test_terminal_handoff_waits_for_local_repair_commit_or_rollback(self):
+        retained, evidence, _, _ = self.terminal_recovery_evidence()
+        terminal = evidence["reviewed_receipt"]
+        active = self.checkpoint.latest()
+        self.pins._initialize(active)
+        with self.pins._open() as db:
+            self.pins._save(db, active, pending=True)
+            db.commit()
+        frozen = self.pin_path.read_bytes()
+        saved_witness = self.store_path.read_bytes()
+        saved_independent = retained._store.path.read_bytes()
+
+        inspect = partial(retained.inspect_terminal_handoff, self.pins, self.store, **evidence)
+        repair = partial(retained.repair_local_terminal, self.pins, self.store, **evidence)
+        save = self.pins._save
+        open_independent = retained._store._open
+
+        for abort in (True, False):
+            with self.subTest(abort=abort), ThreadPoolExecutor(max_workers=2) as pool:
+                staged, attempting_inspection, finish = Event(), Event(), Event()
+
+                def hold_update(db, tip, *, pending):
+                    save(db, tip, pending=pending)
+                    staged.set()
+                    self.assertTrue(finish.wait(timeout=5))
+                    if abort:
+                        raise OSError("synthetic abort before local commit")
+
+                def mark_reader(**options):
+                    if staged.is_set():
+                        attempting_inspection.set()
+                    return open_independent(**options)
+
+                with (patch.object(self.pins, "_save", hold_update),
+                      patch.object(retained._store, "_open", mark_reader)):
+                    pending_repair = pool.submit(repair)
+                    try:
+                        self.assertTrue(staged.wait(timeout=3))
+                        pending_inspection = pool.submit(inspect)
+                        self.assertTrue(attempting_inspection.wait(timeout=3))
+                        with self.assertRaises(TimeoutError):
+                            pending_inspection.result(timeout=0.05)
+                    finally:
+                        finish.set()
+
+                    if abort:
+                        with self.assertRaises(recovery.DecimalRecoveryDenied):
+                            pending_repair.result(timeout=5)
+                        self.assertEqual(self.pin_path.read_bytes(), frozen)
+                    else:
+                        self.assertEqual(pending_repair.result(timeout=5), terminal)
+                    self.assertEqual(pending_inspection.result(timeout=5),
+                                     {"receipt": terminal, "localRepairRequired": abort})
+                self.assertEqual(self.store_path.read_bytes(), saved_witness)
+                self.assertEqual(retained._store.path.read_bytes(), saved_independent)
+
+    def test_missing_terminal_target_is_rechecked_after_independent_evidence(self):
+        retained, evidence, _, _ = self.terminal_recovery_evidence()
+        terminal = evidence["reviewed_receipt"]
+        inspect = partial(retained.inspect_terminal_handoff, self.pins, self.store, **evidence)
+        repair = partial(retained.repair_local_terminal, self.pins, self.store, **evidence)
+        evidence_recheck = receipts._evidence_recheck
+        foreign = b"unreviewed recovery evidence"
+
+        for name, operation in (("inspect", inspect), ("repair", repair)):
+            for suffix in ("", "-journal", "-wal", "-shm"):
+                with self.subTest(operation=name, suffix=suffix):
+                    intruder = self.pin_path.with_name(self.pin_path.name + suffix)
+                    stages = set(self.pin_path.parent.glob(".decimal-terminal-receipt-*/receipt.db"))
+
+                    def recheck_then_create(*paths):
+                        recheck = evidence_recheck(*paths)
+
+                        def create_intruder():
+                            recheck()
+                            intruder.write_bytes(foreign)
+                            intruder.chmod(0o600)
+
+                        return create_intruder
+
+                    try:
+                        with (patch.object(receipts, "_evidence_recheck", recheck_then_create),
+                              self.assertRaises(recovery.DecimalRecoveryDenied)):
+                            operation()
+                        self.assertEqual(intruder.read_bytes(), foreign)
+                        self.assertEqual(self.pin_path.exists(), suffix == "")
+                        self.assertTrue(all(path.is_file() for path in stages))
+                    finally:
+                        intruder.unlink(missing_ok=True)
+
+        self.assertEqual(inspect(),
+                         {"receipt": terminal, "localRepairRequired": True, "localReceiptMissing": True})
+        self.assertEqual(repair(), terminal)
+        self.assertEqual(inspect(), {"receipt": terminal, "localRepairRequired": False})
+
     def test_terminal_stage_cleanup_refuses_active_publisher_and_inexact_evidence(self):
         retained, evidence, old_witness, terminal_witness = self.terminal_recovery_evidence()
 

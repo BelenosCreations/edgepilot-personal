@@ -83,13 +83,13 @@ class FakePublic:
             assert options=={"allow_redirects":False,"stream":True}
             self.calls.append(("GET","HISTORY"))
             close = "101.50" if self.calls.count(("GET", "HISTORY")) == 1 else "101.75"
-            return self.response({"symbol":"SPY","period":"WEEK","regularMarket":{"bars":[{
+            return self.response({"symbol":"SPY","period":"WEEK","regularMarket":{"expectedBars":4,"bars":[{
                 "timestamp":"2026-10-01T13:30:00Z","open":"101.01","high":"102.00",
                 "low":"100.00","close":close,"volume":100}]}})
         if url==public.BASE+"/userapigateway/historicdata/EQUITY/SPY/MONTH":
             assert options=={"allow_redirects":False,"stream":True}
             self.calls.append(("GET","MONTH_HISTORY"))
-            return self.response({"symbol":"SPY","period":"MONTH","regularMarket":{"bars":[{
+            return self.response({"symbol":"SPY","period":"MONTH","totalExpectedBars":22,"regularMarket":{"bars":[{
                 "timestamp":"2026-09-01T13:30:00Z","open":"98.01","high":"99.00",
                 "low":"98.00","close":"98.50","volume":120}]}})
         raise AssertionError("Only allowlisted Public read endpoints")
@@ -149,6 +149,8 @@ assert history.json["provider"]=="Public API"
 assert history.json["source"]=="Get bars v2"
 assert history.json["period"]=="WEEK"
 assert history.json["bars"][0]["close"]=="101.50"
+assert history.json["barCount"] == 1
+assert history.json["sourceExpectedBars"] == 4
 assert history.json["readOnly"] is True
 assert history.json["dataPersisted"] is False
 monthly = post(a, history_path, {**history_request, "period": "MONTH"}, csrf)
@@ -158,6 +160,8 @@ assert monthly.json["provider"] == "Public API"
 assert monthly.json["source"] == "Get bars v2"
 assert monthly.json["period"] == "MONTH"
 assert monthly.json["bars"][0]["close"] == "98.50"
+assert monthly.json["barCount"] == 1
+assert monthly.json["sourceExpectedBars"] is None
 assert monthly.json["dataPersisted"] is False
 assert fake.calls.count(("GET", "HISTORY")) == 1
 assert fake.calls.count(("GET", "MONTH_HISTORY")) == 1

@@ -1,3 +1,11 @@
+## v0.2.135 — 2026-11-14 America/New_York — Terminal repair ordering
+
+**Changed** — Offline handoff inspection checks whether the missing local receipt or a sidecar appeared after the independent evidence was rechecked. Staged publication checks for SQLite sidecars immediately before the exclusive link.
+
+**Tests** — All 919 local tests passed, including 107 focused tests. Inspection waits for a cooperating local repair to commit or roll back. Target and sidecar arrivals during review are refused and retained. The synthetic owner history route verifies source counts and no-store responses.
+
+**Limitations** — Real Public history acceptance on the owner's device, combined rollback of all retained evidence, and consistency across resources after power loss remain open.
+
 ## v0.2.134 — 2026-11-14 America/New_York — Terminal repair readback
 
 **Changed** — Exact offline handoff inspection distinguishes a missing local receipt from an invalid receipt or ambiguous SQLite sidecars. A missing target remains eligible for exclusive staging under the independently retained terminal receipt and signed witness.
