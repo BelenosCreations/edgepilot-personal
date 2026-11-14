@@ -194,6 +194,9 @@ class OwnerMarketHistoryTests(unittest.TestCase):
         self.assertEqual([bar["volume"] for bar in observed["bars"]], ["1700"])
         self.assertIsNone(observed["sourceExpectedBars"])
         self.assertFalse(observed["dataPersisted"])
+        self.assertTrue(observed["readOnly"])
+        self.assertFalse(observed["ordersEnabled"])
+        self.assertFalse(observed["transfersEnabled"])
         payload["regularMarket"]["expectedBars"] = 4
         self.provider(json.dumps(payload))
         refreshed = self.history()

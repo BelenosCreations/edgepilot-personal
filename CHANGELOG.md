@@ -1,3 +1,11 @@
+## v0.2.142 — 2026-11-14 America/New_York — Staging-directory removal and sync
+
+**Changed** — Offline terminal receipt and active checkpoint recovery remove the staging directory relative to the held destination directory. After successful removal, they sync that directory before final publication review.
+
+**Tests** — All 934 local tests passed, including 114 focused tests. Rehearsals cover relocated staging and destination directories, a reused path with operator files, parent sync failure, and readback competing with cleanup retries after process exit. Synthetic Public history verifies read-only, session-only output.
+
+**Limitations** — Same-parent name changes can still race a filesystem syscall. Owner-device Public history acceptance, combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
+
 ## v0.2.141 — 2026-11-14 America/New_York — Staging-directory retirement review
 
 **Changed** — Offline terminal receipt and active checkpoint publication recheck the exact destination and independent evidence after staging-directory retirement. Cleanup verifies the staging name after the sidecar check before unlink.
