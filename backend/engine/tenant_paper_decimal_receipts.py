@@ -228,9 +228,9 @@ class DecimalReceiptStore:
                 stage._initialize(receipt)
                 try:
                     with stage._read_published(receipt) as verified:
+                        recheck_evidence()
                         if any(os.path.lexists(str(self.path) + suffix) for suffix in _SIDECARS):
                             recovery._deny()
-                        recheck_evidence()
                         os.link(stage.path, self.path, follow_symlinks=False)
                 except FileExistsError:
                     # An exclusive-link loser has only its own unpublished stage.
@@ -541,8 +541,8 @@ class DecimalRecoveryReceipt:
             except FileNotFoundError:
                 with witness._open(write=False) as journal:
                     self._require_terminal(witness, journal, tip, operator_record)
-                    receipts._check_missing_target()
                     recheck_evidence()
+                    receipts._check_missing_target()
                     return {"receipt": tip, "localRepairRequired": True, "localReceiptMissing": True}
             except OSError:
                 recovery._deny()
