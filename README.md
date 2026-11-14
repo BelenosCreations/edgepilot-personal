@@ -1,3 +1,5 @@
+**v0.2.126** — Offline active checkpoint recovery now keeps a staging link for exact review if evidence changes after publication. Terminal receipts and active checkpoints share the same staged publication and evidence checks. See [active checkpoint publication](PAPER_CHECKPOINT_PUBLICATION_V02126.md).
+
 **v0.2.125** — Offline terminal receipt publication rechecks independent evidence before linking and after syncing. Active checkpoint readback refuses evidence that disappears or changes during review. See [publication evidence](PAPER_PUBLICATION_EVIDENCE_V02125.md).
 
 **v0.2.124** — Offline terminal receipt cleanup rechecks both retained evidence files before unlink. Tests cover process exit, competing cleanup attempts and loss of an archive pin. See [recovery interruptions](PAPER_RECOVERY_INTERRUPTS_V02124.md).

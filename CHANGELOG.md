@@ -1,3 +1,11 @@
+## v0.2.126 — 2026-11-13 America/New_York — Active checkpoint publication
+
+**Changed** — Offline active checkpoint and terminal receipt recovery share staged publication. Evidence is checked before linking and again after destination sync. Interrupted publication retains the staging link for explicit inspection and cleanup. Active checkpoint cleanup syncs the destination directory before unlink.
+
+**Tests** — All 894 local tests passed, including 125 focused tests covering checkpoint evidence loss and replacement, concurrent publication and cleanup, second-generation archive readback, and a fresh synthetic Public history response.
+
+**Limitations** — Combined rollback, cross-resource power loss and real owner-device Public history acceptance remain open. Production execution remains disabled.
+
 ## v0.2.125 — 2026-11-13 America/New_York — Publication evidence
 
 **Changed** — Terminal receipt publication checks the independent receipt and signed witness before linking and after destination sync. Checkpoint readback and cleanup recheck the local receipt, signed witness and ledger before accepting the result or removing a staging link.

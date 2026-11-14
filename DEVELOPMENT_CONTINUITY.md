@@ -8,14 +8,14 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 
 ## Verification and checkpoint
 
-- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.125 from the merged PR for `development/v0.2.125-publication-evidence`. A later verified main checkpoint takes precedence.
-- Verified v0.2.124 baseline. PR #151 head `75d27dee3d808d1914091c9dba33c18124e6bb56` passed [Actions #43496314485](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43496314485). Main `59d630fe087ee4e7e546606e8479efe03b17501e` passed [Actions #43496668095](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43496668095), matched live Render deployment `dep-dbrmm668bjmc73f9umi0`, and returned HTTP 200 from `/healthz`. Duplicate PR #152 was closed, leaving no open PRs.
-- v0.2.125 rechecks evidence through terminal receipt publication and active checkpoint readback. See [milestone notes](PAPER_PUBLICATION_EVIDENCE_V02125.md).
+- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.126 from the merged PR for `development/v0.2.126-checkpoint-publication`. A later verified main checkpoint takes precedence.
+- Verified v0.2.125 baseline. PR #153 head `3d3d1da0dd570fb50f1ad64a7de3ed92135a44d2` passed [Actions #43497719350](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43497719350). Main `e5588f4a25dc65e17c0080b239df8f6be0720a85` passed [Actions #43498097693](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43498097693), matched live Render deployment `dep-dbrmqfqjnfac73aulmpg`, and returned HTTP 200 from `/healthz`. No PRs were open.
+- v0.2.126 checks evidence on both sides of active checkpoint publication and retains interrupted candidates for exact review. See [milestone notes](PAPER_CHECKPOINT_PUBLICATION_V02126.md).
 
 ## Next safe development batch
 
-1. Rehearse evidence loss around active checkpoint publication itself, including after the destination link is created. Require explicit inspection before cleaning any retained staging name and preserve terminal quarantine and earlier recovery paths.
-2. Evaluate how cooperating offline operators can hold evidence through publication and cleanup across recovery entry points. Preserve exact archive pins and repeated second-generation readback. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
+1. Rehearse interruption during the shared publication cleanup after destination sync. Cover process exit or sync failure after unlink, and verify exact readback for terminal receipts and active checkpoints. Preserve unrelated staging names and earlier recovery paths.
+2. Rehearse a cooperating writer contending with recovery evidence transactions and test refused cleanup when the published inode or stage path changes during review. Preserve exact archive pins and repeated second-generation readback. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
 3. Continue source-attributed and session-only Public research under the user's instruction to assume provider permission. Use real history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance). Earlier snapshot and MSFT quote acceptance still apply.
 
 ## Restrictions and workflow
@@ -26,6 +26,10 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.125 — 2026-11-13 — Publication evidence
+
+Terminal receipt publication and active checkpoint readback recheck the evidence files during verification. Second-generation archive tests cover replacement during the audit. See [publication evidence](PAPER_PUBLICATION_EVIDENCE_V02125.md).
 
 ## v0.2.124 — 2026-11-13 — Recovery interruptions
 

@@ -284,7 +284,7 @@ class PromotionCheckpointTests(unittest.TestCase):
             self.assertTrue(stage.samefile(self.pin_path))
             raise OSError("synthetic lost publication acknowledgment")
 
-        with patch.object(retained, "_sync_receipt_directory", side_effect=fail_sync):
+        with patch.object(receipts, "_sync_directory", side_effect=fail_sync):
             with self.assertRaises(recovery.DecimalRecoveryDenied):
                 retained.repair_local_terminal(self.pins, self.store, **evidence)
         stage, = self.pin_path.parent.glob(".decimal-terminal-receipt-*/receipt.db")
@@ -398,7 +398,7 @@ class PromotionCheckpointTests(unittest.TestCase):
     def test_terminal_stage_cleanup_refuses_evidence_loss_or_replacement_after_review(self):
         retained, evidence, stage, old_witness = self.terminal_cleanup_fixture()
         original, content = self.pin_path.stat(), self.pin_path.read_bytes()
-        sync = retained._sync_receipt_directory
+        sync = receipts._sync_directory
         for path, replace in ((retained._store.path, False), (self.store_path, True)):
             with self.subTest(resource=path.name, replace=replace):
                 held = path.with_suffix(".held")
@@ -410,7 +410,7 @@ class PromotionCheckpointTests(unittest.TestCase):
                         path.write_bytes(old_witness)
                         path.chmod(0o600)
 
-                with patch.object(retained, "_sync_receipt_directory", side_effect=move_evidence):
+                with patch.object(receipts, "_sync_directory", side_effect=move_evidence):
                     with self.assertRaises(recovery.DecimalRecoveryDenied):
                         retained.cleanup_local_terminal_stage(stage, self.pins, self.store, **evidence)
                 self.assertTrue(stage.samefile(self.pin_path))
@@ -455,7 +455,7 @@ class PromotionCheckpointTests(unittest.TestCase):
 
     def test_terminal_publication_requires_evidence_before_link_and_after_sync(self):
         retained, evidence, _, _ = self.terminal_recovery_evidence()
-        sync = retained._sync_receipt_directory
+        sync = receipts._sync_directory
         initialize = receipts.DecimalReceiptStore._initialize
         for path in (retained._store.path, self.store_path):
             for after_link in (False, True):
@@ -473,7 +473,7 @@ class PromotionCheckpointTests(unittest.TestCase):
                         path.write_bytes(exact)
                         path.chmod(0o600)
 
-                    interruption = (patch.object(retained, "_sync_receipt_directory", interrupt_sync)
+                    interruption = (patch.object(receipts, "_sync_directory", interrupt_sync)
                                     if after_link else patch.object(receipts.DecimalReceiptStore,
                                                                     "_initialize", interrupt_initialization))
                     with interruption:
@@ -824,6 +824,70 @@ class PromotionCheckpointTests(unittest.TestCase):
         self.assertEqual(self.checkpoint.inspect_recovered(
             exported, trusted_receipt=tip, **self.recovery_evidence()),
             {"receipt": tip, "additionalLinkPresent": False})
+
+    def test_checkpoint_publication_rechecks_evidence_on_both_sides_of_link(self):
+        self.prepare_checkpoint()
+        tip = self.promote()
+        exported = self.checkpoint.export(expected_receipt=tip)
+        self.checkpoint_path.unlink()
+        initialize = receipts.DecimalReceiptStore._initialize
+        sync = receipts._sync_directory
+
+        def inspect():
+            return self.checkpoint.inspect_recovered(
+                exported, trusted_receipt=tip, **self.recovery_evidence())
+
+        for evidence_path in (self.pin_path, self.store_path, self.path):
+            for after_link in (False, True):
+                with self.subTest(evidence=evidence_path.name, after_link=after_link):
+                    saved = evidence_path.with_suffix(".saved")
+                    exact = evidence_path.read_bytes()
+
+                    def lose_evidence(stage, receipt):
+                        initialize(stage, receipt)
+                        evidence_path.rename(saved)
+
+                    def replace_evidence(directory):
+                        sync(directory)
+                        stages = directory.glob(".edgepilot-checkpoint-*/checkpoint.db")
+                        active, = (candidate for candidate in stages
+                                   if candidate.samefile(self.checkpoint_path))
+                        with self.assertRaises(recovery.DecimalRecoveryDenied):
+                            self.cleanup_stage(active, exported, tip)
+                        evidence_path.rename(saved)
+                        evidence_path.write_bytes(exact)
+                        evidence_path.chmod(0o600)
+
+                    interruption = (patch.object(receipts, "_sync_directory", replace_evidence)
+                                    if after_link else patch.object(receipts.DecimalReceiptStore,
+                                                                    "_initialize", lose_evidence))
+                    with interruption, self.assertRaises(recovery.DecimalRecoveryDenied):
+                        self.recover_checkpoint(exported, tip)
+                    self.assertEqual(self.checkpoint_path.exists(), after_link)
+                    saved.replace(evidence_path)
+                    if after_link:
+                        published = self.checkpoint_path.stat()
+                        content = self.checkpoint_path.read_bytes()
+                        stages = self.checkpoint_path.parent.glob(".edgepilot-checkpoint-*/checkpoint.db")
+                        stage, = (candidate for candidate in stages if candidate.samefile(self.checkpoint_path))
+                        with self.assertRaises(recovery.DecimalRecoveryDenied):
+                            self.checkpoint.latest()
+                        with self.assertRaises(recovery.DecimalRecoveryDenied):
+                            self.recover_checkpoint(exported, tip)
+                        self.assertEqual(inspect(), {"receipt": tip, "additionalLinkPresent": True})
+                        self.cleanup_stage(stage, exported, tip)
+                        self.assert_checkpoint_readback(stage, exported, tip, published, content, linked=False)
+                        self.checkpoint_path.unlink()
+
+    def test_checkpoint_cleanup_preserves_both_names_if_destination_sync_fails(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        original, content = self.checkpoint_path.stat(), self.checkpoint_path.read_bytes()
+        with patch.object(receipts, "_sync_directory", side_effect=OSError("synthetic sync failure")):
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                self.cleanup_stage(stage, exported, tip)
+        self.assert_checkpoint_readback(stage, exported, tip, original, content, linked=True)
+        self.cleanup_stage(stage, exported, tip)
+        self.assert_checkpoint_readback(stage, exported, tip, original, content, linked=False)
 
     def test_partial_checkpoint_and_sidecar_require_explicit_resolution(self):
         self.prepare_checkpoint()
