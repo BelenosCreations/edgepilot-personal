@@ -1,3 +1,5 @@
+**v0.2.134** — Operators can verify a completed local terminal receipt repair after the process exits. The offline rehearsal distinguishes a missing receipt from ambiguous evidence and verifies that tenant archive recovery still requires its own exact pin. See [terminal repair readback](PAPER_TERMINAL_REPAIR_READBACK_V02134.md).
+
 **v0.2.133** — Offline terminal handoff readback verifies whether the local receipt still needs repair. Repeated repair preserves the signed terminal evidence, and active checkpoint review refuses a stale receipt after a competing commit. See [terminal handoff readback](PAPER_TERMINAL_HANDOFF_READBACK_V02133.md).
 
 **v0.2.132** — Offline recovery verifies signed evidence before retaining an independently reviewed terminal receipt after an interrupted handoff. Tests also cover an independent writer temporarily blocking active checkpoint readback and cleanup. See [interrupted receipt review](PAPER_INTERRUPTED_RECEIPT_REVIEW_V02132.md).

@@ -1,3 +1,11 @@
+## v0.2.134 — 2026-11-14 America/New_York — Terminal repair readback
+
+**Changed** — Exact offline handoff inspection distinguishes a missing local receipt from an invalid receipt or ambiguous SQLite sidecars. A missing target remains eligible for exclusive staging under the independently retained terminal receipt and signed witness.
+
+**Tests** — All 917 local tests passed, including 102 focused tests. Reopened stores verify a repair after process exit immediately after commit. A separate second-generation archive still requires its own pin and exact staging link after terminal repair. Synthetic Public history verifies a weekly entitlement refusal after a successful monthly refresh.
+
+**Limitations** — Rollback of every retained copy, cross-resource power-loss consistency, and real Public history verification on the owner's device remain open.
+
 ## v0.2.133 — 2026-11-14 America/New_York — Terminal handoff readback
 
 **Added** — Read-only offline handoff inspection reports whether an existing local receipt needs repair. It requires the exact independent receipt and signed terminal record and verifies that the local receipt belongs to that witness history.

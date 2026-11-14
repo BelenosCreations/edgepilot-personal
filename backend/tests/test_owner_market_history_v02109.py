@@ -91,6 +91,12 @@ class OwnerMarketHistoryTests(unittest.TestCase):
         self.assertEqual(refreshed["source"], "Get bars v2")
         self.assertFalse(refreshed["dataPersisted"])
 
+        self.provider(self.payload(symbol="MSFT", period="WEEK"), status=403)
+        with self.assertRaises(quote_tests.market.OwnerQuoteUnavailable):
+            self.history(symbol="MSFT", period="WEEK")
+        self.assertTrue(self.history_calls[0][0].endswith(
+            "/EQUITY/MSFT/WEEK?tradingSessionToggle=REGULAR_HOURS"))
+
     def test_failure_and_mismatched_instrument_refuse(self):
         for payload, status in ((self.payload(), 302), (self.payload(symbol="MSFT"), 200),
                                 ("{}", 200), ("not json", 200)):

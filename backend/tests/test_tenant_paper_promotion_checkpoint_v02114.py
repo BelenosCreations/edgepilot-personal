@@ -2,6 +2,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 import errno
+from functools import partial
 import os
 from pathlib import Path
 import shutil
@@ -226,6 +227,8 @@ class PromotionCheckpointTests(unittest.TestCase):
         partial, = self.pin_path.parent.glob(".decimal-terminal-receipt-*/receipt.db")
         unrelated = partial.with_name("unrelated.db")
         unrelated.write_bytes(b"unrelated fixture")
+        self.assertEqual(retained.inspect_terminal_handoff(self.pins, self.store, **evidence),
+                         {"receipt": terminal, "localRepairRequired": True, "localReceiptMissing": True})
 
         self.store_path.write_bytes(old_witness)
         with self.assertRaises(recovery.DecimalRecoveryDenied):
@@ -250,6 +253,8 @@ class PromotionCheckpointTests(unittest.TestCase):
         published = self.pin_path.read_bytes()
         inode = self.pin_path.stat()
         self.assertEqual(inspect(), {"receipt": terminal, "additionalLinkPresent": True})
+        self.assertEqual(retained.inspect_terminal_handoff(self.pins, self.store, **evidence),
+                         {"receipt": terminal, "localRepairRequired": False})
         self.store_path.write_bytes(old_witness)
         with self.assertRaises(recovery.DecimalRecoveryDenied):
             inspect()
@@ -272,6 +277,58 @@ class PromotionCheckpointTests(unittest.TestCase):
         self.assertEqual(unrelated.read_bytes(), b"unrelated fixture")
         self.assertEqual(inspect(), {"receipt": terminal, "additionalLinkPresent": False})
         self.assertEqual(self.pins.latest(), terminal)
+
+    def test_handoff_distinguishes_a_missing_receipt_from_ambiguous_local_evidence(self):
+        retained, evidence, old_witness, terminal_witness = self.terminal_recovery_evidence()
+        terminal = evidence["reviewed_receipt"]
+
+        def inspect(**overrides):
+            return retained.inspect_terminal_handoff(self.pins, self.store, **(evidence | overrides))
+
+        absent = {"receipt": terminal, "localRepairRequired": True, "localReceiptMissing": True}
+        self.assertEqual(inspect(), absent)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            inspect(operator_record=self.promotion)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            inspect(reviewed_receipt=None)
+        self.store_path.write_bytes(old_witness)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            inspect()
+        self.store_path.write_bytes(terminal_witness)
+        for suffix in ("-journal", "-wal", "-shm"):
+            sidecar = self.pin_path.with_name(self.pin_path.name + suffix)
+            sidecar.symlink_to(self.pin_path.with_suffix(".absent"))
+            with self.subTest(sidecar=suffix):
+                with self.assertRaises(recovery.DecimalRecoveryDenied):
+                    inspect()
+                with self.assertRaises(recovery.DecimalRecoveryDenied):
+                    retained.repair_local_terminal(self.pins, self.store, **evidence)
+                self.assertTrue(sidecar.is_symlink())
+                self.assertFalse(self.pin_path.exists())
+            sidecar.unlink()
+        self.pin_path.symlink_to(self.pin_path.with_suffix(".absent"))
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            inspect()
+        self.assertTrue(self.pin_path.is_symlink())
+        self.pin_path.unlink()
+        self.pin_path.touch(mode=0o600)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            inspect()
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            retained.repair_local_terminal(self.pins, self.store, **evidence)
+        self.assertEqual(self.pin_path.read_bytes(), b"")
+        self.pin_path.unlink()
+        self.pins._initialize({"number": terminal["number"], "mac": "0" * 64})
+        unrelated = self.pin_path.read_bytes()
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            inspect()
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            retained.repair_local_terminal(self.pins, self.store, **evidence)
+        self.assertEqual(self.pin_path.read_bytes(), unrelated)
+        self.pin_path.unlink()
+        self.assertEqual(inspect(), absent)
+        self.assertEqual(retained.repair_local_terminal(self.pins, self.store, **evidence), terminal)
+        self.assertEqual(inspect(), {"receipt": terminal, "localRepairRequired": False})
 
     def test_terminal_stage_cleanup_refuses_active_publisher_and_inexact_evidence(self):
         retained, evidence, old_witness, terminal_witness = self.terminal_recovery_evidence()
@@ -745,15 +802,34 @@ class PromotionCheckpointTests(unittest.TestCase):
         self.assertEqual(read_handoff(**reviewed_terminal),
                          {"receipt": terminal, "localRepairRequired": True})
 
-        self.assertEqual(independent.repair_local_terminal(
-            self.pins, self.store, **reviewed_terminal), terminal)
-        self.assertEqual(self.pins.latest(), terminal)
+        class ExitAfterCommit(sqlite3.Connection):
+            def commit(self):
+                super().commit()
+                os._exit(97)
+
+        pid = os.fork()
+        if pid == 0:
+            try:
+                connect = partial(sqlite3.connect, factory=ExitAfterCommit)
+                with patch.object(receipts.sqlite3, "connect", connect):
+                    independent.repair_local_terminal(self.pins, self.store, **reviewed_terminal)
+            finally:
+                os._exit(98)
+        _, status = os.waitpid(pid, 0)
+        self.assertEqual(os.waitstatus_to_exitcode(status), 97)
+
+        reopened = receipts.DecimalRecoveryReceipt(
+            independent._store.path, receipt_key=independent._store.key)
+        local = receipts.DecimalReceiptStore(self.pin_path, receipt_key=self.pins.key)
+        witness = type(self.store)(self.store_path, custody_key=self.store.custody_key,
+                                   operator_key=self.store.operator_key)
+        self.assertEqual(local.latest(), terminal)
         repaired = self.pin_path.read_bytes()
         for _ in range(2):
-            self.assertEqual(read_handoff(**reviewed_terminal),
+            self.assertEqual(reopened.inspect_terminal_handoff(local, witness, **reviewed_terminal),
                              {"receipt": terminal, "localRepairRequired": False})
-            self.assertEqual(independent.repair_local_terminal(
-                self.pins, self.store, **reviewed_terminal), terminal)
+            self.assertEqual(reopened.repair_local_terminal(local, witness, **reviewed_terminal),
+                             terminal)
             self.assertEqual(self.pin_path.read_bytes(), repaired)
             self.assertEqual(self.store_path.read_bytes(), signed_bytes)
             self.assertEqual(independent._store.path.read_bytes(), independently_retained)
