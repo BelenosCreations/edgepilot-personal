@@ -1,3 +1,11 @@
+## v0.2.131 — 2026-11-14 America/New_York — Independent checkpoint evidence
+
+**Added** — Offline active checkpoint recovery, readback, and reviewed staging cleanup can take a separately retained receipt. This optional check holds the exact receipt through the operation and rechecks its file alongside local evidence.
+
+**Tests** — All 913 local tests passed, including 141 focused tests. The rehearsal covers an interrupted quarantine acknowledgment, coordinated rollback of local evidence, replacement of the independent receipt during publication, and an authenticated preflight that sees older synthetic state after local rollback. It also checks exact tenant archive pins and source attribution for synthetic monthly Public history.
+
+**Limitations** — The separately retained receipt must remain current. Rollback of all copies, cross-resource power-loss consistency, and owner-device Public history acceptance remain open. Production execution remains disabled.
+
 ## v0.2.130 — 2026-11-13 America/New_York — Recovery writer rollback
 
 **Added** — Offline tests exercise signed witness and synthetic ledger writes that roll back while recovery holds verified read snapshots. The exact checkpoint stays readable, and fresh cleanup removes the reviewed staging link. Terminal receipt readback and cleanup wait for an independent receipt writer to release its transaction and then verify the original receipt.

@@ -597,14 +597,15 @@ class DecimalPromotionCheckpoint:
     @classmethod
     def recover(cls, path, exported, *, trusted_receipt, checkpoint_key, receipts, witness,
                 ledger_path, reserved_receipt, prepared_receipt, operator_record,
-                journal_key, anchor_key):
+                journal_key, anchor_key, recovery_receipt=None):
         """Recreate a lost checkpoint at an independently pinned completed promotion."""
         checkpoint = cls(path, checkpoint_key=checkpoint_key)
         with checkpoint._verified_recovery(
                 exported, trusted_receipt=trusted_receipt, receipts=receipts, witness=witness,
                 ledger_path=ledger_path, reserved_receipt=reserved_receipt,
                 prepared_receipt=prepared_receipt, operator_record=operator_record,
-                journal_key=journal_key, anchor_key=anchor_key) as recheck_evidence:
+                journal_key=journal_key, anchor_key=anchor_key,
+                recovery_receipt=recovery_receipt) as recheck_evidence:
             checkpoint._store._publish_staged(trusted_receipt, recheck_evidence,
                                               prefix=_CHECKPOINT_STAGE_PREFIX,
                                               filename="checkpoint.db")
@@ -612,20 +613,21 @@ class DecimalPromotionCheckpoint:
 
     def inspect_recovered(self, exported, *, trusted_receipt, receipts, witness, ledger_path,
                           reserved_receipt, prepared_receipt, operator_record, journal_key,
-                          anchor_key):
+                          anchor_key, recovery_receipt=None):
         """Read back an exact published candidate after an interrupted recovery."""
         with self._verified_recovery(
                 exported, trusted_receipt=trusted_receipt, receipts=receipts, witness=witness,
                 ledger_path=ledger_path, reserved_receipt=reserved_receipt,
                 prepared_receipt=prepared_receipt, operator_record=operator_record,
-                journal_key=journal_key, anchor_key=anchor_key) as recheck_evidence:
+                journal_key=journal_key, anchor_key=anchor_key,
+                recovery_receipt=recovery_receipt) as recheck_evidence:
             with self._store._read_published(trusted_receipt) as info:
                 recheck_evidence()
                 return {"receipt": trusted_receipt.copy(), "additionalLinkPresent": info.st_nlink == 2}
 
     def cleanup_recovered_stage(self, staging_path, exported, *, trusted_receipt, receipts,
                                 witness, ledger_path, reserved_receipt, prepared_receipt,
-                                operator_record, journal_key, anchor_key):
+                                operator_record, journal_key, anchor_key, recovery_receipt=None):
         """Remove only the operator-selected orphan hard link to an exact checkpoint."""
         target, stage_path = self._store.path, Path(staging_path)
         if (stage_path.parent.parent != target.parent or stage_path.name != "checkpoint.db"
@@ -637,7 +639,8 @@ class DecimalPromotionCheckpoint:
                     exported, trusted_receipt=trusted_receipt, receipts=receipts, witness=witness,
                     ledger_path=ledger_path, reserved_receipt=reserved_receipt,
                     prepared_receipt=prepared_receipt, operator_record=operator_record,
-                    journal_key=journal_key, anchor_key=anchor_key) as recheck_evidence:
+                    journal_key=journal_key, anchor_key=anchor_key,
+                    recovery_receipt=recovery_receipt) as recheck_evidence:
                 with self._store._read_published(trusted_receipt) as verified:
                     self._store._unlink_published_stage(
                         stage_path, folder_fd, verified, recheck_evidence)
@@ -647,7 +650,7 @@ class DecimalPromotionCheckpoint:
     @contextmanager
     def _verified_recovery(self, exported, *, trusted_receipt, receipts, witness, ledger_path,
                            reserved_receipt, prepared_receipt, operator_record, journal_key,
-                           anchor_key):
+                           anchor_key, recovery_receipt):
         self._verify_separation(receipts, witness, journal_key, anchor_key)
         if (type(exported) is not dict or exported.keys() != {"receipt", "mac"}
                 or type(trusted_receipt) is not dict
@@ -658,8 +661,18 @@ class DecimalPromotionCheckpoint:
                 or not exported["mac"].isascii()
                 or not hmac.compare_digest(exported["mac"], self._export_mac(trusted_receipt))):
             recovery._deny()
-        recheck_evidence = _evidence_recheck(receipts.path, witness.path, Path(ledger_path))
-        with receipts._open() as db, witness._open(write=False) as journal:
+        paths = [receipts.path, witness.path, Path(ledger_path)]
+        external = nullcontext()
+        if recovery_receipt is not None:
+            recovery_receipt._verify_separation(
+                receipts, witness, journal_key, anchor_key, self._store.key)
+            external_store = recovery_receipt._store
+            if external_store.path.parent == self._store.path.parent:
+                recovery._deny()
+            paths.append(external_store.path)
+            external = external_store._pin(trusted_receipt)
+        recheck_evidence = _evidence_recheck(*paths)
+        with external, receipts._open() as db, witness._open(write=False) as journal:
             retained, pending = receipts._read_state(db)
             witness._read(journal, reserved_receipt, exact=False)
             witness._read(journal, prepared_receipt, exact=False)

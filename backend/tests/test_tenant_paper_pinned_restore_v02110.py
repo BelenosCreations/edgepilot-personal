@@ -106,6 +106,46 @@ class PinnedPaperRestoreTests(unittest.TestCase):
                                    csrf=self.session["csrf"], max_realized_loss="0.54",
                                    **self.request)
 
+    def test_preflight_cannot_detect_joint_rollback_without_external_archive_pin(self):
+        account_scope.setup(self.path)
+        self.archive_key = Fernet.generate_key()
+        self.destination = self.path.with_name("restored.db")
+        self.policies = dict.fromkeys(
+            [(self.owner, self.account), (self.owner, self.alternate),
+             (self.member, self.other)], PaperRestorePolicy(90, 1000, 300, 54))
+        params = self.params(protected_pct="90", per_trade_cap="3")
+        old_bytes = self.path.read_bytes()
+        old_token, old_pin = self.seal()
+        self.append(params)
+        current_token, current_pin = self.seal()
+
+        def inspect(path, session):
+            return preflight.inspect_fill(path, session_token=session["token"],
+                                          csrf=session["csrf"], max_realized_loss="0.54", **params)
+
+        self.assertTrue(inspect(self.path, self.session)["duplicate"])
+        self.path.write_bytes(old_bytes)
+        projection = inspect(self.path, self.session)
+        self.assertFalse(projection["duplicate"])
+        self.assertFalse(projection["assumedFillAuthorized"])
+        self.assertEqual(self.path.read_bytes(), old_bytes)
+        with self.assertRaises(backup.OfflineBackupDenied):
+            self.restore(old_token, current_pin)
+        self.assertFalse(self.destination.exists())
+
+        restored = self.restore(current_token, current_pin)
+        before = restored.read_bytes()
+        with self.assertRaises(preflight.PaperPreflightDenied):
+            inspect(restored, self.session)
+        auth = identity_auth.IdentityStore(restored)
+        fresh = auth.authenticate("owner", "fixture-password-for-owner", "synthetic-restore")
+        self.assertIsNotNone(auth.principal(fresh["token"], fresh["csrf"]))
+        after_login = restored.read_bytes()
+        with self.assertRaises(preflight.PaperPreflightDenied):
+            inspect(restored, fresh)
+        self.assertNotEqual(after_login, before)
+        self.assertEqual(restored.read_bytes(), after_login)
+
     def test_rejects_rewritten_digest_changed_policy_and_old_ciphertext(self):
         self.prepare()
         old_token, old_pin = self.seal()

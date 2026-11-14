@@ -1,3 +1,5 @@
+**v0.2.131** — Offline checkpoint recovery can require a separately retained receipt before recreating, inspecting, or cleaning up a checkpoint. The authenticated paper preflight remains a read-only projection. See [independent checkpoint evidence](PAPER_INDEPENDENT_CHECKPOINT_EVIDENCE_V02131.md).
+
 **v0.2.130** — Offline recovery tests verify that a rolled-back witness, ledger, or independent receipt write leaves exact evidence usable for readback and reviewed cleanup. See [recovery writer rollback](PAPER_RECOVERY_WRITER_ROLLBACK_V02130.md).
 
 **v0.2.129** — Offline recovery tests verify that a committed witness or ledger update invalidates earlier checkpoint evidence, including when the update commits after a recovery process exits. See [recovery writer ordering](PAPER_RECOVERY_WRITER_ORDER_V02129.md).

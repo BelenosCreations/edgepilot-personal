@@ -8,14 +8,14 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 
 ## Verification and checkpoint
 
-- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.130 from the merged PR for `development/v0.2.130-recovery-writer-rollback`. A later verified main checkpoint takes precedence.
-- Verified v0.2.129 baseline. PR #157 head `1f2b489cd9de0851f58ee1048c4240d9a5eacdf4` passed [Actions #43547342854](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43547342854). Main `771cbbd25ec485bf073b0aa5ae52055cfb0ae9b3` passed [Actions #43547537252](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43547537252), matched live Render deployment `dep-dbrsjse417fc73es7m8g`, and returned HTTP 200 from `/healthz`. No PRs were open.
-- v0.2.130 verifies exact active and terminal recovery readback after competing writers roll back. See [milestone notes](PAPER_RECOVERY_WRITER_ROLLBACK_V02130.md).
+- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.131 from the merged PR for `development/v0.2.131-independent-checkpoint-evidence`. A later verified main checkpoint takes precedence.
+- Verified v0.2.130 baseline. PR #158 head `7b19b4669b8f707ff6f0579dbbe194c91b35f2dd` passed [Actions #43549179013](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43549179013). Main `2aeffc5578fa09f1a89e176780c4638676ebc4f1` passed [Actions #43549424769](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43549424769), matched live Render deployment `dep-dbrsu2ijnfac73bl1n7g`, and returned HTTP 200 from `/healthz`. No PRs were open.
+- v0.2.131 adds an optional independent receipt to offline checkpoint recovery, readback, and cleanup. It documents the authenticated preflight and archive boundaries. See [milestone notes](PAPER_INDEPENDENT_CHECKPOINT_EVIDENCE_V02131.md).
 
 ## Next safe development batch
 
-1. Review the path from authenticated owner paper preflight to the separate offline recovery rehearsal. Identify the remaining evidence and atomicity gaps, and exercise a concrete gap with synthetic recovery fixtures. Keep execution detached from the production fill path.
-2. Evaluate separately retained monotonic evidence for combined rollback and interruption between resource commits. Preserve exact archive pins, repeated second-generation readback and unrelated candidates. Treat combined rollback of all retained evidence and cross-resource power-loss consistency as open until independently demonstrated.
+1. Examine the interval between a signed witness commit and independent receipt retention. Rehearse a process exit in that interval and require explicit operator review after ambiguity. Preserve the exact receipt and existing recovery paths.
+2. Rehearse independent receipt contention during active checkpoint readback and reviewed staging cleanup. Preserve exact archive pins, repeated second-generation readback, and unrelated candidates. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open. Keep the authenticated paper preflight detached from execution.
 3. Continue source-attributed and session-only Public research under the user's instruction to assume provider permission. Use real history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance). Earlier snapshot and MSFT quote acceptance still apply.
 
 ## Restrictions and workflow
@@ -26,6 +26,10 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.130 — 2026-11-13 — Recovery writer rollback
+
+Offline recovery verifies the same evidence after cooperating witness, ledger, and independent receipt writers roll back. See [recovery writer rollback](PAPER_RECOVERY_WRITER_ROLLBACK_V02130.md).
 
 ## v0.2.129 — 2026-11-13 — Recovery writer ordering
 

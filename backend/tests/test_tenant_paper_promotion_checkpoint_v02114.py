@@ -621,6 +621,105 @@ class PromotionCheckpointTests(unittest.TestCase):
                 self.assertEqual(resolved["number"], self.claim["number"] + 1)
                 self.assertEqual(self.path.read_bytes(), ledger)
 
+    def retain_independent_recovery_receipt(self, tip):
+        folder = tempfile.TemporaryDirectory(prefix="decimal-independent-checkpoint-")
+        self.addCleanup(folder.cleanup)
+        return receipts.DecimalRecoveryReceipt.create(
+            Path(folder.name) / "recovery.db", receipt_key=os.urandom(32),
+            receipts=self.pins, witness=self.store, reviewed_receipt=tip)
+
+    def test_independent_receipt_blocks_joint_active_checkpoint_rollback(self):
+        stage, exported, active = self.reviewed_staging_link()
+        independent = self.retain_independent_recovery_receipt(active)
+        old_files = {path: path.read_bytes() for path in (self.pin_path, self.store_path, self.path)}
+        publication = self.checkpoint_path.read_bytes()
+        quarantine = recovery.quarantine_decimal_recovery(
+            record=self.promotion, trusted_tip=recovery.evidence_tip(self.promotion),
+            operator_key=self.operator, reason="INTEGRITY_FAILURE")
+        unrelated = stage.with_name("operator-note")
+        unrelated.write_bytes(b"preserve")
+        evidence = self.recovery_evidence() | {"recovery_receipt": independent}
+        save = self.pins._save
+
+        def lose_local_acknowledgment(db, tip, *, pending):
+            if not pending:
+                recovery._deny()
+            save(db, tip, pending=pending)
+
+        with patch.object(self.pins, "_save", lose_local_acknowledgment):
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                self.pins.publish(self.store, quarantine)
+        record, terminal, _ = self.store.read(trusted_receipt=active)
+        self.assertEqual(record, quarantine)
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            self.pins.latest()
+
+        def inspect(**options):
+            return self.checkpoint.inspect_recovered(exported, trusted_receipt=active, **options)
+
+        # The witness committed before either receipt acknowledged quarantine.
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            inspect(**evidence)
+        self.assertEqual(independent.retain_terminal(
+            self.pins, self.store, expected_receipt=active, reviewed_receipt=terminal,
+            operator_record=quarantine), terminal)
+
+        for path, content in old_files.items():
+            path.write_bytes(content)
+        self.assertEqual(inspect(**self.recovery_evidence()),
+                         {"receipt": active, "additionalLinkPresent": True})
+        missing = self.checkpoint_path.with_name("missing-checkpoint.db")
+        for operation in (
+                lambda: inspect(**evidence),
+                lambda: self.checkpoint.cleanup_recovered_stage(
+                    stage, exported, trusted_receipt=active, **evidence),
+                lambda: receipts.DecimalPromotionCheckpoint.recover(
+                    missing, exported, trusted_receipt=active, checkpoint_key=self.checkpoint_key,
+                    **evidence)):
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                operation()
+            self.assertFalse(missing.exists())
+            self.assertTrue(stage.samefile(self.checkpoint_path))
+            self.assertEqual(self.checkpoint_path.read_bytes(), publication)
+            self.assertEqual(unrelated.read_bytes(), b"preserve")
+        self.assertEqual(independent._store.latest(), terminal)
+
+    def test_independent_receipt_is_rechecked_at_checkpoint_publication(self):
+        self.prepare_checkpoint()
+        tip = self.promote()
+        exported = self.checkpoint.export(expected_receipt=tip)
+        independent = self.retain_independent_recovery_receipt(tip)
+        evidence = self.recovery_evidence() | {"recovery_receipt": independent}
+        self.checkpoint_path.unlink()
+        original = independent._store.path
+        saved = original.with_suffix(".held")
+        content = original.read_bytes()
+        sync = receipts._sync_directory
+
+        def replace_after_sync(path):
+            sync(path)
+            original.rename(saved)
+            original.write_bytes(content)
+            original.chmod(0o600)
+
+        with patch.object(receipts, "_sync_directory", replace_after_sync):
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                receipts.DecimalPromotionCheckpoint.recover(
+                    self.checkpoint_path, exported, trusted_receipt=tip,
+                    checkpoint_key=self.checkpoint_key, **evidence)
+        saved.replace(original)
+        stage, = self.checkpoint_path.parent.glob(".edgepilot-checkpoint-*/checkpoint.db")
+        self.assertTrue(stage.samefile(self.checkpoint_path))
+        for _ in range(2):
+            self.assertEqual(self.checkpoint.inspect_recovered(
+                exported, trusted_receipt=tip, **evidence),
+                {"receipt": tip, "additionalLinkPresent": True})
+        self.checkpoint.cleanup_recovered_stage(stage, exported, trusted_receipt=tip, **evidence)
+        self.assertFalse(stage.exists())
+        self.assertEqual(self.checkpoint.inspect_recovered(
+            exported, trusted_receipt=tip, **evidence),
+            {"receipt": tip, "additionalLinkPresent": False})
+
     def recover_checkpoint(self, exported, tip):
         return receipts.DecimalPromotionCheckpoint.recover(
             self.checkpoint_path, exported, trusted_receipt=tip,
