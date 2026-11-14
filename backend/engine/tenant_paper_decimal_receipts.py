@@ -68,6 +68,19 @@ class DecimalReceiptStore:
                 or stat.S_IMODE(info.st_mode) != 0o700):
             recovery._deny()
 
+    def _check_missing_target(self):
+        try:
+            self._check_directory()
+            sidecars = (self.path.with_name(self.path.name + suffix) for suffix in _SIDECARS)
+            for path in (self.path, *sidecars):
+                try:
+                    path.lstat()
+                except FileNotFoundError:
+                    continue
+                recovery._deny()
+        except OSError:
+            recovery._deny()
+
     def _verify_separation(self, witness, *keys):
         recovery._keys(self.key, witness.custody_key, witness.operator_key, *keys)
         if self.path.parent == witness.path.parent:
@@ -501,6 +514,7 @@ class DecimalRecoveryReceipt:
             with local as db, witness._open(write=False) as journal:
                 self._require_terminal(witness, journal, tip, operator_record)
                 if db is None:
+                    receipts._check_missing_target()
                     receipts._publish_staged(tip, recheck_evidence, prefix=_TERMINAL_STAGE_PREFIX,
                                              filename="receipt.db")
                 else:
@@ -516,19 +530,30 @@ class DecimalRecoveryReceipt:
                 return tip
 
     def inspect_terminal_handoff(self, receipts, witness, *, reviewed_receipt, operator_record):
-        """Read back an existing local receipt against independently reviewed terminal evidence."""
+        """Read back local handoff state against independently reviewed terminal evidence."""
         self._verify_separation(receipts, witness)
-        recheck_evidence = _evidence_recheck(self._store.path, receipts.path, witness.path)
-        with (self._store._pin(reviewed_receipt) as tip,
-              receipts._open(read_only=True) as local,
-              witness._open(write=False) as journal):
+        recheck_evidence = _evidence_recheck(self._store.path, witness.path)
+        with self._store._pin(reviewed_receipt) as tip:
             if tip != reviewed_receipt:
                 recovery._deny()
-            self._require_terminal(witness, journal, tip, operator_record)
-            previous, pending = receipts._read_state(local)
-            witness._read(journal, previous, exact=False)
-            recheck_evidence()
-            return {"receipt": tip, "localRepairRequired": pending or previous != tip}
+            try:
+                receipts.path.lstat()
+            except FileNotFoundError:
+                with witness._open(write=False) as journal:
+                    self._require_terminal(witness, journal, tip, operator_record)
+                    receipts._check_missing_target()
+                    recheck_evidence()
+                    return {"receipt": tip, "localRepairRequired": True, "localReceiptMissing": True}
+            except OSError:
+                recovery._deny()
+            recheck_local = _evidence_recheck(receipts.path)
+            with receipts._open(read_only=True) as local, witness._open(write=False) as journal:
+                self._require_terminal(witness, journal, tip, operator_record)
+                previous, pending = receipts._read_state(local)
+                witness._read(journal, previous, exact=False)
+                recheck_local()
+                recheck_evidence()
+                return {"receipt": tip, "localRepairRequired": pending or previous != tip}
 
     def inspect_local_terminal(self, receipts, witness, *, reviewed_receipt, operator_record):
         """Verify a published terminal receipt after interruption without changing files."""

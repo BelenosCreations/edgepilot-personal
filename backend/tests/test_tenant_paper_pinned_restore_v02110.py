@@ -21,6 +21,7 @@ from engine import tenant_paper_ledger as ledger
 from engine.tenant_paper_loss_stop import _replay_realized
 from engine.tenant_paper_recovery_audit import PaperRestorePolicy
 import test_tenant_paper_authenticated_preflight_v02107 as fixtures
+import test_tenant_paper_promotion_checkpoint_v02114 as terminal_fixtures
 from test_tenant_passkeys_v0225 import b64url
 
 
@@ -285,6 +286,50 @@ class PinnedPaperRestoreTests(unittest.TestCase):
         backup.cleanup_pinned_paper_staging_link(
             token, self.archive_key, self.destination, stage, policies=self.policies,
             trusted_pin=pin)
+
+    def test_terminal_receipt_repair_does_not_authorize_archive_recovery(self):
+        self.prepare()
+        first_token, first_pin = self.seal()
+        self.restore(first_token, first_pin)
+        token, pin = backup.seal_pinned_paper_fixture(
+            self.destination, self.archive_key, policies=self.policies)
+        self.destination = self.destination.with_name("restored-again.db")
+        stage = self.orphan_stage(token, pin)
+        published = self.destination.read_bytes()
+        unrelated = stage.with_name(backup._STAGE_PREFIX + "unrelated.db")
+        unrelated.write_bytes(published)
+        unrelated.chmod(0o600)
+
+        terminal = terminal_fixtures.PromotionCheckpointTests()
+        self.addCleanup(terminal.doCleanups)
+        terminal.setUp()
+        independent, evidence, _, _ = terminal.terminal_recovery_evidence()
+        self.assertEqual(independent.repair_local_terminal(terminal.pins, terminal.store, **evidence),
+                         evidence["reviewed_receipt"])
+        self.assertEqual(
+            independent.inspect_terminal_handoff(terminal.pins, terminal.store, **evidence),
+            {"receipt": evidence["reviewed_receipt"], "localRepairRequired": False})
+
+        def inspect(archive, trusted_pin):
+            return backup.inspect_pinned_paper_publication(
+                archive, self.archive_key, self.destination, policies=self.policies,
+                trusted_pin=trusted_pin)
+
+        for wrong_pin in (first_pin, evidence["reviewed_receipt"]["mac"]):
+            with self.assertRaises(backup.OfflineBackupDenied):
+                inspect(token, wrong_pin)
+            with self.assertRaises(backup.OfflineBackupDenied):
+                self.cleanup(token, wrong_pin, stage)
+        with self.assertRaises(backup.OfflineBackupDenied):
+            self.cleanup(token, pin, unrelated)
+        self.assertFalse(unrelated.samefile(self.destination))
+        self.assertTrue(stage.samefile(self.destination))
+        self.assertEqual(inspect(token, pin), {"quarantineVerified": True, "additionalLinkPresent": True})
+        self.cleanup(token, pin, stage)
+        self.assertFalse(stage.exists())
+        self.assertEqual(inspect(token, pin), {"quarantineVerified": True, "additionalLinkPresent": False})
+        self.assertEqual(self.destination.read_bytes(), published)
+        self.assertEqual(unrelated.read_bytes(), published)
 
     def test_manual_cleanup_preserves_exact_quarantined_destination(self):
         self.prepare()
