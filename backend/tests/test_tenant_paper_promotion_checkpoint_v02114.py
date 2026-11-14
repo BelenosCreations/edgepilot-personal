@@ -552,6 +552,132 @@ class PromotionCheckpointTests(unittest.TestCase):
         self.assertEqual(self.pin_path.read_bytes(), published)
         self.assertEqual(readback(), {"receipt": terminal, "additionalLinkPresent": False})
 
+    def test_terminal_readback_refuses_local_publication_changes_at_final_review(self):
+        retained, evidence, stage, _ = self.terminal_cleanup_fixture()
+        tip = evidence["reviewed_receipt"]
+        readback = partial(retained.inspect_local_terminal, self.pins, self.store, **evidence)
+        handoff = partial(retained.inspect_terminal_handoff, self.pins, self.store, **evidence)
+        checked = {"receipt": tip, "additionalLinkPresent": True}
+        for operation, expected in (
+                (readback, checked), (handoff, {"receipt": tip, "localRepairRequired": False})):
+            self.assert_changed_publication_refused(
+                self.pin_path, stage, retained._store.path, operation, expected)
+
+    def assert_changed_publication_refused(self, target, stage, independent, inspect, expected):
+        original, content = target.stat(), target.read_bytes()
+        evidence_recheck = receipts._evidence_recheck
+        for change in ("unlink", "replace", "remove stage"):
+            with self.subTest(operation=inspect.func.__name__, change=change):
+                def recheck_then_change(*paths):
+                    recheck = evidence_recheck(*paths)
+
+                    def change_publication():
+                        recheck()
+                        if independent in paths:
+                            if change == "remove stage":
+                                stage.unlink()
+                            else:
+                                target.unlink()
+                                if change == "replace":
+                                    target.write_bytes(content)
+                                    target.chmod(0o600)
+                    return change_publication
+
+                with (patch.object(receipts, "_evidence_recheck", recheck_then_change),
+                      self.assertRaises(recovery.DecimalRecoveryDenied)):
+                    inspect()
+                if change == "remove stage":
+                    self.assertFalse(stage.exists())
+                    self.assertTrue(os.path.samestat(target.stat(), original))
+                    os.link(target, stage)
+                else:
+                    self.assertTrue(os.path.samestat(stage.stat(), original))
+                    if change == "replace":
+                        self.assertEqual(target.read_bytes(), content)
+                        self.assertFalse(target.samefile(stage))
+                        target.unlink()
+                    self.assertFalse(target.exists())
+                    os.link(stage, target)
+                self.assertTrue(target.samefile(stage))
+                self.assertEqual(target.read_bytes(), content)
+                self.assertEqual(inspect(), expected)
+
+    def test_active_checkpoint_readback_rechecks_local_publication(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        independent = self.retain_independent_recovery_receipt(tip)
+        inspect = partial(self.checkpoint.inspect_recovered, exported, trusted_receipt=tip,
+                          **self.recovery_evidence(), recovery_receipt=independent)
+        self.assert_changed_publication_refused(
+            self.checkpoint_path, stage, independent._store.path, inspect,
+            {"receipt": tip, "additionalLinkPresent": True})
+
+    def test_terminal_review_refuses_late_publication_and_stage_sidecars(self):
+        retained, evidence, terminal_stage, _ = self.terminal_cleanup_fixture()
+        self.assert_cleanup_preserves_late_sidecars(
+            self.pin_path, terminal_stage,
+            partial(retained.inspect_local_terminal, self.pins, self.store, **evidence),
+            partial(retained.cleanup_local_terminal_stage, terminal_stage, self.pins, self.store,
+                    **evidence), evidence["reviewed_receipt"])
+
+    def test_checkpoint_review_refuses_late_publication_and_stage_sidecars(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        inspect = partial(self.checkpoint.inspect_recovered, exported, trusted_receipt=tip,
+                          **self.recovery_evidence())
+        cleanup = partial(self.cleanup_stage, stage, exported, tip)
+        self.assert_cleanup_preserves_late_sidecars(self.checkpoint_path, stage, inspect, cleanup, tip)
+
+    def assert_cleanup_preserves_late_sidecars(self, target, stage, inspect, cleanup, tip):
+        content = target.read_bytes()
+        sync = receipts._sync_directory
+        read_published = receipts.DecimalReceiptStore._read_published
+        expected = {"receipt": tip, "additionalLinkPresent": True}
+        foreign = b"unreviewed SQLite sidecar"
+
+        for path in (stage, target):
+            for suffix in ("-journal", "-wal", "-shm"):
+                with self.subTest(path=path, suffix=suffix):
+                    sidecar = path.with_name(path.name + suffix)
+
+                    def sync_then_create(directory):
+                        sync(directory)
+                        sidecar.write_bytes(foreign)
+
+                    try:
+                        with (patch.object(receipts, "_sync_directory", sync_then_create),
+                              self.assertRaises(recovery.DecimalRecoveryDenied)):
+                            cleanup()
+                        if path == stage:
+                            self.assertEqual(inspect(), expected)
+                        else:
+                            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                                inspect()
+                        self.assertEqual(sidecar.read_bytes(), foreign)
+                        self.assertTrue(stage.samefile(target))
+                        self.assertEqual(target.read_bytes(), content)
+                    finally:
+                        sidecar.unlink(missing_ok=True)
+
+        sidecar = target.with_name(target.name + "-wal")
+        @contextmanager
+        def create_during_readback(store, receipt):
+            with read_published(store, receipt) as verified:
+                sidecar.write_bytes(foreign)
+                yield verified
+
+        try:
+            with (patch.object(receipts.DecimalReceiptStore, "_read_published", create_during_readback),
+                  self.assertRaises(recovery.DecimalRecoveryDenied)):
+                inspect()
+            self.assertEqual(sidecar.read_bytes(), foreign)
+            self.assertTrue(stage.samefile(target))
+        finally:
+            sidecar.unlink(missing_ok=True)
+        self.assertEqual(inspect(), expected)
+        cleanup()
+        self.assertFalse(stage.exists())
+        self.assertEqual(target.read_bytes(), content)
+        self.assertEqual(inspect(), {"receipt": tip, "additionalLinkPresent": False})
+
     def test_terminal_stage_cleanup_refuses_active_publisher_and_inexact_evidence(self):
         retained, evidence, old_witness, terminal_witness = self.terminal_recovery_evidence()
 

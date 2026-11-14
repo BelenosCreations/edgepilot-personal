@@ -184,6 +184,13 @@ class OwnerMarketHistoryTests(unittest.TestCase):
         self.assertEqual([bar["volume"] for bar in observed["bars"]], ["1700"])
         self.assertIsNone(observed["sourceExpectedBars"])
         self.assertFalse(observed["dataPersisted"])
+        payload["regularMarket"]["expectedBars"] = 4
+        self.provider(json.dumps(payload))
+        refreshed = self.history()
+        self.assertEqual(refreshed["bars"], observed["bars"])
+        self.assertEqual(refreshed["sourceExpectedBars"], 4)
+        self.assertEqual(refreshed["provider"], "Public API")
+        self.assertFalse(refreshed["dataPersisted"])
 
     def test_unsupported_history_period_never_requests_provider_bars(self):
         self.provider(self.payload())

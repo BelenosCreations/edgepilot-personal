@@ -8,14 +8,14 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 
 ## Verification and checkpoint
 
-- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.136 from the merged PR for `development/v0.2.136-terminal-publication-review`. A later verified main checkpoint takes precedence.
-- Verified v0.2.135 baseline. PR #163 head `886e8b6539641080fd80a5dd3e1d6ce3349d4a4e` passed [Actions #43597673260](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43597673260). Main `6d6f1fe391465bf6588e5b5cda93cd01613246b0` passed [Actions #43597904445](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43597904445), matched live Render deployment `dep-dbs5om2jnfac73bt269g`, and returned HTTP 200 from `/healthz`. No PRs were open.
-- v0.2.136 exercises cooperating repairs of a missing receipt and readback after publisher exit. Readback and reviewed cleanup refuse SQLite sidecars that appear during verification. See [milestone notes](PAPER_TERMINAL_PUBLICATION_REVIEW_V02136.md).
+- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.137 from the merged PR for `development/v0.2.137-publication-readback-integrity`. A later verified main checkpoint takes precedence.
+- Verified v0.2.136 baseline. PR #164 head `5e9c45501b671d225a92671332aae70ab5bee213` passed [Actions #43601022645](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43601022645). Main `0986cb42ff67b0d8d950ffd2567c33bf206fbff5` passed [Actions #43601271145](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43601271145), matched live Render deployment `dep-dbs6bep5efls73ecnr0g`, and returned HTTP 200 from `/healthz`. No PRs were open.
+- v0.2.137 rechecks terminal and active checkpoint publication identity after verifying independent evidence. Reviewed cleanup preserves staging names when sidecars appear. See [milestone notes](PAPER_PUBLICATION_READBACK_INTEGRITY_V02137.md).
 
 ## Next safe development batch
 
-1. Rehearse a published terminal receipt being replaced or unlinked while exact readback holds the independent receipt and witness. Verify both readback paths detect the changed local publication and that a fresh review can recover once the exact evidence is available.
-2. Exercise a newly arrived SQLite sidecar under the staging name immediately before cleanup. Compare the active checkpoint readback and cleanup paths for the same evidence ordering. Keep tenant archive evidence independent and authenticated paper preflight detached from execution. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
+1. Rehearse changed local publication during the transition from private stage verification to exclusive linking. Verify that a byte-identical replacement or late SQLite sidecar under the staging name cannot become an accepted publication.
+2. Compare terminal and active checkpoint publication behavior following refusal. Rehearse fresh review when exact evidence is restored and preserve unrelated stage files. Keep tenant archive evidence independent and authenticated paper preflight detached from execution. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
 3. Continue source-attributed and session-only Public research under the user's instruction to assume provider permission. Use real history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance). Earlier snapshot and MSFT quote acceptance still apply.
 
 ## Restrictions and workflow
@@ -26,6 +26,10 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.136 — 2026-11-14 — Terminal publication review
+
+Offline cooperating repairs converge on a single terminal receipt. Readback and reviewed cleanup refuse SQLite sidecars that appear during review. See [terminal publication review](PAPER_TERMINAL_PUBLICATION_REVIEW_V02136.md).
 
 ## v0.2.135 — 2026-11-14 — Terminal repair ordering
 

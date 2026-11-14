@@ -205,6 +205,17 @@ class DecimalReceiptStore:
         except OSError:
             recovery._deny()
 
+    def _inspect_published(self, receipt, recheck_evidence):
+        with self._read_published(receipt) as verified:
+            recheck_evidence()
+            _require_no_sidecars(self.path)
+            current = self.path.lstat()
+            if (not os.path.samestat(verified, current)
+                    or verified.st_ctime_ns != current.st_ctime_ns
+                    or verified.st_nlink != current.st_nlink):
+                recovery._deny()
+            return {"receipt": receipt.copy(), "additionalLinkPresent": current.st_nlink == 2}
+
     @contextmanager
     def _lock_staging_directory(self):
         self._check_directory()
@@ -553,19 +564,16 @@ class DecimalRecoveryReceipt:
                 self._require_terminal(witness, journal, tip, operator_record)
                 previous, pending = receipts._read_state(local)
                 witness._read(journal, previous, exact=False)
-                recheck_local()
                 recheck_evidence()
                 _require_no_sidecars(receipts.path)
+                recheck_local()
                 return {"receipt": tip, "localRepairRequired": pending or previous != tip}
 
     def inspect_local_terminal(self, receipts, witness, *, reviewed_receipt, operator_record):
         """Verify a published terminal receipt after interruption without changing files."""
         with self._verified_terminal(
                 receipts, witness, reviewed_receipt, operator_record) as (tip, recheck_evidence):
-            with receipts._read_published(tip) as info:
-                recheck_evidence()
-                _require_no_sidecars(receipts.path)
-                return {"receipt": tip, "additionalLinkPresent": info.st_nlink == 2}
+            return receipts._inspect_published(tip, recheck_evidence)
 
     def cleanup_local_terminal_stage(self, staging_path, receipts, witness, *, reviewed_receipt,
                                      operator_record):
@@ -674,9 +682,7 @@ class DecimalPromotionCheckpoint:
                 prepared_receipt=prepared_receipt, operator_record=operator_record,
                 journal_key=journal_key, anchor_key=anchor_key,
                 recovery_receipt=recovery_receipt) as recheck_evidence:
-            with self._store._read_published(trusted_receipt) as info:
-                recheck_evidence()
-                return {"receipt": trusted_receipt.copy(), "additionalLinkPresent": info.st_nlink == 2}
+            return self._store._inspect_published(trusted_receipt, recheck_evidence)
 
     def cleanup_recovered_stage(self, staging_path, exported, *, trusted_receipt, receipts,
                                 witness, ledger_path, reserved_receipt, prepared_receipt,

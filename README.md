@@ -1,3 +1,5 @@
+**v0.2.137** — Offline terminal and active checkpoint readback recheck the published file before reporting success. Reviewed cleanup preserves the staging link when a SQLite sidecar appears under either name. See [publication readback integrity](PAPER_PUBLICATION_READBACK_INTEGRITY_V02137.md).
+
 **v0.2.136** — Two cooperating repairs converge on one terminal receipt in the offline rehearsal. If the publisher exits with a staging link, exact readback allows reviewed cleanup. Readback and cleanup also check for SQLite sidecars that appear during review. See [terminal publication review](PAPER_TERMINAL_PUBLICATION_REVIEW_V02136.md).
 
 **v0.2.135** — Offline handoff inspection waits for a local receipt repair to commit or roll back. The missing-receipt path checks the destination and SQLite sidecars after reviewing the signed evidence. See [terminal repair ordering](PAPER_TERMINAL_REPAIR_ORDERING_V02135.md).
