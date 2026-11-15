@@ -407,6 +407,9 @@ class DecimalReceiptStore:
         # A noncooperating writer can rename the chosen directory after
         # the last file observation. Refuse a stale directory name first.
         # This check and unlink remain non-atomic against a same-user race.
+        # A refusal AFTER unlink may still mean a name was removed, possibly
+        # an unreviewed late replacement. Use read-only stage inventory when
+        # noncooperating same-user writers cannot be excluded; do not auto-retry.
         _require_directory_identity(stage_path.parent, staging)
         os.unlink(stage_path.name, dir_fd=folder_fd)
         unlinked = self.path.lstat()

@@ -2656,6 +2656,128 @@ class PromotionCheckpointTests(unittest.TestCase):
                     trusted_receipt=tip, **evidence),
             tip, (retained._store.path, self.pin_path, self.store_path, self.path))
 
+
+    def assert_unlink_boundary_is_non_atomic(
+            self, target, stage, inspect, cleanup, tip, evidence_paths, *, swap):
+        """Prove late noncooperating changes may mutate names before refusal."""
+        self.assertIn(swap, ("stage-file", "directory"))
+        original_unlink = os.unlink
+        folder = stage.parent
+        saved_link = stage.with_name(stage.name + ".late-moved")
+        moved_folder = folder.with_name(folder.name + ".late-moved")
+        unreviewed = b"unreviewed late replacement"
+        published = target.read_bytes()
+        original_evidence = {path: path.read_bytes() for path in evidence_paths}
+
+        initial = inspect(include_stages=True)
+        self.assertEqual(initial["receipt"], tip)
+        self.assertTrue(initial["additionalLinkPresent"])
+        self.assertTrue(next(entry for entry in initial["stages"]
+                             if entry["name"] == folder.name)["publicationLink"])
+        intercepted = []
+
+        def replace_after_last_check(name, *args, **kwargs):
+            if name != stage.name or kwargs.get("dir_fd") is None:
+                return original_unlink(name, *args, **kwargs)
+            self.assertEqual(intercepted, [])
+            intercepted.append(swap)
+            if swap == "stage-file":
+                stage.rename(saved_link)
+                stage.write_bytes(unreviewed)
+            else:
+                folder.rename(moved_folder)
+                folder.mkdir(mode=0o700)
+                stage.write_bytes(unreviewed)
+            # The held dirfd still acts on the originally opened folder.
+            return original_unlink(name, *args, **kwargs)
+
+        with (patch.object(receipts.os, "unlink", replace_after_last_check),
+              self.assertRaises(recovery.DecimalRecoveryDenied)):
+            cleanup()
+
+        self.assertEqual(intercepted, [swap])
+        self.assertEqual(target.read_bytes(), published)
+        for path, content in original_evidence.items():
+            self.assertEqual(path.read_bytes(), content)
+
+        if swap == "stage-file":
+            # The unreviewed replacement was removed before the later
+            # link-count check refused cleanup: not a safe retry state.
+            self.assertFalse(stage.exists())
+            self.assertTrue(saved_link.samefile(target))
+            self.assertEqual(target.stat().st_nlink, 2)
+        else:
+            # The verified link was removed from the moved directory even
+            # though the checked directory name now points at a replacement.
+            self.assertFalse((moved_folder / stage.name).exists())
+            self.assertEqual(stage.read_bytes(), unreviewed)
+            self.assertEqual(target.stat().st_nlink, 1)
+
+        review = inspect(include_stages=True)
+        self.assertEqual(review["receipt"], tip)
+        self.assertEqual(review["additionalLinkPresent"], swap == "stage-file")
+        entries = {record["name"]: record for record in review["stages"]}
+        self.assertFalse(entries[folder.name]["publicationLink"])
+        if swap == "stage-file":
+            self.assertEqual(entries[folder.name]["entries"], [saved_link.name])
+        else:
+            self.assertEqual(entries[folder.name]["entries"], [stage.name])
+            self.assertFalse(entries[moved_folder.name]["publicationLink"])
+            self.assertEqual(entries[moved_folder.name]["entries"], [])
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            cleanup()
+        self.assertEqual(target.read_bytes(), published)
+
+        # A non-destructive inventory is the supported choice while another
+        # same-UID writer can change names; it does not authenticate loose bytes.
+        self.assertEqual(inspect(include_stages=True), review)
+
+    def test_terminal_unlink_boundary_late_file_swap_is_ambiguous(self):
+        retained, evidence, stage, _ = self.terminal_cleanup_fixture()
+        self.assert_unlink_boundary_is_non_atomic(
+            self.pin_path, stage,
+            partial(retained.inspect_local_terminal, self.pins, self.store, **evidence),
+            partial(retained.cleanup_local_terminal_stage, stage,
+                    self.pins, self.store, **evidence),
+            evidence["reviewed_receipt"], (retained._store.path, self.store_path),
+            swap="stage-file")
+
+    def test_terminal_unlink_boundary_late_directory_swap_is_ambiguous(self):
+        retained, evidence, stage, _ = self.terminal_cleanup_fixture()
+        self.assert_unlink_boundary_is_non_atomic(
+            self.pin_path, stage,
+            partial(retained.inspect_local_terminal, self.pins, self.store, **evidence),
+            partial(retained.cleanup_local_terminal_stage, stage,
+                    self.pins, self.store, **evidence),
+            evidence["reviewed_receipt"], (retained._store.path, self.store_path),
+            swap="directory")
+
+    def test_checkpoint_unlink_boundary_late_file_swap_is_ambiguous(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        independent = self.retain_independent_recovery_receipt(tip)
+        evidence = self.recovery_evidence() | {"recovery_receipt": independent}
+        self.assert_unlink_boundary_is_non_atomic(
+            self.checkpoint_path, stage,
+            partial(self.checkpoint.inspect_recovered, exported,
+                    trusted_receipt=tip, **evidence),
+            partial(self.checkpoint.cleanup_recovered_stage, stage, exported,
+                    trusted_receipt=tip, **evidence),
+            tip, (independent._store.path, self.pin_path, self.store_path, self.path),
+            swap="stage-file")
+
+    def test_checkpoint_unlink_boundary_late_directory_swap_is_ambiguous(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        independent = self.retain_independent_recovery_receipt(tip)
+        evidence = self.recovery_evidence() | {"recovery_receipt": independent}
+        self.assert_unlink_boundary_is_non_atomic(
+            self.checkpoint_path, stage,
+            partial(self.checkpoint.inspect_recovered, exported,
+                    trusted_receipt=tip, **evidence),
+            partial(self.checkpoint.cleanup_recovered_stage, stage, exported,
+                    trusted_receipt=tip, **evidence),
+            tip, (independent._store.path, self.pin_path, self.store_path, self.path),
+            swap="directory")
+
     def assert_concurrent_review_after_interrupted_cleanup(self, target, stage, independent,
                                                            inspect, cleanup, tip):
         published = target.read_bytes()
