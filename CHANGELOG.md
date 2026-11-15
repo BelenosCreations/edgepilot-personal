@@ -1,3 +1,11 @@
+## v0.2.146 — 2026-11-14 America/New_York — Shared-evidence publisher exit readback
+
+**Changed** — Added real-process synthetic receipt and checkpoint publication exit rehearsals against the same retained evidence locations as the reviewer, with fresh readback before and after exclusive linking.
+
+**Tests** — An exit before the link leaves only unauthenticated stage inventory; an exit after the link reveals an authenticated publication and a verified surviving hard link. Explicit cleanup removes only the verified link, preserves the earlier unreviewed candidate and leaves independent evidence unchanged.
+
+**Limitations** — The return values describe observed publication state, not an attestation of exactly where or why a process exited. Do not auto-retry or trust unlinked stage contents. Combined retained-evidence rollback and cross-resource power-loss consistency remain unresolved.
+
 ## v0.2.145 — 2026-11-14 America/New_York — Concurrent staging review
 
 **Changed** — Missing-publication inventory takes a nonblocking shared lock while reading each eligible stage directory. The scan checks the name against the directory it opened.

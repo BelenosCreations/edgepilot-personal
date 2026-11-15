@@ -2445,6 +2445,107 @@ class PromotionCheckpointTests(unittest.TestCase):
             partial(self.checkpoint.inspect_recovered, exported, recovery_receipt=retained, **evidence),
             retained._store, tip)
 
+
+    def assert_shared_evidence_exit_readback(
+            self, target, prefix, filename, publish, inspect, cleanup, tip, evidence_paths):
+        """Fork a real publisher with the reviewer's same independent evidence files."""
+        original_link = os.link
+        original_evidence = {path: path.read_bytes() for path in evidence_paths}
+        before = set(target.parent.glob(prefix + "*"))
+        abandoned = None
+        abandoned_bytes = None
+
+        for linked in (False, True):
+            with self.subTest(publisher_linked=linked):
+                def exit_at_link(*args, **kwargs):
+                    if linked:
+                        original_link(*args, **kwargs)
+                    os._exit(96 if linked else 95)
+
+                pid = os.fork()
+                if pid == 0:
+                    try:
+                        with patch.object(receipts.os, "link", side_effect=exit_at_link):
+                            publish()
+                    finally:
+                        os._exit(97)
+
+                _, status = os.waitpid(pid, 0)
+                self.assertEqual(os.waitstatus_to_exitcode(status), 96 if linked else 95)
+                folders = set(target.parent.glob(prefix + "*"))
+                new, = folders - before
+                stage = new / filename
+                self.assertTrue(stage.is_file())
+                self.assertEqual(stage.stat().st_nlink, 2 if linked else 1)
+
+                if not linked:
+                    self.assertFalse(target.exists())
+                    with self.assertRaises(recovery.DecimalRecoveryDenied):
+                        inspect()
+                    review = inspect(include_stages=True)
+                    self.assertEqual(review["receipt"], tip)
+                    self.assertTrue(review["publicationMissing"])
+                    record, = (entry for entry in review["stages"]
+                               if entry["name"] == new.name)
+                    self.assertEqual(record["entries"], [filename])
+                    self.assertFalse(record["publicationLink"])
+                    abandoned = stage
+                    abandoned_bytes = stage.read_bytes()
+                else:
+                    self.assertTrue(stage.samefile(target))
+                    review = inspect(include_stages=True)
+                    self.assertEqual(review["receipt"], tip)
+                    self.assertEqual(review["additionalLinkPresent"], True)
+                    self.assertNotIn("publicationMissing", review)
+                    confirmed = [entry["name"] for entry in review["stages"]
+                                 if entry["publicationLink"]]
+                    self.assertEqual(confirmed, [new.name])
+                    self.assertEqual(abandoned.read_bytes(), abandoned_bytes)
+                    old, = (entry for entry in review["stages"]
+                            if entry["name"] == abandoned.parent.name)
+                    self.assertFalse(old["publicationLink"])
+
+                    cleanup(stage)
+                    self.assertFalse(stage.exists())
+                    self.assertTrue(new.is_dir())  # Retire only the verified link.
+                    settled = inspect(include_stages=True)
+                    self.assertEqual(settled["receipt"], tip)
+                    self.assertFalse(settled["additionalLinkPresent"])
+                    self.assertFalse(any(s["publicationLink"] for s in settled["stages"]))
+                    self.assertEqual(abandoned.read_bytes(), abandoned_bytes)
+
+                for path, content in original_evidence.items():
+                    self.assertEqual(path.read_bytes(), content)
+                before = folders
+
+    def test_terminal_exit_readback_uses_same_evidence_locations(self):
+        retained, evidence, _, _ = self.terminal_recovery_evidence()
+        self.assert_shared_evidence_exit_readback(
+            self.pin_path, ".decimal-terminal-receipt-", "receipt.db",
+            partial(retained.repair_local_terminal, self.pins, self.store, **evidence),
+            partial(retained.inspect_local_terminal, self.pins, self.store, **evidence),
+            lambda stage: retained.cleanup_local_terminal_stage(
+                stage, self.pins, self.store, **evidence),
+            evidence["reviewed_receipt"], (retained._store.path, self.store_path))
+
+    def test_checkpoint_exit_readback_uses_same_evidence_locations(self):
+        self.prepare_checkpoint()
+        tip = self.promote()
+        exported = self.checkpoint.export(expected_receipt=tip)
+        retained = self.retain_independent_recovery_receipt(tip)
+        evidence = self.recovery_evidence() | {
+            "trusted_receipt": tip, "recovery_receipt": retained}
+        self.checkpoint_path.unlink()
+        self.assert_shared_evidence_exit_readback(
+            self.checkpoint_path, ".edgepilot-checkpoint-", "checkpoint.db",
+            partial(receipts.DecimalPromotionCheckpoint.recover,
+                    self.checkpoint_path, exported,
+                    checkpoint_key=self.checkpoint_key, **evidence),
+            partial(self.checkpoint.inspect_recovered, exported, **evidence),
+            lambda stage: self.checkpoint.cleanup_recovered_stage(
+                stage, exported, **evidence),
+            tip, (retained._store.path, self.pin_path, self.store_path, self.path))
+
     def assert_final_unlink_recheck_preserves_replacement(self, target, stage, cleanup):
         stat_path = os.stat
         folder = stage.parent.stat()

@@ -5,22 +5,22 @@ Use this section for the next development session. The entries below record prio
 ## Copyable resume instruction
 
 ```text
-EdgePilot Continuity 008
+EdgePilot Continuity 009
 
 Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on main in BelenosCreations/edgepilot-personal, independently verify the GitHub and Render checkpoint, and follow the next steps and restrictions in that file.
 ```
 
 ## Verification and checkpoint
 
-- Before editing, verify current GitHub main, the exact PR head's CI, main push CI, open PRs and Render's live deployment at the exact main SHA. Resolve v0.2.145 from the merged PR for `development/v0.2.145-concurrent-staging-review`. A later verified main checkpoint takes precedence.
-- Verified v0.2.144 baseline. PR #172 head `8f6fb6ac12ee35c8b1fb90a6dc411da82fb266ee` passed [Actions #43652061398](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43652061398). Main `3e8cc357f9ca7d33d4477e7cef5db160da1ee0db` passed [Actions #43652260502](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43652260502), matched live Render deployment `dep-dbsemre417fc73ffn9lg`, and returned HTTP 200 from `/healthz`. No PRs were open.
-- v0.2.145 rehearses concurrent missing-publication inventory for receipts and checkpoints. See [milestone notes](PAPER_CONCURRENT_STAGING_REVIEW_V02145.md).
+- Before editing, verify the latest GitHub main, exact merged PR head and its pull-request CI, merged-main push CI, open PRs, Render's deployed commit and health. Resolve v0.2.146 from `development/v0.2.146-shared-evidence-publisher-exit` and its merged PR. A later verified main checkpoint takes precedence.
+- Independently verified v0.2.145 baseline: PR #173 head `ed8eb0cd358f030628912ba8f1d5fb57a2c5c3e1` passed [Actions #43667415152](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43667415152). Main `e411934a7a460e23e6da8b66ca5479c8f903d2f9` passed [Actions #43667605199](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43667605199), matched live Render `dep-dbshfhdbedkc73c7j5pg`. No PRs were open. A separate HTTP 200 health probe was unavailable in this session; do not treat the deployment status as that probe.
+- v0.2.146 rehearses same-evidence writer exit before and after the exclusive link, verified surviving stage cleanup and unchanged independent evidence. See [milestone notes](PAPER_SHARED_EVIDENCE_EXIT_READBACK_V02146.md).
 
 ## Next safe development batch
 
-1. Rehearse missing-publication review with the writer and reviewer using the same evidence locations. Exercise fresh readback after the publisher process exits before or after exclusive linking, including a surviving stage link. Review whether the operator can distinguish those outcomes from the documented return values.
+1. Extend synthetic operator recovery with an explicit noncooperating stage-name replacement after observation; test fail-closed behavior without trusting unlinked stage bytes, and document the remaining path-check/unlink race.
 2. Preserve the independently retained tenant archive pin and keep authenticated paper preflight detached from execution. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
-3. Continue source-attributed and session-only Public research under the user's instruction to assume provider permission. Use real history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance). Earlier snapshot and MSFT quote acceptance still apply.
+3. Continue source-attributed, session-only Public history research under the owner's provider-permission assumption. Only use real history for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance). Prior owner snapshot and MSFT quote acceptance remain valid.
 
 ## Restrictions and workflow
 
@@ -30,6 +30,10 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Increment the EdgePilot Continuity sequence at the top of the copy block. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.145 — 2026-11-14 — Concurrent staging review
+
+Missing-publication inventory refuses a busy cooperating stage lock and rechecks its observed stage directory name. See [concurrent staging review](PAPER_CONCURRENT_STAGING_REVIEW_V02145.md).
 
 ## v0.2.144 — 2026-11-14 — Inventory after publication interruption
 
