@@ -5,22 +5,22 @@ Use this section for the next development session. The entries below record prio
 ## Copyable resume instruction
 
 ```text
-EdgePilot Continuity 009
+EdgePilot Continuity 010
 
 Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on main in BelenosCreations/edgepilot-personal, independently verify the GitHub and Render checkpoint, and follow the next steps and restrictions in that file.
 ```
 
 ## Verification and checkpoint
 
-- Before editing, verify the latest GitHub main, exact merged PR head and its pull-request CI, merged-main push CI, open PRs, Render's deployed commit and health. Resolve v0.2.146 from `development/v0.2.146-shared-evidence-publisher-exit` and its merged PR. A later verified main checkpoint takes precedence.
-- Independently verified v0.2.145 baseline: PR #173 head `ed8eb0cd358f030628912ba8f1d5fb57a2c5c3e1` passed [Actions #43667415152](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43667415152). Main `e411934a7a460e23e6da8b66ca5479c8f903d2f9` passed [Actions #43667605199](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43667605199), matched live Render `dep-dbshfhdbedkc73c7j5pg`. No PRs were open. A separate HTTP 200 health probe was unavailable in this session; do not treat the deployment status as that probe.
-- v0.2.146 rehearses same-evidence writer exit before and after the exclusive link, verified surviving stage cleanup and unchanged independent evidence. See [milestone notes](PAPER_SHARED_EVIDENCE_EXIT_READBACK_V02146.md).
+- Before editing, verify GitHub main, exact merged PR head and passing pull-request CI, merged-main push CI, open PRs, Render live deployment at exactly main, and an independent HTTP health check where accessible. Resolve v0.2.147 from `development/v0.2.147-stage-directory-last-check`. A later verified main supersedes this handoff.
+- Verified v0.2.146 baseline: PR #174 head `1f1caa6e9756afa8633ded06a51ab49b8fdb66cb` passed [Actions #43673681153](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43673681153). Main `dac3f121aaabe6681ab26a69bb29c94ab410fef1` passed [Actions #43673888046](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43673888046), matching live Render `dep-dbsimd95efls73er2skg`. No PRs were open. Independent HTTP health check was inaccessible; Render live status is not that probe.
+- v0.2.147 rechecks the stage-directory name immediately before offline hard-link cleanup and tests a noncooperating directory swap after the final file observation. See [milestone notes](PAPER_STAGE_DIRECTORY_LAST_CHECK_V02147.md).
 
 ## Next safe development batch
 
-1. Extend synthetic operator recovery with an explicit noncooperating stage-name replacement after observation; test fail-closed behavior without trusting unlinked stage bytes, and document the remaining path-check/unlink race.
-2. Preserve the independently retained tenant archive pin and keep authenticated paper preflight detached from execution. Combined rollback of all retained evidence and cross-resource power-loss consistency remain open.
-3. Continue source-attributed, session-only Public history research under the owner's provider-permission assumption. Only use real history for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance). Prior owner snapshot and MSFT quote acceptance remain valid.
+1. Examine a noncooperating swap after the **last** directory-name check but before unlink. Document why check and unlink are non-atomic; explore a safe operator-only strategy without inadvertently deleting unreviewed stage bytes.
+2. Preserve the independent exact tenant archive pin, existing recovery and authenticated paper preflight detached from execution. Whole-evidence rollback and cross-resource power-loss consistency are open.
+3. Continue source-attributed, session-only Public history research under the user's provider-permission assumption. Real history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance). Earlier owner snapshot and MSFT quote acceptance stand.
 
 ## Restrictions and workflow
 
@@ -30,6 +30,10 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Increment the EdgePilot Continuity sequence at the top of the copy block. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.146 — 2026-11-14 — Shared-evidence publisher exit readback
+
+Synthetic receipt/checkpoint publishers exit before or after exclusive hard-link publication using the reviewer's same independent evidence. Readback identifies authenticated surviving links without trusting unlinked stages. See [shared-evidence exit readback](PAPER_SHARED_EVIDENCE_EXIT_READBACK_V02146.md).
 
 ## v0.2.145 — 2026-11-14 — Concurrent staging review
 
