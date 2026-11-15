@@ -1,6 +1,7 @@
 """Exercise independently retained promotion evidence under synthetic rollback."""
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+import ctypes
 import errno
 from functools import partial
 import os
@@ -2934,6 +2935,236 @@ class PromotionCheckpointTests(unittest.TestCase):
                     trusted_receipt=tip, **evidence),
             tip, (independent._store.path, self.pin_path, self.store_path, self.path),
             case="occupied-reservation")
+
+
+    def assert_rename_noreplace_operator_prototype(
+            self, target, stage, inspect, tip, evidence_paths, *, case):
+        """Linux-only test of descriptor-based no-overwrite directory moves."""
+        self.assertIn(case, ("roundtrip", "empty-directory", "symlink",
+                             "source-swap", "restore-collision"))
+        libc = ctypes.CDLL(None, use_errno=True)
+        if not hasattr(libc, "renameat2"):
+            self.skipTest("Linux libc renameat2 unavailable")
+        renameat2 = libc.renameat2
+        renameat2.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_int,
+                              ctypes.c_char_p, ctypes.c_uint)
+        renameat2.restype = ctypes.c_int
+        RENAME_NOREPLACE = 1
+        folder = stage.parent
+        original = folder.stat()
+        destination = tempfile.TemporaryDirectory(
+            prefix=".operator-noreplace-prototype-", dir=folder.parent)
+        self.addCleanup(destination.cleanup)
+        holding = Path(destination.name)
+        parked = holding / "retained-stage"
+        displaced = folder.with_name(folder.name + ".moved-evidence")
+        note = folder / "operator-note"
+        note.write_bytes(b"keep operator note")
+        source_bytes = target.read_bytes()
+        independent = {path: path.read_bytes() for path in evidence_paths}
+        initial = inspect(include_stages=True)
+        self.assertEqual(initial["receipt"], tip)
+        self.assertTrue(initial["additionalLinkPresent"])
+        self.assertTrue(next(s for s in initial["stages"]
+                             if s["name"] == folder.name)["publicationLink"])
+        failures = []
+        intervention = []
+
+        def noreplace(source_parent, source_name, dest_parent, dest_name,
+                      *, before=None):
+            source_fd = os.open(source_parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                dest_fd = os.open(dest_parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+                try:
+                    if before:
+                        before()
+                    result = renameat2(source_fd, os.fsencode(source_name),
+                                       dest_fd, os.fsencode(dest_name), RENAME_NOREPLACE)
+                    if result != 0:
+                        number = ctypes.get_errno()
+                        raise OSError(number, os.strerror(number))
+                finally:
+                    os.close(dest_fd)
+            finally:
+                os.close(source_fd)
+
+        def compete():
+            intervention.append(case)
+            if case == "empty-directory":
+                parked.mkdir(mode=0o700)
+            elif case == "symlink":
+                parked.symlink_to("unreviewed-link-target")
+            elif case == "source-swap":
+                folder.rename(displaced)
+                folder.mkdir(mode=0o700)
+                stage.write_bytes(b"unreviewed source replacement")
+
+        def park():
+            observed = folder.lstat()
+            try:
+                noreplace(folder.parent, folder.name, holding, parked.name, before=compete)
+            except OSError as error:
+                failures.append(error.errno)
+                recovery._deny()
+            if not os.path.samestat(observed, parked.lstat()):
+                recovery._deny()
+
+        if case in ("empty-directory", "symlink"):
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                park()
+            self.assertEqual(failures, [errno.EEXIST])
+            self.assertEqual(intervention, [case])
+            self.assertTrue(stage.samefile(target))
+            if case == "symlink":
+                self.assertTrue(parked.is_symlink())
+                self.assertEqual(os.readlink(parked), "unreviewed-link-target")
+            else:
+                self.assertTrue(parked.is_dir())
+                self.assertEqual(list(parked.iterdir()), [])
+            self.assertEqual(inspect(include_stages=True), initial)
+        elif case == "source-swap":
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                park()
+            self.assertEqual(intervention, [case])
+            self.assertEqual(failures, [])
+            self.assertFalse(folder.exists())
+            self.assertTrue((displaced / stage.name).samefile(target))
+            self.assertEqual((displaced / note.name).read_bytes(), b"keep operator note")
+            self.assertEqual((parked / stage.name).read_bytes(), b"unreviewed source replacement")
+            inspected = inspect(include_stages=True)
+            self.assertTrue(inspected["additionalLinkPresent"])
+            self.assertTrue(next(s for s in inspected["stages"]
+                                 if s["name"] == displaced.name)["publicationLink"])
+            # No automatic retry/rollback: the identity-mismatched candidate
+            # must remain held without replacing an operator-selected pathname.
+        else:
+            park()
+            self.assertEqual(intervention, [case])
+            self.assertTrue((parked / stage.name).samefile(target))
+            self.assertEqual((parked / note.name).read_bytes(), b"keep operator note")
+            mid = inspect(include_stages=True)
+            self.assertEqual(mid["receipt"], tip)
+            self.assertTrue(mid["additionalLinkPresent"])
+            self.assertFalse(any(s["publicationLink"] for s in mid["stages"]))
+            if case == "roundtrip":
+                noreplace(holding, parked.name, folder.parent, folder.name)
+                self.assertTrue(stage.samefile(target))
+                self.assertEqual(note.read_bytes(), b"keep operator note")
+                self.assertEqual(inspect(include_stages=True), initial)
+            else:
+                folder.mkdir(mode=0o700)
+                stage.write_bytes(b"conflicting rollback destination")
+                with self.assertRaises(OSError) as refused:
+                    noreplace(holding, parked.name, folder.parent, folder.name)
+                self.assertEqual(refused.exception.errno, errno.EEXIST)
+                self.assertTrue((parked / stage.name).samefile(target))
+                self.assertEqual(stage.read_bytes(), b"conflicting rollback destination")
+                observed = inspect(include_stages=True)
+                self.assertTrue(observed["additionalLinkPresent"])
+                self.assertFalse(next(s for s in observed["stages"]
+                                      if s["name"] == folder.name)["publicationLink"])
+
+        current = displaced if case == "source-swap" else (parked if case == "restore-collision" else folder)
+        self.assertTrue(os.path.samestat(current.stat(), original))
+        self.assertEqual(target.read_bytes(), source_bytes)
+        self.assertEqual(target.stat().st_nlink, 2)
+        for path, content in independent.items():
+            self.assertEqual(path.read_bytes(), content)
+
+    def test_terminal_operator_noreplace_roundtrip(self):
+        retained, evidence, stage, _ = self.terminal_cleanup_fixture()
+        self.assert_rename_noreplace_operator_prototype(
+            self.pin_path, stage,
+            partial(retained.inspect_local_terminal, self.pins, self.store, **evidence),
+            evidence["reviewed_receipt"], (retained._store.path, self.store_path),
+            case="roundtrip")
+
+    def test_terminal_operator_noreplace_empty_directory(self):
+        retained, evidence, stage, _ = self.terminal_cleanup_fixture()
+        self.assert_rename_noreplace_operator_prototype(
+            self.pin_path, stage,
+            partial(retained.inspect_local_terminal, self.pins, self.store, **evidence),
+            evidence["reviewed_receipt"], (retained._store.path, self.store_path),
+            case="empty-directory")
+
+    def test_terminal_operator_noreplace_symlink(self):
+        retained, evidence, stage, _ = self.terminal_cleanup_fixture()
+        self.assert_rename_noreplace_operator_prototype(
+            self.pin_path, stage,
+            partial(retained.inspect_local_terminal, self.pins, self.store, **evidence),
+            evidence["reviewed_receipt"], (retained._store.path, self.store_path),
+            case="symlink")
+
+    def test_terminal_operator_noreplace_source_swap(self):
+        retained, evidence, stage, _ = self.terminal_cleanup_fixture()
+        self.assert_rename_noreplace_operator_prototype(
+            self.pin_path, stage,
+            partial(retained.inspect_local_terminal, self.pins, self.store, **evidence),
+            evidence["reviewed_receipt"], (retained._store.path, self.store_path),
+            case="source-swap")
+
+    def test_terminal_operator_noreplace_restore_collision(self):
+        retained, evidence, stage, _ = self.terminal_cleanup_fixture()
+        self.assert_rename_noreplace_operator_prototype(
+            self.pin_path, stage,
+            partial(retained.inspect_local_terminal, self.pins, self.store, **evidence),
+            evidence["reviewed_receipt"], (retained._store.path, self.store_path),
+            case="restore-collision")
+
+    def test_checkpoint_operator_noreplace_roundtrip(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        independent = self.retain_independent_recovery_receipt(tip)
+        evidence = self.recovery_evidence() | {"recovery_receipt": independent}
+        self.assert_rename_noreplace_operator_prototype(
+            self.checkpoint_path, stage,
+            partial(self.checkpoint.inspect_recovered, exported,
+                    trusted_receipt=tip, **evidence),
+            tip, (independent._store.path, self.pin_path, self.store_path, self.path),
+            case="roundtrip")
+
+    def test_checkpoint_operator_noreplace_empty_directory(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        independent = self.retain_independent_recovery_receipt(tip)
+        evidence = self.recovery_evidence() | {"recovery_receipt": independent}
+        self.assert_rename_noreplace_operator_prototype(
+            self.checkpoint_path, stage,
+            partial(self.checkpoint.inspect_recovered, exported,
+                    trusted_receipt=tip, **evidence),
+            tip, (independent._store.path, self.pin_path, self.store_path, self.path),
+            case="empty-directory")
+
+    def test_checkpoint_operator_noreplace_symlink(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        independent = self.retain_independent_recovery_receipt(tip)
+        evidence = self.recovery_evidence() | {"recovery_receipt": independent}
+        self.assert_rename_noreplace_operator_prototype(
+            self.checkpoint_path, stage,
+            partial(self.checkpoint.inspect_recovered, exported,
+                    trusted_receipt=tip, **evidence),
+            tip, (independent._store.path, self.pin_path, self.store_path, self.path),
+            case="symlink")
+
+    def test_checkpoint_operator_noreplace_source_swap(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        independent = self.retain_independent_recovery_receipt(tip)
+        evidence = self.recovery_evidence() | {"recovery_receipt": independent}
+        self.assert_rename_noreplace_operator_prototype(
+            self.checkpoint_path, stage,
+            partial(self.checkpoint.inspect_recovered, exported,
+                    trusted_receipt=tip, **evidence),
+            tip, (independent._store.path, self.pin_path, self.store_path, self.path),
+            case="source-swap")
+
+    def test_checkpoint_operator_noreplace_restore_collision(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        independent = self.retain_independent_recovery_receipt(tip)
+        evidence = self.recovery_evidence() | {"recovery_receipt": independent}
+        self.assert_rename_noreplace_operator_prototype(
+            self.checkpoint_path, stage,
+            partial(self.checkpoint.inspect_recovered, exported,
+                    trusted_receipt=tip, **evidence),
+            tip, (independent._store.path, self.pin_path, self.store_path, self.path),
+            case="restore-collision")
 
     def assert_concurrent_review_after_interrupted_cleanup(self, target, stage, independent,
                                                            inspect, cleanup, tip):

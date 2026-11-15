@@ -1,3 +1,11 @@
+## v0.2.150 — 2026-11-15 America/New_York — No-overwrite directory-parking research
+
+**Research** — Introduced test-local descriptor-anchored Linux `renameat2(RENAME_NOREPLACE)` rehearsal for stage-directory parking and rollback. No recovery-engine or production API changes were made.
+
+**Tests** — Ten synthetic terminal-receipt/checkpoint regressions cover uncontended roundtrip, late empty-directory and symlink holding collisions, source-directory replacement, and a competing rollback destination. The kernel no-overwrite operation rejects existing names (including symlinks and empty directories) without deleting their contents. A swapped source can still be parked before the post-operation inode mismatch is detected; automatic reversal remains forbidden.
+
+**Limits** — No-overwrite protects only the destination name at the syscall boundary, not the integrity of an uncontrolled source, separate evidence custody, or the holding namespace. Ordinary same-UID filesystem interference is not resolved, and a parked directory vanishes from ordinary stage-prefix inventory until restored. Keep destructive production cleanup disabled under uncontrolled same-UID writers. Whole-evidence rollback and cross-resource power-loss consistency remain open.
+
 ## v0.2.149 — 2026-11-15 America/New_York — Reversible stage-parking prototype
 
 **Research** — Tested operator-only parking of an entire synthetic terminal-receipt or active-checkpoint staging directory into a separately reserved holding location, preserving its hard link and unrelated stage notes. The helper exists **inside the tests only**, not the production engine or an exposed API.
