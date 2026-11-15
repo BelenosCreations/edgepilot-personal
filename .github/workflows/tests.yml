@@ -26,6 +26,9 @@ jobs:
       - name: Install backend dependencies
         working-directory: backend
         run: python -m pip install -r requirements.txt
+      - name: Focused offline publication recovery tests
+        working-directory: backend
+        run: python -m unittest discover -s tests -p test_tenant_paper_promotion_checkpoint_v02114.py -v
       - name: Python unit and Flask route tests
         working-directory: backend
         run: python -m unittest discover -s tests -v

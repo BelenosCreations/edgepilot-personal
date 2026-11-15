@@ -1,3 +1,11 @@
+## v0.2.148 — 2026-11-15 America/New_York — Late-unlink boundary review
+
+**Changed** — Clarified that post-unlink refusal is not proof of no side effects. The offline operator route remains read-only authenticated stage inventory when a noncooperating same-user writer cannot be excluded. CI now runs focused receipt/checkpoint recovery tests before the full regression suite.
+
+**Tests** — Four synthetic terminal/checkpoint cases replace either the staging filename or staging directory **after** the final identity check and just before unlink. The tests document which name may be removed despite subsequent refusal, compare fresh authenticated inventory and verify unchanged independent evidence. This does not intentionally activate any production cleanup path.
+
+**Limitations** — A pathname check cannot atomically condition unlink on inode identity; a same-UID adversary remains out of scope for safe destructive cleanup. Combined retained-evidence rollback and cross-resource power-loss consistency remain open.
+
 ## v0.2.147 — 2026-11-14 America/New_York — Stage-directory last-check review
 
 **Changed** — Offline terminal-receipt and checkpoint cleanup recheck selected staging-directory identity after the final stage-file observation and immediately before unlink.
