@@ -102,6 +102,10 @@ def _stage_inventory(parent, prefix, filename, publication):
                     continue
                 child = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
                 try:
+                    if publication is None:
+                        # Recovery already holds the evidence locks. Fail on a
+                        # busy stage instead of waiting for a cooperating writer.
+                        fcntl.flock(child, fcntl.LOCK_SH | fcntl.LOCK_NB)
                     _require_same_file(info, os.fstat(child))
                     names = sorted(os.listdir(child))
                     entry["entries"] = names
@@ -112,6 +116,7 @@ def _stage_inventory(parent, prefix, filename, publication):
                         entry["publicationLink"] = (publication is not None
                                                     and os.path.samestat(publication, stage))
                     _require_same_file(info, os.fstat(child))
+                    _require_same_file(info, os.stat(name, dir_fd=fd, follow_symlinks=False))
                 finally:
                     os.close(child)
             return inventory, recorded

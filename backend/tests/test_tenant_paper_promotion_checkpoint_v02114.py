@@ -2318,6 +2318,133 @@ class PromotionCheckpointTests(unittest.TestCase):
                 stage, exported, recovery_receipt=independent, **evidence),
             independent._store.path, tip)
 
+    def copy_receipt_file(self, store):
+        folder = tempfile.TemporaryDirectory(prefix="decimal-concurrent-publication-")
+        self.addCleanup(folder.cleanup)
+        path = Path(folder.name) / store.path.name
+        shutil.copyfile(store.path, path)
+        path.chmod(0o600)
+        return path
+
+    def assert_concurrent_missing_inventory(
+            self, target, prefix, filename, publish, inspect, independent, tip):
+        abandoned = target.parent / (prefix + "interrupted")
+        abandoned.mkdir(mode=0o700)
+        candidate = abandoned / filename
+        candidate.write_bytes(b"unreviewed prior candidate")
+        listdir = os.listdir
+        link = os.link
+
+        for timing in ("already-staging", "during-scan"):
+            with self.subTest(timing=timing), ThreadPoolExecutor(max_workers=1) as pool:
+                staged, allow_link = Event(), Event()
+                writer_folders = set(target.parent.glob(prefix + "*"))
+
+                def pause_at_link(*args, **kwargs):
+                    staged.set()
+                    if not allow_link.wait(timeout=5):
+                        raise TimeoutError("Timed out releasing the staged publisher")
+                    return link(*args, **kwargs)
+
+                def publish_during_scan(fd):
+                    names = listdir(fd)
+                    if not staged.is_set() and os.path.samestat(os.fstat(fd), target.parent.stat()):
+                        publisher = pool.submit(publish)
+                        self.assertTrue(staged.wait(timeout=5))
+                        allow_link.set()
+                        publisher.result(timeout=5)
+                    return names
+
+                with patch.object(receipts.os, "link", pause_at_link):
+                    if timing == "already-staging":
+                        publisher = pool.submit(publish)
+                        try:
+                            self.assertTrue(staged.wait(timeout=5))
+                            stage, = set(target.parent.glob(prefix + "*")) - writer_folders
+                            self.assertTrue((stage / filename).is_file())
+                            self.assertFalse(target.exists())
+                            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                                inspect(include_stages=True)
+                            self.assertTrue((stage / filename).is_file())
+                            self.assertFalse(target.exists())
+                        finally:
+                            allow_link.set()
+                        publisher.result(timeout=5)
+                    else:
+                        with (patch.object(receipts.os, "listdir", publish_during_scan),
+                              self.assertRaises(recovery.DecimalRecoveryDenied)):
+                            inspect(include_stages=True)
+                        self.assertTrue(staged.is_set())
+                        self.assertTrue(target.is_file())
+
+                self.assertEqual(inspect(), {"receipt": tip, "additionalLinkPresent": False})
+                self.assertEqual(candidate.read_bytes(), b"unreviewed prior candidate")
+                target.unlink()
+
+        moved = abandoned.with_name(abandoned.name + ".moved")
+        original = abandoned.stat()
+
+        def rename_during_scan(fd):
+            names = listdir(fd)
+            if not moved.exists() and os.path.samestat(os.fstat(fd), original):
+                abandoned.rename(moved)
+                abandoned.mkdir(mode=0o700)
+                candidate.write_bytes(b"unreviewed replacement")
+            return names
+
+        with (patch.object(receipts.os, "listdir", rename_during_scan),
+              self.assertRaises(recovery.DecimalRecoveryDenied)):
+            inspect(include_stages=True)
+        result = inspect(include_stages=True)
+        self.assertTrue(result["publicationMissing"])
+        stages = {stage["name"]: stage for stage in result["stages"]}
+        self.assertEqual(stages[moved.name]["inode"], original.st_ino)
+        self.assertFalse(stages[abandoned.name]["publicationLink"])
+
+        # A previously signed pin cannot establish this missing publication.
+        pin_bytes = independent.path.read_bytes()
+        with independent._open() as db:
+            independent._save(db, self.claim, pending=False)
+            db.commit()
+        try:
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                inspect(include_stages=True)
+        finally:
+            independent.path.write_bytes(pin_bytes)
+        self.assertEqual(inspect(include_stages=True), result)
+        self.assertEqual((moved / filename).read_bytes(), b"unreviewed prior candidate")
+        self.assertEqual(candidate.read_bytes(), b"unreviewed replacement")
+        self.assertFalse(target.exists())
+
+    def test_terminal_inventory_refuses_concurrent_staging_and_publication(self):
+        retained, evidence, _, _ = self.terminal_recovery_evidence()
+        writer_pin = receipts.DecimalRecoveryReceipt(
+            self.copy_receipt_file(retained._store), receipt_key=retained._store.key)
+        self.assert_concurrent_missing_inventory(
+            self.pin_path, ".decimal-terminal-receipt-", "receipt.db",
+            partial(writer_pin.repair_local_terminal, self.pins, self.store, **evidence),
+            partial(retained.inspect_local_terminal, self.pins, self.store, **evidence),
+            retained._store, evidence["reviewed_receipt"])
+
+    def test_checkpoint_inventory_refuses_concurrent_staging_and_publication(self):
+        self.prepare_checkpoint()
+        tip = self.promote()
+        exported = self.checkpoint.export(expected_receipt=tip)
+        retained = self.retain_independent_recovery_receipt(tip)
+        writer_pin = receipts.DecimalRecoveryReceipt(
+            self.copy_receipt_file(retained._store), receipt_key=retained._store.key)
+        writer_receipts = receipts.DecimalReceiptStore(
+            self.copy_receipt_file(self.pins), receipt_key=self.pins.key)
+        evidence = self.recovery_evidence() | {"trusted_receipt": tip}
+        writer_evidence = evidence | {"receipts": writer_receipts, "recovery_receipt": writer_pin}
+        self.checkpoint_path.unlink()
+        self.assert_concurrent_missing_inventory(
+            self.checkpoint_path, ".edgepilot-checkpoint-", "checkpoint.db",
+            partial(receipts.DecimalPromotionCheckpoint.recover, self.checkpoint_path, exported,
+                    checkpoint_key=self.checkpoint_key, **writer_evidence),
+            partial(self.checkpoint.inspect_recovered, exported, recovery_receipt=retained, **evidence),
+            retained._store, tip)
+
     def assert_final_unlink_recheck_preserves_replacement(self, target, stage, cleanup):
         stat_path = os.stat
         folder = stage.parent.stat()
