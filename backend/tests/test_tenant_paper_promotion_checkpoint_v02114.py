@@ -3166,6 +3166,243 @@ class PromotionCheckpointTests(unittest.TestCase):
             tip, (independent._store.path, self.pin_path, self.store_path, self.path),
             case="restore-collision")
 
+
+    def assert_operator_parked_manifest_review(
+            self, target, stage, inspect, tip, evidence_paths, *, kind, case):
+        """Test-local signed location manifest for a parked synthetic stage.
+
+        A signed record is not atomic with rename and is not a safe production
+        operation against uncontrolled same-UID filesystem writers.
+        """
+        import hashlib
+        import hmac
+        import json
+
+        self.assertIn(kind, ("terminal", "checkpoint"))
+        self.assertIn(case, ("clean", "holding-swap", "parked-name-swap",
+                             "manifest-tamper", "evidence-tamper"))
+        libc = ctypes.CDLL(None, use_errno=True)
+        if not hasattr(libc, "renameat2"):
+            self.skipTest("Linux libc renameat2 unavailable")
+        renameat2 = libc.renameat2
+        renameat2.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_int,
+                              ctypes.c_char_p, ctypes.c_uint)
+        renameat2.restype = ctypes.c_int
+
+        folder = stage.parent
+        original = folder.stat()
+        target_stat = target.stat()
+        original_bytes = target.read_bytes()
+        independent = {path: path.read_bytes() for path in evidence_paths}
+        before = inspect(include_stages=True)
+        self.assertEqual(before["receipt"], tip)
+        self.assertTrue(before["additionalLinkPresent"])
+        self.assertTrue(next(item for item in before["stages"]
+                             if item["name"] == folder.name)["publicationLink"])
+        root_dir = tempfile.TemporaryDirectory(
+            prefix=".operator-parked-review-v02151-", dir=folder.parent)
+        self.addCleanup(root_dir.cleanup)
+        root = Path(root_dir.name)
+        holding = root / "holding"
+        records = root / "independent-records"
+        holding.mkdir(mode=0o700)
+        records.mkdir(mode=0o700)
+        parked = holding / "retained-stage"
+        key = os.urandom(32)  # In-memory synthetic operator authority only.
+
+        # Both parent directories are descriptor-pinned for the no-overwrite
+        # operation. The source basename itself is still raceable by same UID.
+        source_fd = os.open(folder.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        holding_fd = os.open(holding, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            result = renameat2(source_fd, os.fsencode(folder.name),
+                               holding_fd, os.fsencode(parked.name), 1)
+            if result != 0:
+                number = ctypes.get_errno()
+                raise OSError(number, os.strerror(number))
+        finally:
+            os.close(holding_fd)
+            os.close(source_fd)
+        self.assertTrue(os.path.samestat(original, parked.stat()))
+        self.assertTrue((parked / stage.name).samefile(target))
+
+        def sha(data):
+            return hashlib.sha256(data).hexdigest()
+
+        # A source-attributed location record is retained outside the
+        # holding directory and the ordinary stage-prefix inventory.
+        signed = {
+            "format": "test-only-v02151",
+            "source_kind": kind,
+            "source_stage": folder.name,
+            "stage_file": stage.name,
+            "stage_dev": original.st_dev,
+            "stage_ino": original.st_ino,
+            "target": target.name,
+            "target_dev": target_stat.st_dev,
+            "target_ino": target_stat.st_ino,
+            "target_sha256": sha(original_bytes),
+            "holding_dev": holding.stat().st_dev,
+            "holding_ino": holding.stat().st_ino,
+            "parked_name": parked.name,
+            "receipt_sha256": sha(repr(tip).encode("utf-8")),
+            "evidence": [
+                {"name": path.name, "sha256": sha(data)}
+                for path, data in independent.items()
+            ],
+        }
+        raw = json.dumps(signed, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        seal = hmac.new(key, raw, hashlib.sha256).hexdigest()
+        manifest = records / "location.json"
+        signature = records / "location.mac"
+        manifest.write_bytes(raw)
+        signature.write_text(seal, encoding="ascii")
+
+        middle = inspect(include_stages=True)
+        self.assertEqual(middle["receipt"], tip)
+        self.assertTrue(middle["additionalLinkPresent"])
+        self.assertFalse(any(item["publicationLink"] for item in middle["stages"]))
+
+        def independently_review():
+            # This review is deliberately read-only. A signed location hint
+            # alone cannot license automatic unlink or restore.
+            candidate = manifest.read_bytes()
+            observed_seal = signature.read_text(encoding="ascii")
+            if not hmac.compare_digest(
+                    hmac.new(key, candidate, hashlib.sha256).hexdigest(),
+                    observed_seal):
+                recovery._deny()
+            try:
+                record = json.loads(candidate)
+            except (ValueError, UnicodeDecodeError):
+                recovery._deny()
+            if record != signed or record["source_kind"] != kind:
+                recovery._deny()
+            if record["receipt_sha256"] != sha(repr(tip).encode("utf-8")):
+                recovery._deny()
+            if record["evidence"] != [
+                    {"name": path.name, "sha256": sha(path.read_bytes())}
+                    for path in evidence_paths]:
+                recovery._deny()
+            try:
+                hold_fd = os.open(holding, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            except OSError:
+                recovery._deny()
+            try:
+                held_stat = os.fstat(hold_fd)
+                if (held_stat.st_dev, held_stat.st_ino) != (
+                        record["holding_dev"], record["holding_ino"]):
+                    recovery._deny()
+                try:
+                    stage_fd = os.open(
+                        record["parked_name"],
+                        os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=hold_fd)
+                except OSError:
+                    recovery._deny()
+                try:
+                    directory = os.fstat(stage_fd)
+                    if (directory.st_dev, directory.st_ino) != (
+                            record["stage_dev"], record["stage_ino"]):
+                        recovery._deny()
+                    try:
+                        link_fd = os.open(
+                            record["stage_file"], os.O_RDONLY | os.O_NOFOLLOW,
+                            dir_fd=stage_fd)
+                    except OSError:
+                        recovery._deny()
+                    with os.fdopen(link_fd, "rb") as source:
+                        link = os.fstat(source.fileno())
+                        if (link.st_dev, link.st_ino) != (
+                                record["target_dev"], record["target_ino"]):
+                            recovery._deny()
+                        if sha(source.read()) != record["target_sha256"]:
+                            recovery._deny()
+                finally:
+                    os.close(stage_fd)
+            finally:
+                os.close(hold_fd)
+            target_now = target.stat()
+            if (target_now.st_dev, target_now.st_ino) != (
+                    record["target_dev"], record["target_ino"]):
+                recovery._deny()
+            if sha(target.read_bytes()) != record["target_sha256"]:
+                recovery._deny()
+            checked = inspect(include_stages=True)
+            if (checked["receipt"] != tip or
+                    not checked["additionalLinkPresent"] or
+                    any(item["publicationLink"] for item in checked["stages"])):
+                recovery._deny()
+            return True
+
+        displaced = None
+        if case == "holding-swap":
+            displaced = root / "authentic-holding"
+            holding.rename(displaced)
+            holding.mkdir(mode=0o700)
+            (holding / parked.name).mkdir(mode=0o700)
+            (holding / parked.name / stage.name).write_bytes(b"unreviewed holding")
+        elif case == "parked-name-swap":
+            displaced = holding / "authentic-parked"
+            parked.rename(displaced)
+            parked.mkdir(mode=0o700)
+            (parked / stage.name).write_bytes(b"unreviewed parked name")
+        elif case == "manifest-tamper":
+            # The manifest is not authorized merely because the replacement
+            # contains plausible source and inode fields.
+            manifest.write_bytes(raw.replace(b"test-only-v02151",
+                                             b"test-only-v02150"))
+        elif case == "evidence-tamper":
+            evidence_paths[0].write_bytes(b"unreviewed evidence replacement")
+
+        if case == "clean":
+            self.assertTrue(independently_review())
+        else:
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                independently_review()
+
+        authentic = (displaced / parked.name if case == "holding-swap"
+                     else displaced if case == "parked-name-swap" else parked)
+        self.assertTrue(os.path.samestat(authentic.stat(), original))
+        self.assertTrue((authentic / stage.name).samefile(target))
+        self.assertEqual(target.read_bytes(), original_bytes)
+        self.assertEqual(target.stat().st_nlink, 2)
+        for path, content in independent.items():
+            if case != "evidence-tamper" or path != evidence_paths[0]:
+                self.assertEqual(path.read_bytes(), content)
+        # The independent record and every candidate remain for explicit
+        # operator review; nothing is automatically restored or removed.
+        self.assertTrue(manifest.is_file())
+        self.assertTrue(signature.is_file())
+
+    def test_terminal_operator_parked_manifest_adversarial(self):
+        for case in ("clean", "holding-swap", "parked-name-swap",
+                     "manifest-tamper", "evidence-tamper"):
+            with self.subTest(case=case):
+                retained, evidence, stage, _ = self.terminal_cleanup_fixture()
+                self.assert_operator_parked_manifest_review(
+                    self.pin_path, stage,
+                    partial(retained.inspect_local_terminal,
+                            self.pins, self.store, **evidence),
+                    evidence["reviewed_receipt"],
+                    (retained._store.path, self.store_path),
+                    kind="terminal", case=case)
+
+    def test_checkpoint_operator_parked_manifest_adversarial(self):
+        for case in ("clean", "holding-swap", "parked-name-swap",
+                     "manifest-tamper", "evidence-tamper"):
+            with self.subTest(case=case):
+                stage, exported, tip = self.reviewed_staging_link()
+                independent = self.retain_independent_recovery_receipt(tip)
+                evidence = self.recovery_evidence() | {"recovery_receipt": independent}
+                self.assert_operator_parked_manifest_review(
+                    self.checkpoint_path, stage,
+                    partial(self.checkpoint.inspect_recovered, exported,
+                            trusted_receipt=tip, **evidence),
+                    tip, (independent._store.path, self.pin_path,
+                          self.store_path, self.path),
+                    kind="checkpoint", case=case)
+
+
     def assert_concurrent_review_after_interrupted_cleanup(self, target, stage, independent,
                                                            inspect, cleanup, tip):
         published = target.read_bytes()
