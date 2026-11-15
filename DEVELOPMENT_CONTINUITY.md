@@ -5,22 +5,22 @@ Use this section for the next development session. The entries below record prio
 ## Copyable resume instruction
 
 ```text
-EdgePilot Continuity 012
+EdgePilot Continuity 013
 
 Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on main in BelenosCreations/edgepilot-personal, independently verify the GitHub and Render checkpoint, and follow the next steps and restrictions in that file.
 ```
 
 ## Verification and checkpoint
 
-- Before editing, recheck GitHub main, merged exact-head PR CI, post-merge main CI, open PRs and Render exact live SHA. Independently probe HTTP health where possible. Resolve v0.2.149 from `development/v0.2.149-operator-park-prototype`; any newer verified main supersedes this handoff.
-- Independently verified v0.2.148 baseline: PR #176 head `8b05eacd8d99d8987f47b63ebe808d89c8599df5` passed [Actions #43720452040](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43720452040). Main `670247dd3cd935b797113d32ff076a5542db5b31` passed [Actions #43720682478](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43720682478) and matched live Render deployment `dep-dbsrf2tbedkc73cgoomg`; no PRs were open. Separate HTTP 200 health probe was not verified.
-- v0.2.149 explores offline-only, test-local **whole-directory parking** with synthetic terminal/checkpoint stage fixtures. Clean reversal, late source replacement and occupied target reservation are exercised. No production operator API or automatically invoked retirement code was added. See [milestone notes](PAPER_REVERSIBLE_STAGE_PARKING_V02149.md).
+- Independently verify the current GitHub main, merged exact-head PR CI, post-merge main CI, open PRs, Render's exact live SHA and separate HTTP health where available. Resolve v0.2.150 from `development/v0.2.150-rename-noreplace-review`; any later verified main supersedes this handoff.
+- Independently verified v0.2.149 baseline: PR #177 head `b8019137ecdb01f6232926f6697663e49f604eee` passed [Actions #43721649093](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43721649093). Main `fec01e4afa05f9fd747aaa434ac025152b405192` passed [Actions #43721858558](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43721858558), matched live Render deployment `dep-dbsrldlbedkc73ch06pg`. No open PRs. A separate HTTP 200 /healthz probe could not be verified.
+- v0.2.150 adds ten Linux-only synthetic terminal/checkpoint cases for descriptor-bound, no-overwrite stage-directory parking and rollback. Empty-directory, symlink and source-swap races are covered. All helpers remain test-local, with no new engine APIs. See [milestone notes](PAPER_NOREPLACE_STAGE_PARKING_V02150.md).
 
 ## Next safe development batch
 
-1. Evaluate descriptor-pinned, no-overwrite alternatives to ordinary stage-directory rename and safe explicit rollback semantics. Test a same-user replacement of an **empty or symlink target**: ordinary rename may silently overwrite, so the current prototype is **not** a security boundary. Retain read-only inspection as the safe route if same-UID interference is possible, and do not activate destructive cleanup without proven isolation.
-2. Preserve independent exact tenant archive pin, signed receipt/checkpoint custody, existing recovery and detached authenticated paper preflight. Combined full-evidence rollback and cross-resource power-loss consistency remain open.
-3. Continue source-attributed, session-only Public history research under the owner's provider-permission assumption. Real data only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance); existing owner snapshot and MSFT quote acceptance remain valid.
+1. Examine whether stage-directory parking can preserve an independently reviewable, source-attributed manifest while it is outside the normal stage prefix. Test adversarial holding-directory or parked-name replacement after a successful `RENAME_NOREPLACE`, without automatically retrying or trusting unlinked candidates.
+2. Maintain independent tenant archive pin, exact signed receipt/checkpoint custody, existing recovery and detached paper preflight. Combined full-evidence rollback and cross-resource power-loss consistency remain open.
+3. Continue source-attributed, session-only Public history research under owner provider-permission assumption. Real history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance); owner snapshot and MSFT quote acceptance remain valid.
 
 ## Restrictions and workflow
 
@@ -30,6 +30,10 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Increment the EdgePilot Continuity sequence at the top of the copy block. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.149 — 2026-11-15 — Reversible operator stage-parking prototype
+
+Six offline tests explore whole-directory parking/restore, source substitution and nonempty target collision without production cleanup exposure. See [prototype notes](PAPER_REVERSIBLE_STAGE_PARKING_V02149.md).
 
 ## v0.2.148 — 2026-11-15 — Late-unlink race review
 
