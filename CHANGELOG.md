@@ -1,3 +1,11 @@
+## v0.2.151 — 2026-11-15 America/New_York — Read-only signed parked-stage review
+
+**Research** — Added test-local source-attributed signed location records for offline Linux no-overwrite directory parking. Read-only review checks stage and holding inode identity, the exact published hard link, stored receipt/checkpoint source attribution and independently retained evidence.
+
+**Tests** — Ten isolated terminal/checkpoint tests cover clean review, substituted holding directory, replaced parked name, tampered manifest and altered independent evidence. All adversarial cases refuse without deleting, retrying, or restoring candidates.
+
+**Limits** — There is no atomic move-plus-manifest transaction, durable monotonic record authority, or safe destructive operation against an uncontrolled same-UID writer. Production recovery and execution are unchanged. See [parked-stage manifest notes](PAPER_PARKED_STAGE_MANIFEST_V02151.md).
+
 ## v0.2.150 — 2026-11-15 America/New_York — No-overwrite directory-parking research
 
 **Research** — Introduced test-local descriptor-anchored Linux `renameat2(RENAME_NOREPLACE)` rehearsal for stage-directory parking and rollback. No recovery-engine or production API changes were made.
