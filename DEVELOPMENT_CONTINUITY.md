@@ -5,22 +5,22 @@ Use this section for the next development session. The entries below record prio
 ## Copyable resume instruction
 
 ```text
-EdgePilot Continuity 011
+EdgePilot Continuity 012
 
 Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on main in BelenosCreations/edgepilot-personal, independently verify the GitHub and Render checkpoint, and follow the next steps and restrictions in that file.
 ```
 
 ## Verification and checkpoint
 
-- Before editing, verify current GitHub main, merged PR head and exact-head CI, merged-main push CI, open PRs, exact Render live SHA and independent health when accessible. Resolve v0.2.148 from `development/v0.2.148-late-unlink-race-review`. A later verified checkpoint takes precedence.
-- Independently verified v0.2.147 baseline: PR #175 head `3f5a80c3edffb7f44faf4c64df3eeaa5c5da7dea` passed [Actions #43675345083](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43675345083). Main `4abfca2fc5193c93ad58d0e133c9982af41bd457` passed [Actions #43675526020](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43675526020), matched live Render deployment `dep-dbsj1115efls73erdpm0`. No open PRs. An independent HTTP health check could not be completed from the available network.
-- v0.2.148 documents and tests the final non-atomic unlink boundary for terminal/checkpoint recovery, including dangerous post-refusal side effects, and introduces focused recovery CI before full CI. See [milestone notes](PAPER_LATE_UNLINK_BOUNDARY_V02148.md).
+- Before editing, recheck GitHub main, merged exact-head PR CI, post-merge main CI, open PRs and Render exact live SHA. Independently probe HTTP health where possible. Resolve v0.2.149 from `development/v0.2.149-operator-park-prototype`; any newer verified main supersedes this handoff.
+- Independently verified v0.2.148 baseline: PR #176 head `8b05eacd8d99d8987f47b63ebe808d89c8599df5` passed [Actions #43720452040](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43720452040). Main `670247dd3cd935b797113d32ff076a5542db5b31` passed [Actions #43720682478](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43720682478) and matched live Render deployment `dep-dbsrf2tbedkc73cgoomg`; no PRs were open. Separate HTTP 200 health probe was not verified.
+- v0.2.149 explores offline-only, test-local **whole-directory parking** with synthetic terminal/checkpoint stage fixtures. Clean reversal, late source replacement and occupied target reservation are exercised. No production operator API or automatically invoked retirement code was added. See [milestone notes](PAPER_REVERSIBLE_STAGE_PARKING_V02149.md).
 
 ## Next safe development batch
 
-1. Research an operator-only **reversible** staging-link retirement design, using protected naming and identity evidence, where a noncooperating same-user race does not irreversibly remove unreviewed bytes. Do not claim a check-plus-unlink sequence is atomic, and keep destructive cleanup disabled when uncontrolled same-user writers could act.
-2. Preserve independent exact tenant archive pin, signed receipt/checkpoint custody, existing recovery, and detached authenticated paper preflight. Combined evidence rollback and cross-resource power-loss consistency remain open.
-3. Continue Public history research with source attribution and session-only usage under the user-approved provider-permission assumption. Target real data only for [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance); prior owner snapshot and MSFT quote acceptance remain valid.
+1. Evaluate descriptor-pinned, no-overwrite alternatives to ordinary stage-directory rename and safe explicit rollback semantics. Test a same-user replacement of an **empty or symlink target**: ordinary rename may silently overwrite, so the current prototype is **not** a security boundary. Retain read-only inspection as the safe route if same-UID interference is possible, and do not activate destructive cleanup without proven isolation.
+2. Preserve independent exact tenant archive pin, signed receipt/checkpoint custody, existing recovery and detached authenticated paper preflight. Combined full-evidence rollback and cross-resource power-loss consistency remain open.
+3. Continue source-attributed, session-only Public history research under the owner's provider-permission assumption. Real data only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance); existing owner snapshot and MSFT quote acceptance remain valid.
 
 ## Restrictions and workflow
 
@@ -30,6 +30,10 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Increment the EdgePilot Continuity sequence at the top of the copy block. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.148 — 2026-11-15 — Late-unlink race review
+
+Four synthetic late-swap tests show that failed cleanup can already have removed a pathname. Read-only inventory remains preferred under untrusted same-UID writers. See [late-unlink boundary review](PAPER_LATE_UNLINK_BOUNDARY_V02148.md).
 
 ## v0.2.147 — 2026-11-15 — Stage-directory last check
 

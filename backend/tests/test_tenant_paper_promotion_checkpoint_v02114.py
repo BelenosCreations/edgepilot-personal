@@ -2778,6 +2778,163 @@ class PromotionCheckpointTests(unittest.TestCase):
             tip, (independent._store.path, self.pin_path, self.store_path, self.path),
             swap="directory")
 
+
+    def assert_operator_directory_parking_prototype(
+            self, target, stage, inspect, tip, independent_paths, *, case):
+        """Offline-only directory parking, never invoked by live recovery."""
+        self.assertIn(case, ("roundtrip", "source-swap", "occupied-reservation"))
+        original = stage.parent
+        saved_bytes = target.read_bytes()
+        verified = original.stat()
+        evidence = {path: path.read_bytes() for path in independent_paths}
+        marker = original / "operator-note"
+        marker.write_bytes(b"preserve-stage-notes")
+
+        initial = inspect(include_stages=True)
+        self.assertEqual(initial["receipt"], tip)
+        self.assertTrue(initial["additionalLinkPresent"])
+        self.assertTrue(next(row for row in initial["stages"]
+                             if row["name"] == original.name)["publicationLink"])
+
+        reservation = tempfile.TemporaryDirectory(
+            prefix=".operator-holding-prototype-", dir=original.parent)
+        self.addCleanup(reservation.cleanup)
+        parked = Path(reservation.name) / "retained-stage"
+        displaced = original.with_name(original.name + ".displaced")
+        ordinary_rename = os.rename
+        interventions = []
+
+        def park_for_operator_review():
+            # This is a test-local prototype, not a production API.
+            observed = original.lstat()
+            if os.path.lexists(parked):
+                recovery._deny()
+            try:
+                os.rename(original, parked)
+            except OSError:
+                recovery._deny()
+            if not os.path.samestat(observed, parked.lstat()):
+                recovery._deny()
+            return parked
+
+        def interfere_at_rename(source, destination, *args, **kwargs):
+            if (Path(source) == original and Path(destination) == parked
+                    and not interventions):
+                interventions.append(case)
+                if case == "source-swap":
+                    ordinary_rename(original, displaced)
+                    original.mkdir(mode=0o700)
+                    (original / stage.name).write_bytes(b"unreviewed replacement")
+                elif case == "occupied-reservation":
+                    parked.mkdir(mode=0o700)
+                    (parked / "collision-note").write_bytes(b"do not overwrite")
+            return ordinary_rename(source, destination, *args, **kwargs)
+
+        if case == "roundtrip":
+            self.assertEqual(park_for_operator_review(), parked)
+            self.assertFalse(original.exists())
+            self.assertTrue((parked / stage.name).samefile(target))
+            self.assertEqual((parked / marker.name).read_bytes(), b"preserve-stage-notes")
+            intermediate = inspect(include_stages=True)
+            self.assertEqual(intermediate["receipt"], tip)
+            self.assertTrue(intermediate["additionalLinkPresent"])
+            self.assertFalse(any(row["publicationLink"] for row in intermediate["stages"]))
+            # Reversal is demonstrated only in an uncontended synthetic fixture.
+            os.rename(parked, original)
+            self.assertTrue(stage.samefile(target))
+            self.assertEqual(marker.read_bytes(), b"preserve-stage-notes")
+            self.assertEqual(inspect(include_stages=True), initial)
+        else:
+            with (patch.object(os, "rename", interfere_at_rename),
+                  self.assertRaises(recovery.DecimalRecoveryDenied)):
+                park_for_operator_review()
+            self.assertEqual(interventions, [case])
+            if case == "source-swap":
+                # The swapped-in candidate was moved, not deleted. A mismatch
+                # must never trigger an automatic move back over another name.
+                self.assertFalse(original.exists())
+                self.assertTrue((displaced / stage.name).samefile(target))
+                self.assertEqual((displaced / marker.name).read_bytes(),
+                                 b"preserve-stage-notes")
+                self.assertEqual((parked / stage.name).read_bytes(),
+                                 b"unreviewed replacement")
+                current = inspect(include_stages=True)
+                self.assertTrue(next(row for row in current["stages"]
+                                     if row["name"] == displaced.name)["publicationLink"])
+                self.assertTrue(current["additionalLinkPresent"])
+            else:
+                # A nonempty reservation prevents a same-directory rename
+                # from overwriting preexisting evidence.
+                self.assertTrue(stage.samefile(target))
+                self.assertEqual((parked / "collision-note").read_bytes(),
+                                 b"do not overwrite")
+                self.assertEqual(inspect(include_stages=True), initial)
+
+        self.assertTrue(os.path.samestat(verified, (
+            (displaced if case == "source-swap" else original).stat()
+            if case != "roundtrip" else original.stat())))
+        self.assertEqual(target.read_bytes(), saved_bytes)
+        self.assertEqual(target.stat().st_nlink, 2)
+        for path, content in evidence.items():
+            self.assertEqual(path.read_bytes(), content)
+
+    def test_terminal_operator_parking_roundtrip_prototype(self):
+        retained, evidence, stage, _ = self.terminal_cleanup_fixture()
+        self.assert_operator_directory_parking_prototype(
+            self.pin_path, stage,
+            partial(retained.inspect_local_terminal, self.pins, self.store, **evidence),
+            evidence["reviewed_receipt"], (retained._store.path, self.store_path),
+            case="roundtrip")
+
+    def test_checkpoint_operator_parking_roundtrip_prototype(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        independent = self.retain_independent_recovery_receipt(tip)
+        evidence = self.recovery_evidence() | {"recovery_receipt": independent}
+        self.assert_operator_directory_parking_prototype(
+            self.checkpoint_path, stage,
+            partial(self.checkpoint.inspect_recovered, exported,
+                    trusted_receipt=tip, **evidence),
+            tip, (independent._store.path, self.pin_path, self.store_path, self.path),
+            case="roundtrip")
+
+    def test_terminal_operator_parking_detects_replaced_source(self):
+        retained, evidence, stage, _ = self.terminal_cleanup_fixture()
+        self.assert_operator_directory_parking_prototype(
+            self.pin_path, stage,
+            partial(retained.inspect_local_terminal, self.pins, self.store, **evidence),
+            evidence["reviewed_receipt"], (retained._store.path, self.store_path),
+            case="source-swap")
+
+    def test_checkpoint_operator_parking_detects_replaced_source(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        independent = self.retain_independent_recovery_receipt(tip)
+        evidence = self.recovery_evidence() | {"recovery_receipt": independent}
+        self.assert_operator_directory_parking_prototype(
+            self.checkpoint_path, stage,
+            partial(self.checkpoint.inspect_recovered, exported,
+                    trusted_receipt=tip, **evidence),
+            tip, (independent._store.path, self.pin_path, self.store_path, self.path),
+            case="source-swap")
+
+    def test_terminal_operator_parking_preserves_occupied_reservation(self):
+        retained, evidence, stage, _ = self.terminal_cleanup_fixture()
+        self.assert_operator_directory_parking_prototype(
+            self.pin_path, stage,
+            partial(retained.inspect_local_terminal, self.pins, self.store, **evidence),
+            evidence["reviewed_receipt"], (retained._store.path, self.store_path),
+            case="occupied-reservation")
+
+    def test_checkpoint_operator_parking_preserves_occupied_reservation(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        independent = self.retain_independent_recovery_receipt(tip)
+        evidence = self.recovery_evidence() | {"recovery_receipt": independent}
+        self.assert_operator_directory_parking_prototype(
+            self.checkpoint_path, stage,
+            partial(self.checkpoint.inspect_recovered, exported,
+                    trusted_receipt=tip, **evidence),
+            tip, (independent._store.path, self.pin_path, self.store_path, self.path),
+            case="occupied-reservation")
+
     def assert_concurrent_review_after_interrupted_cleanup(self, target, stage, independent,
                                                            inspect, cleanup, tip):
         published = target.read_bytes()
