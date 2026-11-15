@@ -2581,6 +2581,81 @@ class PromotionCheckpointTests(unittest.TestCase):
             partial(self.checkpoint.cleanup_recovered_stage, stage, exported, trusted_receipt=tip,
                     recovery_receipt=independent, **self.recovery_evidence()))
 
+
+    def assert_directory_swap_after_last_stage_stat(
+            self, target, stage, inspect, cleanup, tip, evidence_paths):
+        """A noncooperating same-user writer replaces the stage directory name."""
+        folder = stage.parent
+        selected = folder.stat()
+        renamed = folder.with_name(folder.name + ".moved")
+        target_bytes = target.read_bytes()
+        independent = {path: path.read_bytes() for path in evidence_paths}
+        original_stat = os.stat
+        observations = []
+
+        def swap_directory_after_final_observation(path, *args, **kwargs):
+            info = original_stat(path, *args, **kwargs)
+            fd = kwargs.get("dir_fd")
+            if (path == stage.name and fd is not None
+                    and os.path.samestat(os.fstat(fd), selected)):
+                observations.append(info)
+                if len(observations) == 2:
+                    folder.rename(renamed)
+                    folder.mkdir(mode=0o700)
+                    stage.write_bytes(b"unreviewed replacement: preserve")
+            return info
+
+        with (patch.object(receipts.os, "stat", swap_directory_after_final_observation),
+              patch.object(receipts.os, "unlink",
+                           side_effect=AssertionError("Unexpected stage unlink")),
+              self.assertRaises(recovery.DecimalRecoveryDenied)):
+            cleanup()
+
+        self.assertEqual(len(observations), 2)
+        moved_link = renamed / stage.name
+        self.assertTrue(moved_link.samefile(target))
+        self.assertEqual(stage.read_bytes(), b"unreviewed replacement: preserve")
+        self.assertEqual(target.read_bytes(), target_bytes)
+        self.assertEqual(target.stat().st_nlink, 2)
+        for path, content in independent.items():
+            self.assertEqual(path.read_bytes(), content)
+
+        # A remembered selection must not be silently applied to a new name.
+        with self.assertRaises(recovery.DecimalRecoveryDenied):
+            cleanup()
+        self.assertTrue(moved_link.samefile(target))
+        self.assertEqual(stage.read_bytes(), b"unreviewed replacement: preserve")
+
+        review = inspect(include_stages=True)
+        self.assertEqual(review["receipt"], tip)
+        self.assertTrue(review["additionalLinkPresent"])
+        records = {entry["name"]: entry for entry in review["stages"]}
+        self.assertTrue(records[renamed.name]["publicationLink"])
+        self.assertFalse(records[folder.name]["publicationLink"])
+        self.assertEqual(records[folder.name]["entries"], [stage.name])
+        self.assertEqual(target.read_bytes(), target_bytes)
+
+    def test_terminal_directory_swap_after_final_stage_stat_is_refused(self):
+        retained, evidence, stage, _ = self.terminal_cleanup_fixture()
+        self.assert_directory_swap_after_last_stage_stat(
+            self.pin_path, stage,
+            partial(retained.inspect_local_terminal, self.pins, self.store, **evidence),
+            partial(retained.cleanup_local_terminal_stage, stage,
+                    self.pins, self.store, **evidence),
+            evidence["reviewed_receipt"], (retained._store.path, self.store_path))
+
+    def test_checkpoint_directory_swap_after_final_stage_stat_is_refused(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        retained = self.retain_independent_recovery_receipt(tip)
+        evidence = self.recovery_evidence() | {"recovery_receipt": retained}
+        self.assert_directory_swap_after_last_stage_stat(
+            self.checkpoint_path, stage,
+            partial(self.checkpoint.inspect_recovered, exported,
+                    trusted_receipt=tip, **evidence),
+            partial(self.checkpoint.cleanup_recovered_stage, stage, exported,
+                    trusted_receipt=tip, **evidence),
+            tip, (retained._store.path, self.pin_path, self.store_path, self.path))
+
     def assert_concurrent_review_after_interrupted_cleanup(self, target, stage, independent,
                                                            inspect, cleanup, tip):
         published = target.read_bytes()

@@ -1,3 +1,11 @@
+## v0.2.147 — 2026-11-14 America/New_York — Stage-directory last-check review
+
+**Changed** — Offline terminal-receipt and checkpoint cleanup recheck selected staging-directory identity after the final stage-file observation and immediately before unlink.
+
+**Tests** — Synthetic noncooperating directory replacement at that boundary must refuse cleanup without unlinking the moved verified link or touching the replacement. Fresh authenticated inventory distinguishes the moved link from the unreviewed new candidate and confirms independent evidence unchanged.
+
+**Limitations** — The last directory-name check and unlink are not one atomic operation against a hostile same-user writer. Do not infer authenticity from unlinked stages or automatically retry ambiguous cleanup. Combined evidence rollback and cross-resource power-loss consistency remain unresolved.
+
 ## v0.2.146 — 2026-11-14 America/New_York — Shared-evidence publisher exit readback
 
 **Changed** — Added real-process synthetic receipt and checkpoint publication exit rehearsals against the same retained evidence locations as the reviewer, with fresh readback before and after exclusive linking.

@@ -404,6 +404,10 @@ class DecimalReceiptStore:
         # Reject a name substituted during review. The staging lock serializes
         # cooperating writers across the final pathname check and unlink.
         _require_same_file(link, os.stat(stage_path.name, dir_fd=folder_fd, follow_symlinks=False))
+        # A noncooperating writer can rename the chosen directory after
+        # the last file observation. Refuse a stale directory name first.
+        # This check and unlink remain non-atomic against a same-user race.
+        _require_directory_identity(stage_path.parent, staging)
         os.unlink(stage_path.name, dir_fd=folder_fd)
         unlinked = self.path.lstat()
         os.fsync(folder_fd)
