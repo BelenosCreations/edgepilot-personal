@@ -1,3 +1,11 @@
+## v0.2.149 — 2026-11-15 America/New_York — Reversible stage-parking prototype
+
+**Research** — Tested operator-only parking of an entire synthetic terminal-receipt or active-checkpoint staging directory into a separately reserved holding location, preserving its hard link and unrelated stage notes. The helper exists **inside the tests only**, not the production engine or an exposed API.
+
+**Tests** — Six offline regressions cover clean park-and-restore, source-directory substitution at the rename boundary and an occupied nonempty target reservation. Clean roundtrips preserve independent evidence, published bytes, and authenticated inventory. Replaced sources fail identity review but preserve both the displaced verified link and unreviewed replacement; occupied targets fail without overwriting evidence.
+
+**Limits** — A same-user adversary can interfere with the source, destination or reservation. Regular rename can replace some destination types and cannot guarantee safe reversal after interference; renaming away a stage also temporarily removes it from the normal stage inventory. Do not use the test-local prototype on real stores, enable destructive cleanup, or equate it with an atomic protected retirement operation. Combined evidence rollback and cross-resource power-loss consistency remain open.
+
 ## v0.2.148 — 2026-11-15 America/New_York — Late-unlink boundary review
 
 **Changed** — Clarified that post-unlink refusal is not proof of no side effects. The offline operator route remains read-only authenticated stage inventory when a noncooperating same-user writer cannot be excluded. CI now runs focused receipt/checkpoint recovery tests before the full regression suite.
