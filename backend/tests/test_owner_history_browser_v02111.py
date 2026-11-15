@@ -103,6 +103,15 @@ vm.runInNewContext(fs.readFileSync(process.argv[1], "utf8"), {
                /Public API · MSFT · One month · 1 displayed bar · 0 expected by Public/);
   assert.equal(el("historyRows").children[0].children[4].textContent, "201.15");
 
+  const pendingRefresh = el("loadHistory").fire("click");
+  assert.equal(el("loadHistory").disabled, true);
+  await el("loadHistory").fire("click");
+  assert.equal(pending.length, 1);
+  pending.shift().resolve(reply(200, newMonth));
+  await pendingRefresh;
+  assert.equal(el("loadHistory").disabled, false);
+  assert.equal(el("historyRows").children[0].children[4].textContent, "201.15");
+
   const obsoleteSymbol = el("loadHistory").fire("click");
   el("quoteSymbol").value = "spy";
   el("quoteSymbol").fire("input");

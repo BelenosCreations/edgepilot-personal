@@ -1,3 +1,11 @@
+## v0.2.145 — 2026-11-14 America/New_York — Concurrent staging review
+
+**Changed** — Missing-publication inventory takes a nonblocking shared lock while reading each eligible stage directory. The scan checks the name against the directory it opened.
+
+**Tests** — Real synthetic publishers exercise a held staging lock and publication during an inventory scan. The rehearsal refuses a renamed stage or stale independent pin and preserves the staged contents. The Public history browser test verifies that an in-flight refresh blocks a duplicate request.
+
+**Limitations** — Stage inventory is a point-in-time review of names and metadata. A filesystem writer can race after observation. Combined rollback of retained evidence, cross-resource power-loss consistency and owner-device Public history acceptance remain open.
+
 ## v0.2.144 — 2026-11-14 America/New_York — Inventory after publication interruption
 
 **Changed** — Offline terminal receipt and active checkpoint readback can inventory staging directories with a missing destination using exact independent evidence. Cleanup checks the selected stage name again immediately before unlink.
