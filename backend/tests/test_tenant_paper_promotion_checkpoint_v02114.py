@@ -3374,34 +3374,115 @@ class PromotionCheckpointTests(unittest.TestCase):
         self.assertTrue(manifest.is_file())
         self.assertTrue(signature.is_file())
 
-    def test_terminal_operator_parked_manifest_adversarial(self):
-        for case in ("clean", "holding-swap", "parked-name-swap",
-                     "manifest-tamper", "evidence-tamper"):
-            with self.subTest(case=case):
-                retained, evidence, stage, _ = self.terminal_cleanup_fixture()
-                self.assert_operator_parked_manifest_review(
-                    self.pin_path, stage,
-                    partial(retained.inspect_local_terminal,
-                            self.pins, self.store, **evidence),
-                    evidence["reviewed_receipt"],
-                    (retained._store.path, self.store_path),
-                    kind="terminal", case=case)
+    def test_terminal_operator_parked_manifest_clean(self):
+        retained, evidence, stage, _ = self.terminal_cleanup_fixture()
+        self.assert_operator_parked_manifest_review(
+            self.pin_path, stage,
+            partial(retained.inspect_local_terminal,
+                    self.pins, self.store, **evidence),
+            evidence["reviewed_receipt"],
+            (retained._store.path, self.store_path),
+            kind="terminal", case="clean")
 
-    def test_checkpoint_operator_parked_manifest_adversarial(self):
-        for case in ("clean", "holding-swap", "parked-name-swap",
-                     "manifest-tamper", "evidence-tamper"):
-            with self.subTest(case=case):
-                stage, exported, tip = self.reviewed_staging_link()
-                independent = self.retain_independent_recovery_receipt(tip)
-                evidence = self.recovery_evidence() | {"recovery_receipt": independent}
-                self.assert_operator_parked_manifest_review(
-                    self.checkpoint_path, stage,
-                    partial(self.checkpoint.inspect_recovered, exported,
-                            trusted_receipt=tip, **evidence),
-                    tip, (independent._store.path, self.pin_path,
-                          self.store_path, self.path),
-                    kind="checkpoint", case=case)
+    def test_terminal_operator_parked_manifest_holding_swap(self):
+        retained, evidence, stage, _ = self.terminal_cleanup_fixture()
+        self.assert_operator_parked_manifest_review(
+            self.pin_path, stage,
+            partial(retained.inspect_local_terminal,
+                    self.pins, self.store, **evidence),
+            evidence["reviewed_receipt"],
+            (retained._store.path, self.store_path),
+            kind="terminal", case="holding-swap")
 
+    def test_terminal_operator_parked_manifest_parked_name_swap(self):
+        retained, evidence, stage, _ = self.terminal_cleanup_fixture()
+        self.assert_operator_parked_manifest_review(
+            self.pin_path, stage,
+            partial(retained.inspect_local_terminal,
+                    self.pins, self.store, **evidence),
+            evidence["reviewed_receipt"],
+            (retained._store.path, self.store_path),
+            kind="terminal", case="parked-name-swap")
+
+    def test_terminal_operator_parked_manifest_manifest_tamper(self):
+        retained, evidence, stage, _ = self.terminal_cleanup_fixture()
+        self.assert_operator_parked_manifest_review(
+            self.pin_path, stage,
+            partial(retained.inspect_local_terminal,
+                    self.pins, self.store, **evidence),
+            evidence["reviewed_receipt"],
+            (retained._store.path, self.store_path),
+            kind="terminal", case="manifest-tamper")
+
+    def test_terminal_operator_parked_manifest_evidence_tamper(self):
+        retained, evidence, stage, _ = self.terminal_cleanup_fixture()
+        self.assert_operator_parked_manifest_review(
+            self.pin_path, stage,
+            partial(retained.inspect_local_terminal,
+                    self.pins, self.store, **evidence),
+            evidence["reviewed_receipt"],
+            (retained._store.path, self.store_path),
+            kind="terminal", case="evidence-tamper")
+
+    def test_checkpoint_operator_parked_manifest_clean(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        independent = self.retain_independent_recovery_receipt(tip)
+        evidence = self.recovery_evidence() | {"recovery_receipt": independent}
+        self.assert_operator_parked_manifest_review(
+            self.checkpoint_path, stage,
+            partial(self.checkpoint.inspect_recovered, exported,
+                    trusted_receipt=tip, **evidence),
+            tip, (independent._store.path, self.pin_path,
+                  self.store_path, self.path),
+            kind="checkpoint", case="clean")
+
+    def test_checkpoint_operator_parked_manifest_holding_swap(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        independent = self.retain_independent_recovery_receipt(tip)
+        evidence = self.recovery_evidence() | {"recovery_receipt": independent}
+        self.assert_operator_parked_manifest_review(
+            self.checkpoint_path, stage,
+            partial(self.checkpoint.inspect_recovered, exported,
+                    trusted_receipt=tip, **evidence),
+            tip, (independent._store.path, self.pin_path,
+                  self.store_path, self.path),
+            kind="checkpoint", case="holding-swap")
+
+    def test_checkpoint_operator_parked_manifest_parked_name_swap(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        independent = self.retain_independent_recovery_receipt(tip)
+        evidence = self.recovery_evidence() | {"recovery_receipt": independent}
+        self.assert_operator_parked_manifest_review(
+            self.checkpoint_path, stage,
+            partial(self.checkpoint.inspect_recovered, exported,
+                    trusted_receipt=tip, **evidence),
+            tip, (independent._store.path, self.pin_path,
+                  self.store_path, self.path),
+            kind="checkpoint", case="parked-name-swap")
+
+    def test_checkpoint_operator_parked_manifest_manifest_tamper(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        independent = self.retain_independent_recovery_receipt(tip)
+        evidence = self.recovery_evidence() | {"recovery_receipt": independent}
+        self.assert_operator_parked_manifest_review(
+            self.checkpoint_path, stage,
+            partial(self.checkpoint.inspect_recovered, exported,
+                    trusted_receipt=tip, **evidence),
+            tip, (independent._store.path, self.pin_path,
+                  self.store_path, self.path),
+            kind="checkpoint", case="manifest-tamper")
+
+    def test_checkpoint_operator_parked_manifest_evidence_tamper(self):
+        stage, exported, tip = self.reviewed_staging_link()
+        independent = self.retain_independent_recovery_receipt(tip)
+        evidence = self.recovery_evidence() | {"recovery_receipt": independent}
+        self.assert_operator_parked_manifest_review(
+            self.checkpoint_path, stage,
+            partial(self.checkpoint.inspect_recovered, exported,
+                    trusted_receipt=tip, **evidence),
+            tip, (independent._store.path, self.pin_path,
+                  self.store_path, self.path),
+            kind="checkpoint", case="evidence-tamper")
 
     def assert_concurrent_review_after_interrupted_cleanup(self, target, stage, independent,
                                                            inspect, cleanup, tip):
