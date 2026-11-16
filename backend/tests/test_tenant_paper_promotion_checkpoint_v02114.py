@@ -3179,7 +3179,10 @@ class PromotionCheckpointTests(unittest.TestCase):
         import json
 
         self.assertIn(kind, ("terminal", "checkpoint"))
-        self.assertIn(case, ("clean", "holding-swap", "parked-name-swap",
+        exit_points = {"before-record": 90, "partial-record": 91,
+                       "prepared": 92, "moved": 93, "conflict": 93,
+                       "interrupted-evidence-change": 93}
+        self.assertIn(case, (*exit_points, "clean", "holding-swap", "parked-name-swap",
                              "manifest-tamper", "evidence-tamper"))
         libc = ctypes.CDLL(None, use_errno=True)
         if not hasattr(libc, "renameat2"):
@@ -3212,19 +3215,20 @@ class PromotionCheckpointTests(unittest.TestCase):
 
         # Both parent directories are descriptor-pinned for the no-overwrite
         # operation. The source basename itself is still raceable by same UID.
-        source_fd = os.open(folder.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-        holding_fd = os.open(holding, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-        try:
-            result = renameat2(source_fd, os.fsencode(folder.name),
-                               holding_fd, os.fsencode(parked.name), 1)
-            if result != 0:
-                number = ctypes.get_errno()
-                raise OSError(number, os.strerror(number))
-        finally:
-            os.close(holding_fd)
-            os.close(source_fd)
-        self.assertTrue(os.path.samestat(original, parked.stat()))
-        self.assertTrue((parked / stage.name).samefile(target))
+        def park_stage():
+            source_fd = os.open(folder.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                holding_fd = os.open(holding, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+                try:
+                    result = renameat2(source_fd, os.fsencode(folder.name),
+                                       holding_fd, os.fsencode(parked.name), 1)
+                    if result != 0:
+                        number = ctypes.get_errno()
+                        raise OSError(number, os.strerror(number))
+                finally:
+                    os.close(holding_fd)
+            finally:
+                os.close(source_fd)
 
         def sha(data):
             return hashlib.sha256(data).hexdigest()
@@ -3251,31 +3255,64 @@ class PromotionCheckpointTests(unittest.TestCase):
                 for path, data in independent.items()
             ],
         }
-        raw = json.dumps(signed, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        seal = hmac.new(key, raw, hashlib.sha256).hexdigest()
+
+        def encode(record):
+            return json.dumps(record, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+        def seal(data):
+            return hmac.new(key, data, hashlib.sha256).hexdigest()
+
+        raw = encode(signed)
         manifest = records / "location.json"
         signature = records / "location.mac"
-        manifest.write_bytes(raw)
-        signature.write_text(seal, encoding="ascii")
+        conflicting_manifest = records / "conflicting-location.json"
+        conflicting_signature = records / "conflicting-location.mac"
 
-        middle = inspect(include_stages=True)
-        self.assertEqual(middle["receipt"], tip)
-        self.assertTrue(middle["additionalLinkPresent"])
-        self.assertFalse(any(item["publicationLink"] for item in middle["stages"]))
+        def write_record():
+            manifest.write_bytes(raw)
+            if case == "partial-record":
+                os._exit(91)
+            signature.write_text(seal(raw), encoding="ascii")
 
-        def independently_review():
-            # This review is deliberately read-only. A signed location hint
-            # alone cannot license automatic unlink or restore.
-            candidate = manifest.read_bytes()
-            observed_seal = signature.read_text(encoding="ascii")
-            if not hmac.compare_digest(
-                    hmac.new(key, candidate, hashlib.sha256).hexdigest(),
-                    observed_seal):
+        if case in exit_points:
+            pid = os.fork()
+            if pid == 0:
+                try:
+                    if case == "before-record":
+                        os._exit(90)
+                    write_record()
+                    if case == "prepared":
+                        os._exit(92)
+                    park_stage()
+                    os._exit(93)
+                except BaseException:
+                    os._exit(99)
+            _, status = os.waitpid(pid, 0)
+            self.assertEqual(os.waitstatus_to_exitcode(status), exit_points[case])
+        else:
+            park_stage()
+            write_record()
+
+        def read_signed_record(record_path, seal_path):
+            try:
+                candidate = record_path.read_bytes()
+                observed_seal = seal_path.read_text(encoding="ascii")
+            except (OSError, UnicodeError):
+                recovery._deny()
+            if not hmac.compare_digest(seal(candidate), observed_seal):
                 recovery._deny()
             try:
-                record = json.loads(candidate)
-            except (ValueError, UnicodeDecodeError):
+                return json.loads(candidate)
+            except (ValueError, UnicodeError):
                 recovery._deny()
+
+        def independently_review():
+            # Require all supplied local evidence to agree before interpreting
+            # either location. A valid seal cannot break a tie between records.
+            record = read_signed_record(manifest, signature)
+            if os.path.lexists(conflicting_manifest) or os.path.lexists(conflicting_signature):
+                if read_signed_record(conflicting_manifest, conflicting_signature) != record:
+                    recovery._deny()
             if record != signed or record["source_kind"] != kind:
                 recovery._deny()
             if record["receipt_sha256"] != sha(repr(tip).encode("utf-8")):
@@ -3283,6 +3320,10 @@ class PromotionCheckpointTests(unittest.TestCase):
             if record["evidence"] != [
                     {"name": path.name, "sha256": sha(path.read_bytes())}
                     for path in evidence_paths]:
+                recovery._deny()
+            original_present = os.path.lexists(folder)
+            parked_present = os.path.lexists(parked)
+            if original_present == parked_present:
                 recovery._deny()
             try:
                 hold_fd = os.open(holding, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
@@ -3294,9 +3335,13 @@ class PromotionCheckpointTests(unittest.TestCase):
                         record["holding_dev"], record["holding_ino"]):
                     recovery._deny()
                 try:
-                    stage_fd = os.open(
-                        record["parked_name"],
-                        os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=hold_fd)
+                    if original_present:
+                        stage_fd = os.open(
+                            folder, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+                    else:
+                        stage_fd = os.open(
+                            record["parked_name"],
+                            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=hold_fd)
                 except OSError:
                     recovery._deny()
                 try:
@@ -3328,11 +3373,14 @@ class PromotionCheckpointTests(unittest.TestCase):
             if sha(target.read_bytes()) != record["target_sha256"]:
                 recovery._deny()
             checked = inspect(include_stages=True)
+            visible_links = [item["name"] for item in checked["stages"]
+                             if item["publicationLink"]]
+            expected_links = [record["source_stage"]] if original_present else []
             if (checked["receipt"] != tip or
                     not checked["additionalLinkPresent"] or
-                    any(item["publicationLink"] for item in checked["stages"])):
+                    visible_links != expected_links):
                 recovery._deny()
-            return True
+            return "stage-at-source" if original_present else "stage-at-parked-location"
 
         displaced = None
         if case == "holding-swap":
@@ -3351,38 +3399,62 @@ class PromotionCheckpointTests(unittest.TestCase):
             # contains plausible source and inode fields.
             manifest.write_bytes(raw.replace(b"test-only-v02151",
                                              b"test-only-v02150"))
-        elif case == "evidence-tamper":
+        elif case in ("evidence-tamper", "interrupted-evidence-change"):
             evidence_paths[0].write_bytes(b"unreviewed evidence replacement")
+        elif case == "conflict":
+            alternative = encode(signed | {"parked_name": "other-retained-stage"})
+            conflicting_manifest.write_bytes(alternative)
+            conflicting_signature.write_text(seal(alternative), encoding="ascii")
+            self.assertEqual(read_signed_record(manifest, signature), signed)
+            self.assertEqual(read_signed_record(conflicting_manifest, conflicting_signature),
+                             signed | {"parked_name": "other-retained-stage"})
 
-        if case == "clean":
-            self.assertTrue(independently_review())
+        retained_before_review = {path.name: path.read_bytes() for path in records.iterdir()}
+        evidence_before_review = {path: path.read_bytes() for path in evidence_paths}
+        if case in ("clean", "moved"):
+            self.assertEqual(independently_review(), "stage-at-parked-location")
+        elif case == "prepared":
+            self.assertEqual(independently_review(), "stage-at-source")
         else:
             with self.assertRaises(recovery.DecimalRecoveryDenied):
                 independently_review()
 
-        authentic = (displaced / parked.name if case == "holding-swap"
-                     else displaced if case == "parked-name-swap" else parked)
+        # A process exit before parking must leave the exact original link
+        # discoverable. Review may describe that location, never retry the move.
+        before_move = case in ("before-record", "partial-record", "prepared")
+        authentic = folder if before_move else parked
+        if case == "holding-swap":
+            authentic = displaced / parked.name
+        elif case == "parked-name-swap":
+            authentic = displaced
+        self.assertEqual(os.path.lexists(folder), before_move)
+        if before_move:
+            self.assertFalse(os.path.lexists(parked))
         self.assertTrue(os.path.samestat(authentic.stat(), original))
         self.assertTrue((authentic / stage.name).samefile(target))
         self.assertEqual(target.read_bytes(), original_bytes)
         self.assertEqual(target.stat().st_nlink, 2)
-        for path, content in independent.items():
-            if case != "evidence-tamper" or path != evidence_paths[0]:
-                self.assertEqual(path.read_bytes(), content)
-        # The independent record and every candidate remain for explicit
-        # operator review; nothing is automatically restored or removed.
-        self.assertTrue(manifest.is_file())
-        self.assertTrue(signature.is_file())
+
+        expected_records = {manifest.name, signature.name}
+        if case == "before-record":
+            expected_records.clear()
+        elif case == "partial-record":
+            expected_records.remove(signature.name)
+            self.assertEqual(retained_before_review.get(manifest.name), raw)
+        elif case == "conflict":
+            expected_records.update((conflicting_manifest.name, conflicting_signature.name))
+        self.assertEqual(set(retained_before_review), expected_records)
+        self.assertEqual({path.name: path.read_bytes() for path in records.iterdir()},
+                         retained_before_review)
+        expected_evidence = independent.copy()
+        if case in ("evidence-tamper", "interrupted-evidence-change"):
+            expected_evidence[evidence_paths[0]] = b"unreviewed evidence replacement"
+        self.assertEqual(evidence_before_review, expected_evidence)
+        self.assertEqual({path: path.read_bytes() for path in evidence_paths},
+                         evidence_before_review)
 
     def test_terminal_operator_parked_manifest_clean(self):
-        retained, evidence, stage, _ = self.terminal_cleanup_fixture()
-        self.assert_operator_parked_manifest_review(
-            self.pin_path, stage,
-            partial(retained.inspect_local_terminal,
-                    self.pins, self.store, **evidence),
-            evidence["reviewed_receipt"],
-            (retained._store.path, self.store_path),
-            kind="terminal", case="clean")
+        self.assert_terminal_operator_parking_exit("clean")
 
     def test_terminal_operator_parked_manifest_holding_swap(self):
         retained, evidence, stage, _ = self.terminal_cleanup_fixture()
@@ -3425,16 +3497,7 @@ class PromotionCheckpointTests(unittest.TestCase):
             kind="terminal", case="evidence-tamper")
 
     def test_checkpoint_operator_parked_manifest_clean(self):
-        stage, exported, tip = self.reviewed_staging_link()
-        independent = self.retain_independent_recovery_receipt(tip)
-        evidence = self.recovery_evidence() | {"recovery_receipt": independent}
-        self.assert_operator_parked_manifest_review(
-            self.checkpoint_path, stage,
-            partial(self.checkpoint.inspect_recovered, exported,
-                    trusted_receipt=tip, **evidence),
-            tip, (independent._store.path, self.pin_path,
-                  self.store_path, self.path),
-            kind="checkpoint", case="clean")
+        self.assert_checkpoint_operator_parking_exit("clean")
 
     def test_checkpoint_operator_parked_manifest_holding_swap(self):
         stage, exported, tip = self.reviewed_staging_link()
@@ -3483,6 +3546,64 @@ class PromotionCheckpointTests(unittest.TestCase):
             tip, (independent._store.path, self.pin_path,
                   self.store_path, self.path),
             kind="checkpoint", case="evidence-tamper")
+
+    def assert_terminal_operator_parking_exit(self, case):
+        retained, evidence, stage, _ = self.terminal_cleanup_fixture()
+        self.assert_operator_parked_manifest_review(
+            self.pin_path, stage,
+            partial(retained.inspect_local_terminal,
+                    self.pins, self.store, **evidence),
+            evidence["reviewed_receipt"],
+            (retained._store.path, self.store_path),
+            kind="terminal", case=case)
+
+    def test_terminal_parking_exit_before_record(self):
+        self.assert_terminal_operator_parking_exit("before-record")
+
+    def test_terminal_parking_exit_partial_record(self):
+        self.assert_terminal_operator_parking_exit("partial-record")
+
+    def test_terminal_parking_exit_prepared(self):
+        self.assert_terminal_operator_parking_exit("prepared")
+
+    def test_terminal_parking_exit_moved(self):
+        self.assert_terminal_operator_parking_exit("moved")
+
+    def test_terminal_parking_exit_conflict(self):
+        self.assert_terminal_operator_parking_exit("conflict")
+
+    def test_terminal_parking_exit_interrupted_evidence_change(self):
+        self.assert_terminal_operator_parking_exit("interrupted-evidence-change")
+
+    def assert_checkpoint_operator_parking_exit(self, case):
+        stage, exported, tip = self.reviewed_staging_link()
+        independent = self.retain_independent_recovery_receipt(tip)
+        evidence = self.recovery_evidence() | {"recovery_receipt": independent}
+        self.assert_operator_parked_manifest_review(
+            self.checkpoint_path, stage,
+            partial(self.checkpoint.inspect_recovered, exported,
+                    trusted_receipt=tip, **evidence),
+            tip, (independent._store.path, self.pin_path,
+                  self.store_path, self.path),
+            kind="checkpoint", case=case)
+
+    def test_checkpoint_parking_exit_before_record(self):
+        self.assert_checkpoint_operator_parking_exit("before-record")
+
+    def test_checkpoint_parking_exit_partial_record(self):
+        self.assert_checkpoint_operator_parking_exit("partial-record")
+
+    def test_checkpoint_parking_exit_prepared(self):
+        self.assert_checkpoint_operator_parking_exit("prepared")
+
+    def test_checkpoint_parking_exit_moved(self):
+        self.assert_checkpoint_operator_parking_exit("moved")
+
+    def test_checkpoint_parking_exit_conflict(self):
+        self.assert_checkpoint_operator_parking_exit("conflict")
+
+    def test_checkpoint_parking_exit_interrupted_evidence_change(self):
+        self.assert_checkpoint_operator_parking_exit("interrupted-evidence-change")
 
     def assert_concurrent_review_after_interrupted_cleanup(self, target, stage, independent,
                                                            inspect, cleanup, tip):
