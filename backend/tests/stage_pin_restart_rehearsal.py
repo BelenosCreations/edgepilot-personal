@@ -9,7 +9,7 @@ import stat
 import sys
 
 
-def read_digest(path):
+def read_entry(path, limit):
     try:
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     except FileNotFoundError:
@@ -22,12 +22,21 @@ def read_digest(path):
             identity = os.fstat(stream.fileno())
             if not stat.S_ISREG(identity.st_mode):
                 return "unreadable", None
-            data = stream.read(65)
+            data = stream.read(limit + 1)
         if not os.path.samestat(identity, path.lstat()):
             return "unreadable", None
     except OSError:
         return "unreadable", None
 
+    return ("oversized", None) if len(data) > limit else ("present", data)
+
+
+def read_digest(path):
+    state, data = read_entry(path, 64)
+    if state == "oversized":
+        return "malformed", None
+    if state != "present":
+        return state, None
     if not re.fullmatch(rb"[0-9a-f]{1,64}", data):
         return "malformed", None
     if len(data) < 64:
@@ -35,15 +44,43 @@ def read_digest(path):
     return "complete", data.decode("ascii")
 
 
+def observe_record(records, basename, key, source_kind):
+    body_state, body = read_entry(records / f"{basename}.json", 65536)
+    seal_state, seal = read_entry(records / f"{basename}.mac", 64)
+    states = (body_state, seal_state)
+    digest = None
+    if states == ("absent", "absent"):
+        state = "absent"
+    elif "unreadable" in states:
+        state = "unreadable"
+    elif "absent" in states:
+        state = "incomplete"
+    elif body_state == "oversized":
+        state = "invalid-body"
+    elif seal_state == "oversized" or not hmac.compare_digest(
+            hmac.new(key, body, hashlib.sha256).hexdigest().encode("ascii"), seal):
+        state = "invalid-seal"
+    else:
+        try:
+            record = json.loads(body)
+        except (ValueError, UnicodeError):
+            record = None
+        if not isinstance(record, dict) or not isinstance(record.get("source_kind"), str):
+            state = "invalid-body"
+        elif record["source_kind"] != source_kind:
+            state = "source-mismatch"
+        else:
+            state = "authenticated"
+            digest = hashlib.sha256(body).hexdigest()
+    return {"state": state, "body": body_state, "seal": seal_state, "digest": digest}
+
+
 def inventory(root, key, source_kind):
-    records = root / "independent-records"
-    authenticated = set()
-    for basename in ("location", "previous-location"):
-        body = (records / f"{basename}.json").read_bytes()
-        seal = (records / f"{basename}.mac").read_bytes()
-        expected = hmac.new(key, body, hashlib.sha256).hexdigest().encode("ascii")
-        if hmac.compare_digest(expected, seal) and json.loads(body)["source_kind"] == source_kind:
-            authenticated.add(hashlib.sha256(body).hexdigest())
+    folder = root / "independent-records"
+    records = {name: observe_record(folder, name, key, source_kind)
+               for name in ("location", "previous-location")}
+    authenticated = {record["digest"] for record in records.values()
+                     if record["state"] == "authenticated"}
 
     def observe(path):
         state, digest = read_digest(path)
@@ -55,6 +92,7 @@ def inventory(root, key, source_kind):
     staged = observe(root / "pending-location.sha256")
     confirmed = active["state"] == "signed-record" and staged["state"] == "absent"
     return {
+        "records": records,
         "active": active,
         "staged": staged,
         "status": "active-pin-observed" if confirmed else "ambiguous",

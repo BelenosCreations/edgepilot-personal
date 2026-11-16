@@ -1,3 +1,11 @@
+## v0.2.156 — 2026-11-16 America/New_York — Report signed record evidence after restart
+
+**Research** — Fresh-process pin inventory reports each signed record pair's condition and excludes unavailable, damaged or wrong-source candidates from authenticated digest matches.
+
+**Tests** — Twelve new Linux cases cover missing and invalid evidence for terminal receipts and active checkpoints. Existing replacement cases also check that a pin can reference an authentic earlier record while independent review refuses the observed location mismatch.
+
+**Limits** — Inventory reports evidence only. Independent custody, coordinated rollback, uncontrolled same-UID changes and cross-resource power-loss consistency remain unresolved. See [signed record evidence after restart](PAPER_RESTART_RECORD_EVIDENCE_V02156.md).
+
 ## v0.2.155 — 2026-11-16 America/New_York — Inventory location pins after restart
 
 **Research** — A fresh Python process inventories retained pin files after the synthetic writer exits, checking complete digests against authenticated source-attributed records.
