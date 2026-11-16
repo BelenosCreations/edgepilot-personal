@@ -1,3 +1,5 @@
+**v0.2.157** — Fresh-process recovery tests report ambiguity when signed records or pins change during inventory. The tests preserve both generations and cover replacements with identical bytes. See [evidence changes during inventory](PAPER_RESTART_EVIDENCE_CHANGES_V02157.md).
+
 **v0.2.156** — Offline recovery pin inventory reports missing, damaged and wrong-source signed record pairs after a restart. Separate location review refuses an authenticated earlier pin when the stage remains in a later holding directory. See [signed record evidence after restart](PAPER_RESTART_RECORD_EVIDENCE_V02156.md).
 
 **v0.2.155** — Offline Linux tests start a fresh reviewer after an interrupted location pin update. The reviewer distinguishes authenticated, partial, malformed and unmatched staged digests while preserving the active pin and recovery evidence. See [pin inventory after restart](PAPER_RESTART_PIN_INVENTORY_V02155.md).
