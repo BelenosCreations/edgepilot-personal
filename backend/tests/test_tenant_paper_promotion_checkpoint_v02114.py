@@ -3177,6 +3177,7 @@ class PromotionCheckpointTests(unittest.TestCase):
         import hashlib
         import hmac
         import json
+        import stat
 
         self.assertIn(kind, ("terminal", "checkpoint"))
         exit_points = {"before-record": 90, "partial-record": 91,
@@ -3184,8 +3185,12 @@ class PromotionCheckpointTests(unittest.TestCase):
                        "interrupted-evidence-change": 93,
                        "both-source": 92, "both-parked": 93, "neither": 93,
                        "stale-and-current": 93, "stale-only": 93, "missing-pin": 93}
-        pinned_cases = ("stale-and-current", "stale-only", "missing-pin")
-        self.assertIn(case, (*exit_points, "clean", "holding-swap", "parked-name-swap",
+        pin_update_cases = ("pin-update-during-open", "pin-update-before-return",
+                            "pin-exit-before-replace", "pin-exit-after-replace",
+                            "pin-same-digest-replacement")
+        pinned_cases = ("stale-and-current", "stale-only", "missing-pin", *pin_update_cases)
+        self.assertIn(case, (*exit_points, *pin_update_cases,
+                             "clean", "holding-swap", "parked-name-swap",
                              "manifest-tamper", "evidence-tamper"))
         libc = ctypes.CDLL(None, use_errno=True)
         if not hasattr(libc, "renameat2"):
@@ -3274,6 +3279,9 @@ class PromotionCheckpointTests(unittest.TestCase):
         prior_manifest = records / "previous-location.json"
         prior_signature = records / "previous-location.mac"
         pin = root / "independently-retained-location.sha256"
+        staged_pin = root / "pending-location.sha256"
+        original_pin = root / "original-location.sha256"
+        competing_pin = root / "competing-location.sha256"
 
         if case in pinned_cases:
             # Complete an earlier operation with the same stage, target and
@@ -3323,9 +3331,12 @@ class PromotionCheckpointTests(unittest.TestCase):
             move_no_replace(folder, parked)
             write_record()
 
-        def read_signed_bytes(record_path, seal_path):
+        def read_signed_bytes(record_path, seal_path, *, after_open=None):
             try:
-                candidate = record_path.read_bytes()
+                with record_path.open("rb") as record:
+                    if after_open is not None:
+                        after_open()
+                    candidate = record.read()
                 observed_seal = seal_path.read_text(encoding="ascii")
             except (OSError, UnicodeError):
                 recovery._deny()
@@ -3342,19 +3353,34 @@ class PromotionCheckpointTests(unittest.TestCase):
         def read_signed_record(record_path, seal_path):
             return decode_record(read_signed_bytes(record_path, seal_path))
 
-        def read_pinned_record():
-            try:
-                exact_digest = pin.read_text(encoding="ascii")
-            except (OSError, UnicodeError):
+        def observe_pin():
+            if os.path.lexists(staged_pin):
                 recovery._deny()
+            try:
+                fd = os.open(pin, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+                with os.fdopen(fd, "rb") as stream:
+                    identity = os.fstat(stream.fileno())
+                    if not stat.S_ISREG(identity.st_mode):
+                        recovery._deny()
+                    digest = stream.read(65)
+                named_identity = pin.lstat()
+            except OSError:
+                recovery._deny()
+            if (not os.path.samestat(identity, named_identity)
+                    or len(digest) != 64 or os.path.lexists(staged_pin)):
+                recovery._deny()
+            return (identity.st_dev, identity.st_ino, digest)
+
+        def read_pinned_record(observed_pin, *, after_open=None):
             # Consult the earlier valid record first to exercise stale replay.
             candidates = [(prior_manifest, prior_signature)]
             if os.path.lexists(manifest) or os.path.lexists(signature):
                 candidates.append((manifest, signature))
             matches = []
             for record_path, seal_path in candidates:
-                candidate = read_signed_bytes(record_path, seal_path)
-                if hmac.compare_digest(sha(candidate), exact_digest):
+                on_open = after_open if record_path == manifest else None
+                candidate = read_signed_bytes(record_path, seal_path, after_open=on_open)
+                if hmac.compare_digest(sha(candidate).encode("ascii"), observed_pin[2]):
                     matches.append(candidate)
             if len(matches) != 1:
                 recovery._deny()
@@ -3374,11 +3400,14 @@ class PromotionCheckpointTests(unittest.TestCase):
             return (observe(folder.parent / record["source_stage"]),
                     observe(holding / record["parked_name"]))
 
-        def independently_review():
+        def independently_review(*, after_open=None, before_return=None):
             # Require all supplied local evidence to agree before interpreting
             # either location. A valid seal cannot break a tie between records.
             if case in pinned_cases:
-                record = read_pinned_record()
+                observed_pin = observe_pin()
+                record = read_pinned_record(observed_pin, after_open=after_open)
+                if observe_pin() != observed_pin:
+                    recovery._deny()
             else:
                 record = read_signed_record(manifest, signature)
             if os.path.lexists(conflicting_manifest) or os.path.lexists(conflicting_signature):
@@ -3451,6 +3480,10 @@ class PromotionCheckpointTests(unittest.TestCase):
                     not checked["additionalLinkPresent"] or
                     visible_links != expected_links):
                 recovery._deny()
+            if before_return is not None:
+                before_return()
+            if case in pinned_cases and observe_pin() != observed_pin:
+                recovery._deny()
             return "stage-at-source" if original_present else "stage-at-parked-location"
 
         displaced = None
@@ -3502,7 +3535,7 @@ class PromotionCheckpointTests(unittest.TestCase):
         if case in pinned_cases:
             self.assertEqual(read_signed_record(prior_manifest, prior_signature), earlier_record)
             self.assertNotEqual(sha(earlier_raw), sha(raw))
-            if case != "missing-pin":
+            if case not in ("missing-pin", *pin_update_cases):
                 review_evidence_paths.append(pin)
             if case == "stale-only":
                 review_evidence_paths.extend((root / manifest.name, root / signature.name))
@@ -3512,11 +3545,57 @@ class PromotionCheckpointTests(unittest.TestCase):
         if decoy is not None:
             decoy_identity = decoy.lstat()
         if case == "stale-and-current":
-            self.assertEqual(read_pinned_record(), signed)
+            self.assertEqual(read_pinned_record(observe_pin()), signed)
         elif case in ("stale-only", "missing-pin"):
             with self.assertRaises(recovery.DecimalRecoveryDenied):
-                read_pinned_record()
-        if case in ("clean", "moved", "stale-and-current"):
+                read_pinned_record(observe_pin())
+        if case in pin_update_cases:
+            current_digest = sha(raw).encode("ascii")
+            competing_digest = (current_digest if case == "pin-same-digest-replacement"
+                                else sha(earlier_raw).encode("ascii"))
+            os.link(pin, original_pin)
+            self.assertEqual(independently_review(), "stage-at-parked-location")
+
+            def write_competing_pin(*, exit_at=None):
+                with staged_pin.open("xb") as stream:
+                    stream.write(competing_digest)
+                os.link(staged_pin, competing_pin)
+                if exit_at == "staged":
+                    os._exit(94)
+                os.replace(staged_pin, pin)
+                if exit_at == "replaced":
+                    os._exit(95)
+
+            def compete():
+                exit_at = {"pin-exit-before-replace": "staged",
+                           "pin-exit-after-replace": "replaced"}.get(case)
+                if exit_at is None:
+                    write_competing_pin()
+                    return
+                pid = os.fork()
+                if pid == 0:
+                    try:
+                        write_competing_pin(exit_at=exit_at)
+                    finally:
+                        os._exit(99)
+                _, status = os.waitpid(pid, 0)
+                self.assertEqual(os.waitstatus_to_exitcode(status),
+                                 94 if exit_at == "staged" else 95)
+
+            during_open = case == "pin-update-during-open"
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                independently_review(after_open=compete if during_open else None,
+                                     before_return=None if during_open else compete)
+            self.assertEqual(original_pin.read_bytes(), current_digest)
+            self.assertEqual(competing_pin.read_bytes(), competing_digest)
+            self.assertFalse(original_pin.samefile(competing_pin))
+            if case == "pin-exit-before-replace":
+                self.assertTrue(pin.samefile(original_pin))
+                self.assertTrue(staged_pin.samefile(competing_pin))
+            else:
+                self.assertTrue(pin.samefile(competing_pin))
+                self.assertFalse(os.path.lexists(staged_pin))
+        elif case in ("clean", "moved", "stale-and-current"):
             self.assertEqual(independently_review(), "stage-at-parked-location")
         elif case == "prepared":
             self.assertEqual(independently_review(), "stage-at-source")
@@ -3756,6 +3835,36 @@ class PromotionCheckpointTests(unittest.TestCase):
 
     def test_checkpoint_parking_inventory_missing_pin(self):
         self.assert_checkpoint_operator_parking_exit("missing-pin")
+
+    def test_terminal_pin_update_during_open(self):
+        self.assert_terminal_operator_parking_exit("pin-update-during-open")
+
+    def test_terminal_pin_update_before_return(self):
+        self.assert_terminal_operator_parking_exit("pin-update-before-return")
+
+    def test_terminal_pin_exit_before_replace(self):
+        self.assert_terminal_operator_parking_exit("pin-exit-before-replace")
+
+    def test_terminal_pin_exit_after_replace(self):
+        self.assert_terminal_operator_parking_exit("pin-exit-after-replace")
+
+    def test_terminal_pin_same_digest_replacement(self):
+        self.assert_terminal_operator_parking_exit("pin-same-digest-replacement")
+
+    def test_checkpoint_pin_update_during_open(self):
+        self.assert_checkpoint_operator_parking_exit("pin-update-during-open")
+
+    def test_checkpoint_pin_update_before_return(self):
+        self.assert_checkpoint_operator_parking_exit("pin-update-before-return")
+
+    def test_checkpoint_pin_exit_before_replace(self):
+        self.assert_checkpoint_operator_parking_exit("pin-exit-before-replace")
+
+    def test_checkpoint_pin_exit_after_replace(self):
+        self.assert_checkpoint_operator_parking_exit("pin-exit-after-replace")
+
+    def test_checkpoint_pin_same_digest_replacement(self):
+        self.assert_checkpoint_operator_parking_exit("pin-same-digest-replacement")
 
     def assert_concurrent_review_after_interrupted_cleanup(self, target, stage, independent,
                                                            inspect, cleanup, tip):

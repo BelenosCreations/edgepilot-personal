@@ -1,3 +1,5 @@
+**v0.2.154** — Offline Linux tests check the location pin after reading a signed record and before reporting a parked stage. Read-only review refuses competing pin replacements and retained pending updates after process exit. See [location pin changes](PAPER_LOCATION_PIN_CHANGE_V02154.md).
+
 **v0.2.153** — Offline Linux tests inventory both stage names after interruption and refuse a location decision when both or neither name is present. An independently retained digest selects the exact signed record when an earlier valid record survives. See [stage inventory and record pinning](PAPER_STAGE_INVENTORY_PIN_V02153.md).
 
 **v0.2.152** — Offline Linux recovery tests distinguish a prepared stage at its source from the same stage after parking. Read-only review refuses missing seals, conflicting signed records and changed independent evidence. See [interrupted stage parking](PAPER_INTERRUPTED_STAGE_PARKING_V02152.md).

@@ -5,20 +5,20 @@ Use this section for the next development session. The entries below record prio
 ## Copyable resume instruction
 
 ```text
-EdgePilot Continuity 016
+EdgePilot Continuity 017
 
 Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on main in BelenosCreations/edgepilot-personal, independently verify the GitHub and Render checkpoint, and follow the next steps and restrictions in that file.
 ```
 
 ## Verification and checkpoint
 
-- Independently verify current GitHub main, merged exact-head PR CI, post-merge main CI, open PRs, exact live Render SHA and separate HTTP health. Resolve v0.2.153 from `development/v0.2.153-stage-inventory-pin`. Any later verified main supersedes this handoff.
-- Independently verified v0.2.152 baseline: PR #180 head `d8546c4ec5d55aeb82d8a8441e63bb5303a546fa` passed [Actions #43864488277](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43864488277). Main `06239bd937f70466ed0ee743dfe772ac1c3a2e67` passed [Actions #43864895241](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43864895241), matched live Render `dep-dbtf7lmq1p3s73fsbneg`, and returned HTTP 200 from `/healthz`. No open PRs.
-- v0.2.153 adds twelve offline Linux tests for ambiguous stage inventory and exact digest selection when a genuinely earlier signed record survives. See [milestone notes](PAPER_STAGE_INVENTORY_PIN_V02153.md).
+- Independently verify current GitHub main, merged exact-head PR CI, post-merge main CI, open PRs, exact live Render SHA and separate HTTP health. Resolve v0.2.154 from `development/v0.2.154-location-pin-change`. Any later verified main supersedes this handoff.
+- Independently verified v0.2.153 baseline: PR #181 head `0b80405012d759aca487dcb3f38568c39bba6fa0` passed [Actions #43867548478](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43867548478). Main `d88ed80e39669c35fef28f3320f2f8cae05dc091` passed [Actions #43867961889](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43867961889), matched live Render `dep-dbtfh4vf3r2c73ffcra0`, and returned HTTP 200 from `/healthz`. No open PRs.
+- v0.2.154 adds ten offline Linux tests for competing location pin updates and process exit before or after replacing a pin. See [milestone notes](PAPER_LOCATION_PIN_CHANGE_V02154.md).
 
 ## Next safe development batch
 
-1. Rehearse read-only review when the retained location pin changes after the reviewer opens the record or before it returns its observation. Include a competing update to a different valid signed record and process exit during a synthetic pin update. Preserve the original and competing evidence and refuse ambiguous observations.
+1. Rehearse read-only pin review after interrupted updates followed by a fresh process. Cover an active pin and retained staged pin that reference different valid records, along with read-only inventory of a partial staged digest. Check which observations are possible without cleanup, promotion, or retry.
 2. Maintain the independent tenant archive pin, exact signed receipt/checkpoint custody, read-only recovery, detached paper preflight and session-only source-attributed Public history. Combined full-evidence rollback, uncontrolled same-UID races and cross-resource power-loss consistency remain unresolved.
 3. Use real Public history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance) under the owner provider-permission assumption. Existing owner snapshot and MSFT quote acceptance remain valid.
 
@@ -30,6 +30,10 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Increment the EdgePilot Continuity sequence at the top of the copy block. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.153 — 2026-11-16 — Inventory ambiguous stage locations
+
+Twelve offline cases preserve ambiguous or displaced stages and match the exact current signed record against a separately retained digest when an older valid record survives. See [stage inventory and record pinning](PAPER_STAGE_INVENTORY_PIN_V02153.md).
 
 ## v0.2.152 — 2026-11-16 — Review interrupted stage parking
 
