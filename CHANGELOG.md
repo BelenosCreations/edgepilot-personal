@@ -1,3 +1,11 @@
+## v0.2.155 — 2026-11-16 America/New_York — Inventory location pins after restart
+
+**Research** — A fresh Python process inventories retained pin files after the synthetic writer exits, checking complete digests against authenticated source-attributed records.
+
+**Tests** — Twelve Linux cases cover conflicting and equal signed references, partial and malformed staged files, unmatched digests and an exit after replacement. The tests verify that review preserves the directory entries, link identities and record contents.
+
+**Limits** — A signed record reference is a pin observation only. Independent custody, coordinated rollback, same-UID races and cross-resource power-loss consistency remain unresolved. See [pin inventory after restart](PAPER_RESTART_PIN_INVENTORY_V02155.md).
+
 ## v0.2.154 — 2026-11-16 America/New_York — Review location pin changes
 
 **Research** — The offline parking fixture rechecks the pin's exact digest and file identity after record selection and again before returning a read-only observation. A pending pin update causes review to refuse.

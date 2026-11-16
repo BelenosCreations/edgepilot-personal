@@ -5,20 +5,20 @@ Use this section for the next development session. The entries below record prio
 ## Copyable resume instruction
 
 ```text
-EdgePilot Continuity 017
+EdgePilot Continuity 018
 
 Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on main in BelenosCreations/edgepilot-personal, independently verify the GitHub and Render checkpoint, and follow the next steps and restrictions in that file.
 ```
 
 ## Verification and checkpoint
 
-- Independently verify current GitHub main, merged exact-head PR CI, post-merge main CI, open PRs, exact live Render SHA and separate HTTP health. Resolve v0.2.154 from `development/v0.2.154-location-pin-change`. Any later verified main supersedes this handoff.
-- Independently verified v0.2.153 baseline: PR #181 head `0b80405012d759aca487dcb3f38568c39bba6fa0` passed [Actions #43867548478](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43867548478). Main `d88ed80e39669c35fef28f3320f2f8cae05dc091` passed [Actions #43867961889](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43867961889), matched live Render `dep-dbtfh4vf3r2c73ffcra0`, and returned HTTP 200 from `/healthz`. No open PRs.
-- v0.2.154 adds ten offline Linux tests for competing location pin updates and process exit before or after replacing a pin. See [milestone notes](PAPER_LOCATION_PIN_CHANGE_V02154.md).
+- Independently verify current GitHub main, merged exact-head PR CI, post-merge main CI, open PRs, exact live Render SHA and separate HTTP health. Resolve v0.2.155 from `development/v0.2.155-restart-pin-inventory`. Any later verified main supersedes this handoff.
+- Independently verified v0.2.154 baseline: PR #182 head `6492576ec443f12cf04433c6bc690af99ceed404` passed [Actions #43868959027](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43868959027). Main `72697853436f7879c16e2550e835fb9bb6eff79d` passed [Actions #43869441035](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43869441035), matched live Render `dep-dbtflo5bedkc73d8nc2g`, and returned HTTP 200 from `/healthz`. No open PRs.
+- v0.2.155 adds twelve offline Linux tests for a fresh process inventorying retained location pins after an interrupted synthetic update. See [milestone notes](PAPER_RESTART_PIN_INVENTORY_V02155.md).
 
 ## Next safe development batch
 
-1. Rehearse read-only pin review after interrupted updates followed by a fresh process. Cover an active pin and retained staged pin that reference different valid records, along with read-only inventory of a partial staged digest. Check which observations are possible without cleanup, promotion, or retry.
+1. Extend fresh-process pin inventory to report missing and damaged signed record pairs and source attribution mismatches. Rehearse an authenticated active pin that references the earlier record while the stage still occupies the later holding directory. Preserve all retained evidence and keep any decision about stage use outside the pin inventory.
 2. Maintain the independent tenant archive pin, exact signed receipt/checkpoint custody, read-only recovery, detached paper preflight and session-only source-attributed Public history. Combined full-evidence rollback, uncontrolled same-UID races and cross-resource power-loss consistency remain unresolved.
 3. Use real Public history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance) under the owner provider-permission assumption. Existing owner snapshot and MSFT quote acceptance remain valid.
 
@@ -30,6 +30,10 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Increment the EdgePilot Continuity sequence at the top of the copy block. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.154 — 2026-11-16 — Review location pin changes
+
+Ten Linux tests preserve original and competing records and pins when a writer changes the retained location evidence during recovery review. See [location pin changes](PAPER_LOCATION_PIN_CHANGE_V02154.md).
 
 ## v0.2.153 — 2026-11-16 — Inventory ambiguous stage locations
 

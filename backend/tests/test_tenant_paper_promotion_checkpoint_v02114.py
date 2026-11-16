@@ -10,6 +10,8 @@ import shutil
 import signal
 import socket
 import sqlite3
+import subprocess
+import sys
 import tempfile
 from threading import Barrier, Event
 import unittest
@@ -3188,8 +3190,11 @@ class PromotionCheckpointTests(unittest.TestCase):
         pin_update_cases = ("pin-update-during-open", "pin-update-before-return",
                             "pin-exit-before-replace", "pin-exit-after-replace",
                             "pin-same-digest-replacement")
-        pinned_cases = ("stale-and-current", "stale-only", "missing-pin", *pin_update_cases)
-        self.assertIn(case, (*exit_points, *pin_update_cases,
+        restart_cases = ("restart-conflict", "restart-partial", "restart-same-digest",
+                         "restart-unmatched", "restart-malformed", "restart-replaced")
+        pinned_cases = ("stale-and-current", "stale-only", "missing-pin",
+                        *pin_update_cases, *restart_cases)
+        self.assertIn(case, (*exit_points, *pin_update_cases, *restart_cases,
                              "clean", "holding-swap", "parked-name-swap",
                              "manifest-tamper", "evidence-tamper"))
         libc = ctypes.CDLL(None, use_errno=True)
@@ -3535,7 +3540,7 @@ class PromotionCheckpointTests(unittest.TestCase):
         if case in pinned_cases:
             self.assertEqual(read_signed_record(prior_manifest, prior_signature), earlier_record)
             self.assertNotEqual(sha(earlier_raw), sha(raw))
-            if case not in ("missing-pin", *pin_update_cases):
+            if case not in ("missing-pin", *pin_update_cases, *restart_cases):
                 review_evidence_paths.append(pin)
             if case == "stale-only":
                 review_evidence_paths.extend((root / manifest.name, root / signature.name))
@@ -3549,7 +3554,71 @@ class PromotionCheckpointTests(unittest.TestCase):
         elif case in ("stale-only", "missing-pin"):
             with self.assertRaises(recovery.DecimalRecoveryDenied):
                 read_pinned_record(observe_pin())
-        if case in pin_update_cases:
+        if case in restart_cases:
+            current_digest = sha(raw)
+            prior_digest = sha(earlier_raw)
+            expected_staged_state, staged_contents = {
+                "restart-conflict": ("signed-record", prior_digest),
+                "restart-partial": ("partial", prior_digest[:19]),
+                "restart-same-digest": ("signed-record", current_digest),
+                "restart-unmatched": ("unmatched", sha(b"unsigned location")),
+                "restart-malformed": ("malformed", "x" + prior_digest[1:]),
+                "restart-replaced": ("absent", prior_digest),
+            }[case]
+            self.assertEqual(read_signed_record(manifest, signature), signed)
+            self.assertEqual(independently_review(), "stage-at-parked-location")
+            os.link(pin, original_pin)
+            writer = os.fork()
+            if writer == 0:
+                try:
+                    with staged_pin.open("xb") as stream:
+                        stream.write(staged_contents.encode("ascii"))
+                    if case == "restart-replaced":
+                        os.replace(staged_pin, pin)
+                    os._exit(94)
+                finally:
+                    os._exit(99)
+            _, status = os.waitpid(writer, 0)
+            self.assertEqual(os.waitstatus_to_exitcode(status), 94)
+
+            def snapshot():
+                entries = {}
+                for path in root.rglob("*"):
+                    identity = path.lstat()
+                    contents = path.read_bytes() if stat.S_ISREG(identity.st_mode) else None
+                    entries[path.relative_to(root)] = (
+                        identity.st_dev, identity.st_ino, identity.st_mode,
+                        identity.st_mtime_ns, identity.st_nlink, contents,
+                    )
+                return entries
+
+            retained_after_exit = snapshot()
+            report = subprocess.run(
+                [sys.executable, str(Path(__file__).with_name("stage_pin_restart_rehearsal.py"))],
+                input=json.dumps({"root": str(root), "key": key.hex(), "kind": kind}),
+                text=True, capture_output=True, check=True, timeout=10,
+            )
+            replaced = case == "restart-replaced"
+            self.assertEqual(json.loads(report.stdout), {
+                "active": {"state": "signed-record",
+                           "digest": prior_digest if replaced else current_digest},
+                "staged": {
+                    "state": expected_staged_state,
+                    "digest": staged_contents if expected_staged_state in (
+                        "signed-record", "unmatched") else None,
+                },
+                "status": "active-pin-observed" if replaced else "ambiguous",
+            })
+            self.assertEqual(snapshot(), retained_after_exit)
+            self.assertEqual(original_pin.read_text(encoding="ascii"), current_digest)
+            if replaced:
+                self.assertFalse(os.path.lexists(staged_pin))
+                self.assertFalse(pin.samefile(original_pin))
+                self.assertEqual(pin.read_text(encoding="ascii"), prior_digest)
+            else:
+                self.assertTrue(pin.samefile(original_pin))
+                self.assertEqual(staged_pin.read_text(encoding="ascii"), staged_contents)
+        elif case in pin_update_cases:
             current_digest = sha(raw).encode("ascii")
             competing_digest = (current_digest if case == "pin-same-digest-replacement"
                                 else sha(earlier_raw).encode("ascii"))
@@ -3865,6 +3934,42 @@ class PromotionCheckpointTests(unittest.TestCase):
 
     def test_checkpoint_pin_same_digest_replacement(self):
         self.assert_checkpoint_operator_parking_exit("pin-same-digest-replacement")
+
+    def test_terminal_pin_restart_conflict(self):
+        self.assert_terminal_operator_parking_exit("restart-conflict")
+
+    def test_terminal_pin_restart_partial(self):
+        self.assert_terminal_operator_parking_exit("restart-partial")
+
+    def test_terminal_pin_restart_same_digest(self):
+        self.assert_terminal_operator_parking_exit("restart-same-digest")
+
+    def test_terminal_pin_restart_unmatched(self):
+        self.assert_terminal_operator_parking_exit("restart-unmatched")
+
+    def test_terminal_pin_restart_malformed(self):
+        self.assert_terminal_operator_parking_exit("restart-malformed")
+
+    def test_terminal_pin_restart_replaced(self):
+        self.assert_terminal_operator_parking_exit("restart-replaced")
+
+    def test_checkpoint_pin_restart_conflict(self):
+        self.assert_checkpoint_operator_parking_exit("restart-conflict")
+
+    def test_checkpoint_pin_restart_partial(self):
+        self.assert_checkpoint_operator_parking_exit("restart-partial")
+
+    def test_checkpoint_pin_restart_same_digest(self):
+        self.assert_checkpoint_operator_parking_exit("restart-same-digest")
+
+    def test_checkpoint_pin_restart_unmatched(self):
+        self.assert_checkpoint_operator_parking_exit("restart-unmatched")
+
+    def test_checkpoint_pin_restart_malformed(self):
+        self.assert_checkpoint_operator_parking_exit("restart-malformed")
+
+    def test_checkpoint_pin_restart_replaced(self):
+        self.assert_checkpoint_operator_parking_exit("restart-replaced")
 
     def assert_concurrent_review_after_interrupted_cleanup(self, target, stage, independent,
                                                            inspect, cleanup, tip):
