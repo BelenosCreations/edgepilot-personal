@@ -1,3 +1,11 @@
+## v0.2.152 — 2026-11-16 America/New_York — Review interrupted stage parking
+
+**Research** — Rehearsed preparing a signed source-attributed record before parking a synthetic recovery stage. The reviewer checks the exact hard link, directory identities, signed receipt and independent evidence before describing where the stage was observed.
+
+**Tests** — Twelve Linux process-exit cases cover absent and partial records, prepared and moved stages, conflicting valid signed records, and later independent evidence changes for both terminal receipts and active checkpoints.
+
+**Limits** — Review retains all candidates and evidence. Cross-resource power-loss consistency, full-evidence rollback and uncontrolled same-UID races remain unresolved. See [interrupted stage parking](PAPER_INTERRUPTED_STAGE_PARKING_V02152.md).
+
 ## v0.2.151 — 2026-11-15 America/New_York — Read-only signed parked-stage review
 
 **Research** — Added test-local source-attributed signed location records for offline Linux no-overwrite directory parking. Read-only review checks stage and holding inode identity, the exact published hard link, stored receipt/checkpoint source attribution and independently retained evidence.

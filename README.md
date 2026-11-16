@@ -1,3 +1,5 @@
+**v0.2.152** — Offline Linux recovery tests distinguish a prepared stage at its source from the same stage after parking. Read-only review refuses missing seals, conflicting signed records and changed independent evidence. See [interrupted stage parking](PAPER_INTERRUPTED_STAGE_PARKING_V02152.md).
+
 **v0.2.151** — Offline Linux tests verify a signed, source-attributed parked-stage location manifest against replaced holding directories, parked-name substitution and altered independent evidence. No production cleanup or trading activation. See [parked-stage manifest review](PAPER_PARKED_STAGE_MANIFEST_V02151.md).
 
 **v0.2.137** — Offline terminal and active checkpoint readback recheck the published file before reporting success. Reviewed cleanup preserves the staging link when a SQLite sidecar appears under either name. See [publication readback integrity](PAPER_PUBLICATION_READBACK_INTEGRITY_V02137.md).

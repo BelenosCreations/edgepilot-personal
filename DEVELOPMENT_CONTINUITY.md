@@ -5,21 +5,21 @@ Use this section for the next development session. The entries below record prio
 ## Copyable resume instruction
 
 ```text
-EdgePilot Continuity 014
+EdgePilot Continuity 015
 
 Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on main in BelenosCreations/edgepilot-personal, independently verify the GitHub and Render checkpoint, and follow the next steps and restrictions in that file.
 ```
 
 ## Verification and checkpoint
 
-- Independently verify current GitHub main, merged exact-head PR CI, post-merge main CI, open PRs, exact live Render SHA and separate HTTP health if available. Resolve v0.2.151 from development/v0.2.151-parked-manifest-review; any later verified main supersedes this handoff.
-- Independently verified v0.2.150 baseline: PR #178 head c158e8bf269988be58ccc0526747ba86e0db3367 passed [Actions #43726173927](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43726173927). Main 2a45e3d1f84a0c5204c0669312b89ed6841e4d60 passed [Actions #43726383392](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43726383392) and matched live Render dep-dbsscj49v7es73c96rhg. No open PRs. An independent HTTP 200 /healthz probe was not verified.
-- v0.2.151 adds ten test-local Linux synthetic checks for independently signed, source-attributed parked-stage location records, with read-only detection of holding-directory replacement, parked-name replacement, manifest tampering and separately retained evidence changes. No new recovery or trading APIs. See [milestone notes](PAPER_PARKED_STAGE_MANIFEST_V02151.md).
+- Independently verify current GitHub main, merged exact-head PR CI, post-merge main CI, open PRs, exact live Render SHA and separate HTTP health. Resolve v0.2.152 from `development/v0.2.152-interrupted-stage-parking`. Any later verified main supersedes this handoff.
+- Independently verified v0.2.151 baseline: PR #179 head `4a70dc496d9839826423dac619597a0a5a9dc453` passed [Actions #43761077517](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43761077517). Main `5c612a1a2d188810da2f77a6b471297daccf7d9b` passed [Actions #43761358495](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43761358495), matched live Render `dep-dbt1rhk9v7es73cge2p0` and returned HTTP 200 from `/healthz`. No open PRs.
+- v0.2.152 adds twelve synthetic Linux process-exit tests around signed location-record preparation and no-overwrite parking. Explicit read-only review identifies exact source/parked candidates and refuses incomplete or conflicting records and changed independent evidence. See [milestone notes](PAPER_INTERRUPTED_STAGE_PARKING_V02152.md).
 
 ## Next safe development batch
 
-1. Rehearse process exits before and after a separately prepared source-attributed location record and no-overwrite directory parking; distinguish ambiguous prepared/moved states using explicit read-only review, never automatic retry, acceptance or unlink. Test conflicting valid signed location records and retained evidence after interrupted publication.
-2. Maintain independent tenant archive pin, exact signed receipt/checkpoint custody, read-only recovery, detached paper preflight and session-only source-attributed Public history. Combined full-evidence rollback, uncontrolled same-UID races and cross-resource power-loss consistency remain unresolved.
+1. Rehearse read-only inventory when both original and parked names are present after interruption, or when neither is present. Validate independently pinned record selection against a genuine older signed record from an earlier operation. Preserve every ambiguous candidate and evidence file.
+2. Maintain the independent tenant archive pin, exact signed receipt/checkpoint custody, read-only recovery, detached paper preflight and session-only source-attributed Public history. Combined full-evidence rollback, uncontrolled same-UID races and cross-resource power-loss consistency remain unresolved.
 3. Use real Public history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance) under the owner provider-permission assumption. Existing owner snapshot and MSFT quote acceptance remain valid.
 
 ## Restrictions and workflow
@@ -30,6 +30,10 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Increment the EdgePilot Continuity sequence at the top of the copy block. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.151 — 2026-11-15 — Read-only parked-stage manifest review
+
+Ten offline tests cover signed location records for terminal receipts and active checkpoints, including holding-directory substitution, parked-name replacement, manifest tampering and independent evidence changes. See [parked-stage manifest review](PAPER_PARKED_STAGE_MANIFEST_V02151.md).
 
 ## v0.2.150 — 2026-11-15 — Linux no-overwrite directory parking
 
