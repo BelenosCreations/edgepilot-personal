@@ -1,3 +1,5 @@
+**v0.2.156** — Offline recovery pin inventory reports missing, damaged and wrong-source signed record pairs after a restart. Separate location review refuses an authenticated earlier pin when the stage remains in a later holding directory. See [signed record evidence after restart](PAPER_RESTART_RECORD_EVIDENCE_V02156.md).
+
 **v0.2.155** — Offline Linux tests start a fresh reviewer after an interrupted location pin update. The reviewer distinguishes authenticated, partial, malformed and unmatched staged digests while preserving the active pin and recovery evidence. See [pin inventory after restart](PAPER_RESTART_PIN_INVENTORY_V02155.md).
 
 **v0.2.154** — Offline Linux tests check the location pin after reading a signed record and before reporting a parked stage. Read-only review refuses competing pin replacements and retained pending updates after process exit. See [location pin changes](PAPER_LOCATION_PIN_CHANGE_V02154.md).

@@ -3190,8 +3190,11 @@ class PromotionCheckpointTests(unittest.TestCase):
         pin_update_cases = ("pin-update-during-open", "pin-update-before-return",
                             "pin-exit-before-replace", "pin-exit-after-replace",
                             "pin-same-digest-replacement")
+        record_cases = ("record-absent", "record-missing-body", "record-missing-seal",
+                        "record-bad-seal", "record-bad-body", "record-wrong-source")
         restart_cases = ("restart-conflict", "restart-partial", "restart-same-digest",
-                         "restart-unmatched", "restart-malformed", "restart-replaced")
+                         "restart-unmatched", "restart-malformed", "restart-replaced",
+                         *record_cases)
         pinned_cases = ("stale-and-current", "stale-only", "missing-pin",
                         *pin_update_cases, *restart_cases)
         self.assertIn(case, (*exit_points, *pin_update_cases, *restart_cases,
@@ -3564,10 +3567,57 @@ class PromotionCheckpointTests(unittest.TestCase):
                 "restart-unmatched": ("unmatched", sha(b"unsigned location")),
                 "restart-malformed": ("malformed", "x" + prior_digest[1:]),
                 "restart-replaced": ("absent", prior_digest),
-            }[case]
+            }.get(case, ("unmatched", prior_digest))
             self.assertEqual(read_signed_record(manifest, signature), signed)
             self.assertEqual(independently_review(), "stage-at-parked-location")
             os.link(pin, original_pin)
+            current_record = {"state": "authenticated", "body": "present",
+                              "seal": "present", "digest": current_digest}
+            earlier_observation = current_record | {"digest": prior_digest}
+            if case in record_cases:
+                # Retain original bytes and inodes outside the record slots.
+                archive = root / "retained-earlier-record"
+                archive.mkdir(mode=0o700)
+                for candidate in (prior_manifest, prior_signature):
+                    candidate.rename(archive / candidate.name)
+
+                missing_body = case in ("record-absent", "record-missing-body")
+                missing_seal = case in ("record-absent", "record-missing-seal")
+                candidate_body = earlier_raw
+                candidate_seal = seal(earlier_raw)
+                if case == "record-bad-body":
+                    candidate_body = b'{"source_kind":'
+                    candidate_seal = seal(candidate_body)
+                elif case == "record-wrong-source":
+                    other_kind = "terminal" if kind == "checkpoint" else "checkpoint"
+                    candidate_body = encode(earlier_record | {"source_kind": other_kind})
+                    candidate_seal = seal(candidate_body)
+                elif case == "record-bad-seal":
+                    candidate_seal = "0" * 64
+                    self.assertNotEqual(candidate_seal, seal(candidate_body))
+
+                if not missing_body:
+                    prior_manifest.write_bytes(candidate_body)
+                    # Pin the presented bytes even when the body is invalid
+                    # or carries a valid signature for the wrong source.
+                    staged_contents = sha(candidate_body)
+                if not missing_seal:
+                    prior_signature.write_text(candidate_seal, encoding="ascii")
+                earlier_observation = {
+                    "state": {
+                        "record-absent": "absent",
+                        "record-missing-body": "incomplete",
+                        "record-missing-seal": "incomplete",
+                        "record-bad-seal": "invalid-seal",
+                        "record-bad-body": "invalid-body",
+                        "record-wrong-source": "source-mismatch",
+                    }[case],
+                    "body": "absent" if missing_body else "present",
+                    "seal": "absent" if missing_seal else "present",
+                    "digest": None,
+                }
+                retained_before_review = {path.name: path.read_bytes() for path in records.iterdir()}
+
             writer = os.fork()
             if writer == 0:
                 try:
@@ -3600,6 +3650,7 @@ class PromotionCheckpointTests(unittest.TestCase):
             )
             replaced = case == "restart-replaced"
             self.assertEqual(json.loads(report.stdout), {
+                "records": {"location": current_record, "previous-location": earlier_observation},
                 "active": {"state": "signed-record",
                            "digest": prior_digest if replaced else current_digest},
                 "staged": {
@@ -3615,6 +3666,12 @@ class PromotionCheckpointTests(unittest.TestCase):
                 self.assertFalse(os.path.lexists(staged_pin))
                 self.assertFalse(pin.samefile(original_pin))
                 self.assertEqual(pin.read_text(encoding="ascii"), prior_digest)
+                self.assertEqual(read_pinned_record(observe_pin()), earlier_record)
+                self.assertFalse(os.path.lexists(earlier_parked))
+                self.assertTrue((parked / stage.name).samefile(target))
+                self.assertNotEqual(earlier_record["holding_ino"], holding.stat().st_ino)
+                with self.assertRaises(recovery.DecimalRecoveryDenied):
+                    independently_review()
             else:
                 self.assertTrue(pin.samefile(original_pin))
                 self.assertEqual(staged_pin.read_text(encoding="ascii"), staged_contents)
@@ -3706,6 +3763,10 @@ class PromotionCheckpointTests(unittest.TestCase):
             self.assertEqual(pin.is_file(), case != "missing-pin")
         if case == "stale-only":
             expected_records.difference_update((manifest.name, signature.name))
+        if case in ("record-absent", "record-missing-body"):
+            expected_records.remove(prior_manifest.name)
+        if case in ("record-absent", "record-missing-seal"):
+            expected_records.remove(prior_signature.name)
         self.assertEqual(set(retained_before_review), expected_records)
         self.assertEqual({path.name: path.read_bytes() for path in records.iterdir()},
                          retained_before_review)
@@ -3970,6 +4031,42 @@ class PromotionCheckpointTests(unittest.TestCase):
 
     def test_checkpoint_pin_restart_replaced(self):
         self.assert_checkpoint_operator_parking_exit("restart-replaced")
+
+    def test_terminal_restart_record_absent(self):
+        self.assert_terminal_operator_parking_exit("record-absent")
+
+    def test_terminal_restart_record_missing_body(self):
+        self.assert_terminal_operator_parking_exit("record-missing-body")
+
+    def test_terminal_restart_record_missing_seal(self):
+        self.assert_terminal_operator_parking_exit("record-missing-seal")
+
+    def test_terminal_restart_record_bad_seal(self):
+        self.assert_terminal_operator_parking_exit("record-bad-seal")
+
+    def test_terminal_restart_record_bad_body(self):
+        self.assert_terminal_operator_parking_exit("record-bad-body")
+
+    def test_terminal_restart_record_wrong_source(self):
+        self.assert_terminal_operator_parking_exit("record-wrong-source")
+
+    def test_checkpoint_restart_record_absent(self):
+        self.assert_checkpoint_operator_parking_exit("record-absent")
+
+    def test_checkpoint_restart_record_missing_body(self):
+        self.assert_checkpoint_operator_parking_exit("record-missing-body")
+
+    def test_checkpoint_restart_record_missing_seal(self):
+        self.assert_checkpoint_operator_parking_exit("record-missing-seal")
+
+    def test_checkpoint_restart_record_bad_seal(self):
+        self.assert_checkpoint_operator_parking_exit("record-bad-seal")
+
+    def test_checkpoint_restart_record_bad_body(self):
+        self.assert_checkpoint_operator_parking_exit("record-bad-body")
+
+    def test_checkpoint_restart_record_wrong_source(self):
+        self.assert_checkpoint_operator_parking_exit("record-wrong-source")
 
     def assert_concurrent_review_after_interrupted_cleanup(self, target, stage, independent,
                                                            inspect, cleanup, tip):
