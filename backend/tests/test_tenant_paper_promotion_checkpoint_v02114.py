@@ -3181,7 +3181,10 @@ class PromotionCheckpointTests(unittest.TestCase):
         self.assertIn(kind, ("terminal", "checkpoint"))
         exit_points = {"before-record": 90, "partial-record": 91,
                        "prepared": 92, "moved": 93, "conflict": 93,
-                       "interrupted-evidence-change": 93}
+                       "interrupted-evidence-change": 93,
+                       "both-source": 92, "both-parked": 93, "neither": 93,
+                       "stale-and-current": 93, "stale-only": 93, "missing-pin": 93}
+        pinned_cases = ("stale-and-current", "stale-only", "missing-pin")
         self.assertIn(case, (*exit_points, "clean", "holding-swap", "parked-name-swap",
                              "manifest-tamper", "evidence-tamper"))
         libc = ctypes.CDLL(None, use_errno=True)
@@ -3215,13 +3218,14 @@ class PromotionCheckpointTests(unittest.TestCase):
 
         # Both parent directories are descriptor-pinned for the no-overwrite
         # operation. The source basename itself is still raceable by same UID.
-        def park_stage():
-            source_fd = os.open(folder.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        def move_no_replace(source, destination):
+            source_fd = os.open(source.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
             try:
-                holding_fd = os.open(holding, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+                holding_fd = os.open(destination.parent,
+                                     os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
                 try:
-                    result = renameat2(source_fd, os.fsencode(folder.name),
-                                       holding_fd, os.fsencode(parked.name), 1)
+                    result = renameat2(source_fd, os.fsencode(source.name),
+                                       holding_fd, os.fsencode(destination.name), 1)
                     if result != 0:
                         number = ctypes.get_errno()
                         raise OSError(number, os.strerror(number))
@@ -3267,6 +3271,32 @@ class PromotionCheckpointTests(unittest.TestCase):
         signature = records / "location.mac"
         conflicting_manifest = records / "conflicting-location.json"
         conflicting_signature = records / "conflicting-location.mac"
+        prior_manifest = records / "previous-location.json"
+        prior_signature = records / "previous-location.mac"
+        pin = root / "independently-retained-location.sha256"
+
+        if case in pinned_cases:
+            # Complete an earlier operation with the same stage, target and
+            # signing authority, then explicitly return the stage for a new one.
+            earlier_holding = root / "previous-holding"
+            earlier_holding.mkdir(mode=0o700)
+            earlier_parked = earlier_holding / parked.name
+            earlier_stat = earlier_holding.stat()
+            earlier_record = signed | {
+                "holding_dev": earlier_stat.st_dev,
+                "holding_ino": earlier_stat.st_ino,
+            }
+            earlier_raw = encode(earlier_record)
+            prior_manifest.write_bytes(earlier_raw)
+            prior_signature.write_text(seal(earlier_raw), encoding="ascii")
+            move_no_replace(folder, earlier_parked)
+            self.assertTrue(os.path.samestat(original, earlier_parked.stat()))
+            self.assertTrue((earlier_parked / stage.name).samefile(target))
+            move_no_replace(earlier_parked, folder)
+            # Retain the exact current record digest outside the directory
+            # where the publisher leaves its candidate files.
+            if case != "missing-pin":
+                pin.write_text(sha(raw), encoding="ascii")
 
         def write_record():
             manifest.write_bytes(raw)
@@ -3281,19 +3311,19 @@ class PromotionCheckpointTests(unittest.TestCase):
                     if case == "before-record":
                         os._exit(90)
                     write_record()
-                    if case == "prepared":
+                    if case in ("prepared", "both-source"):
                         os._exit(92)
-                    park_stage()
+                    move_no_replace(folder, parked)
                     os._exit(93)
                 except BaseException:
                     os._exit(99)
             _, status = os.waitpid(pid, 0)
             self.assertEqual(os.waitstatus_to_exitcode(status), exit_points[case])
         else:
-            park_stage()
+            move_no_replace(folder, parked)
             write_record()
 
-        def read_signed_record(record_path, seal_path):
+        def read_signed_bytes(record_path, seal_path):
             try:
                 candidate = record_path.read_bytes()
                 observed_seal = seal_path.read_text(encoding="ascii")
@@ -3301,15 +3331,56 @@ class PromotionCheckpointTests(unittest.TestCase):
                 recovery._deny()
             if not hmac.compare_digest(seal(candidate), observed_seal):
                 recovery._deny()
+            return candidate
+
+        def decode_record(candidate):
             try:
                 return json.loads(candidate)
             except (ValueError, UnicodeError):
                 recovery._deny()
 
+        def read_signed_record(record_path, seal_path):
+            return decode_record(read_signed_bytes(record_path, seal_path))
+
+        def read_pinned_record():
+            try:
+                exact_digest = pin.read_text(encoding="ascii")
+            except (OSError, UnicodeError):
+                recovery._deny()
+            # Consult the earlier valid record first to exercise stale replay.
+            candidates = [(prior_manifest, prior_signature)]
+            if os.path.lexists(manifest) or os.path.lexists(signature):
+                candidates.append((manifest, signature))
+            matches = []
+            for record_path, seal_path in candidates:
+                candidate = read_signed_bytes(record_path, seal_path)
+                if hmac.compare_digest(sha(candidate), exact_digest):
+                    matches.append(candidate)
+            if len(matches) != 1:
+                recovery._deny()
+            return decode_record(matches[0])
+
+        def inventory_locations(record):
+            def observe(path):
+                try:
+                    identity = path.lstat()
+                except FileNotFoundError:
+                    return "absent"
+                if (identity.st_dev, identity.st_ino) == (record["stage_dev"],
+                                                         record["stage_ino"]):
+                    return "recorded-stage"
+                return "other-entry"
+
+            return (observe(folder.parent / record["source_stage"]),
+                    observe(holding / record["parked_name"]))
+
         def independently_review():
             # Require all supplied local evidence to agree before interpreting
             # either location. A valid seal cannot break a tie between records.
-            record = read_signed_record(manifest, signature)
+            if case in pinned_cases:
+                record = read_pinned_record()
+            else:
+                record = read_signed_record(manifest, signature)
             if os.path.lexists(conflicting_manifest) or os.path.lexists(conflicting_signature):
                 if read_signed_record(conflicting_manifest, conflicting_signature) != record:
                     recovery._deny()
@@ -3321,10 +3392,10 @@ class PromotionCheckpointTests(unittest.TestCase):
                     {"name": path.name, "sha256": sha(path.read_bytes())}
                     for path in evidence_paths]:
                 recovery._deny()
-            original_present = os.path.lexists(folder)
-            parked_present = os.path.lexists(parked)
-            if original_present == parked_present:
+            locations = inventory_locations(record)
+            if locations not in (("recorded-stage", "absent"), ("absent", "recorded-stage")):
                 recovery._deny()
+            original_present = locations[0] == "recorded-stage"
             try:
                 hold_fd = os.open(holding, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
             except OSError:
@@ -3383,7 +3454,24 @@ class PromotionCheckpointTests(unittest.TestCase):
             return "stage-at-source" if original_present else "stage-at-parked-location"
 
         displaced = None
-        if case == "holding-swap":
+        decoy = None
+        observed_locations = None
+        if case in ("both-source", "both-parked"):
+            decoy = parked if case == "both-source" else folder
+            decoy.mkdir(mode=0o700)
+            (decoy / stage.name).write_bytes(b"preserve unreviewed candidate")
+            observed_locations = (("recorded-stage", "other-entry") if case == "both-source"
+                                  else ("other-entry", "recorded-stage"))
+        elif case == "neither":
+            displaced = root / "unattributed-stage"
+            move_no_replace(parked, displaced)
+            observed_locations = ("absent", "absent")
+        elif case == "stale-only":
+            # The publisher slot can be absent while the older signed bytes
+            # remain available. Keep the current record pair intact elsewhere.
+            manifest.rename(root / manifest.name)
+            signature.rename(root / signature.name)
+        elif case == "holding-swap":
             displaced = root / "authentic-holding"
             holding.rename(displaced)
             holding.mkdir(mode=0o700)
@@ -3410,8 +3498,25 @@ class PromotionCheckpointTests(unittest.TestCase):
                              signed | {"parked_name": "other-retained-stage"})
 
         retained_before_review = {path.name: path.read_bytes() for path in records.iterdir()}
-        evidence_before_review = {path: path.read_bytes() for path in evidence_paths}
-        if case in ("clean", "moved"):
+        review_evidence_paths = [*evidence_paths]
+        if case in pinned_cases:
+            self.assertEqual(read_signed_record(prior_manifest, prior_signature), earlier_record)
+            self.assertNotEqual(sha(earlier_raw), sha(raw))
+            if case != "missing-pin":
+                review_evidence_paths.append(pin)
+            if case == "stale-only":
+                review_evidence_paths.extend((root / manifest.name, root / signature.name))
+        evidence_before_review = {path: path.read_bytes() for path in review_evidence_paths}
+        if observed_locations is not None:
+            self.assertEqual(inventory_locations(signed), observed_locations)
+        if decoy is not None:
+            decoy_identity = decoy.lstat()
+        if case == "stale-and-current":
+            self.assertEqual(read_pinned_record(), signed)
+        elif case in ("stale-only", "missing-pin"):
+            with self.assertRaises(recovery.DecimalRecoveryDenied):
+                read_pinned_record()
+        if case in ("clean", "moved", "stale-and-current"):
             self.assertEqual(independently_review(), "stage-at-parked-location")
         elif case == "prepared":
             self.assertEqual(independently_review(), "stage-at-source")
@@ -3421,15 +3526,20 @@ class PromotionCheckpointTests(unittest.TestCase):
 
         # A process exit before parking must leave the exact original link
         # discoverable. Review may describe that location, never retry the move.
-        before_move = case in ("before-record", "partial-record", "prepared")
+        before_move = case in ("before-record", "partial-record", "prepared", "both-source")
         authentic = folder if before_move else parked
         if case == "holding-swap":
             authentic = displaced / parked.name
-        elif case == "parked-name-swap":
+        elif case in ("parked-name-swap", "neither"):
             authentic = displaced
-        self.assertEqual(os.path.lexists(folder), before_move)
+        self.assertEqual(os.path.lexists(folder), before_move or case == "both-parked")
         if before_move:
-            self.assertFalse(os.path.lexists(parked))
+            self.assertEqual(os.path.lexists(parked), case == "both-source")
+        if observed_locations is not None:
+            self.assertEqual(inventory_locations(signed), observed_locations)
+        if decoy is not None:
+            self.assertTrue(os.path.samestat(decoy.lstat(), decoy_identity))
+            self.assertEqual((decoy / stage.name).read_bytes(), b"preserve unreviewed candidate")
         self.assertTrue(os.path.samestat(authentic.stat(), original))
         self.assertTrue((authentic / stage.name).samefile(target))
         self.assertEqual(target.read_bytes(), original_bytes)
@@ -3443,14 +3553,20 @@ class PromotionCheckpointTests(unittest.TestCase):
             self.assertEqual(retained_before_review.get(manifest.name), raw)
         elif case == "conflict":
             expected_records.update((conflicting_manifest.name, conflicting_signature.name))
+        if case in pinned_cases:
+            expected_records.update((prior_manifest.name, prior_signature.name))
+            self.assertEqual(pin.is_file(), case != "missing-pin")
+        if case == "stale-only":
+            expected_records.difference_update((manifest.name, signature.name))
         self.assertEqual(set(retained_before_review), expected_records)
         self.assertEqual({path.name: path.read_bytes() for path in records.iterdir()},
                          retained_before_review)
         expected_evidence = independent.copy()
         if case in ("evidence-tamper", "interrupted-evidence-change"):
             expected_evidence[evidence_paths[0]] = b"unreviewed evidence replacement"
-        self.assertEqual(evidence_before_review, expected_evidence)
-        self.assertEqual({path: path.read_bytes() for path in evidence_paths},
+        self.assertEqual({path: evidence_before_review[path] for path in evidence_paths},
+                         expected_evidence)
+        self.assertEqual({path: path.read_bytes() for path in review_evidence_paths},
                          evidence_before_review)
 
     def test_terminal_operator_parked_manifest_clean(self):
@@ -3604,6 +3720,42 @@ class PromotionCheckpointTests(unittest.TestCase):
 
     def test_checkpoint_parking_exit_interrupted_evidence_change(self):
         self.assert_checkpoint_operator_parking_exit("interrupted-evidence-change")
+
+    def test_terminal_parking_inventory_both_source(self):
+        self.assert_terminal_operator_parking_exit("both-source")
+
+    def test_terminal_parking_inventory_both_parked(self):
+        self.assert_terminal_operator_parking_exit("both-parked")
+
+    def test_terminal_parking_inventory_neither(self):
+        self.assert_terminal_operator_parking_exit("neither")
+
+    def test_terminal_parking_inventory_stale_and_current(self):
+        self.assert_terminal_operator_parking_exit("stale-and-current")
+
+    def test_terminal_parking_inventory_stale_only(self):
+        self.assert_terminal_operator_parking_exit("stale-only")
+
+    def test_terminal_parking_inventory_missing_pin(self):
+        self.assert_terminal_operator_parking_exit("missing-pin")
+
+    def test_checkpoint_parking_inventory_both_source(self):
+        self.assert_checkpoint_operator_parking_exit("both-source")
+
+    def test_checkpoint_parking_inventory_both_parked(self):
+        self.assert_checkpoint_operator_parking_exit("both-parked")
+
+    def test_checkpoint_parking_inventory_neither(self):
+        self.assert_checkpoint_operator_parking_exit("neither")
+
+    def test_checkpoint_parking_inventory_stale_and_current(self):
+        self.assert_checkpoint_operator_parking_exit("stale-and-current")
+
+    def test_checkpoint_parking_inventory_stale_only(self):
+        self.assert_checkpoint_operator_parking_exit("stale-only")
+
+    def test_checkpoint_parking_inventory_missing_pin(self):
+        self.assert_checkpoint_operator_parking_exit("missing-pin")
 
     def assert_concurrent_review_after_interrupted_cleanup(self, target, stage, independent,
                                                            inspect, cleanup, tip):
