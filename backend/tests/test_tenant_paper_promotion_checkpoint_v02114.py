@@ -3192,12 +3192,14 @@ class PromotionCheckpointTests(unittest.TestCase):
                             "pin-same-digest-replacement")
         record_cases = ("record-absent", "record-missing-body", "record-missing-seal",
                         "record-bad-seal", "record-bad-body", "record-wrong-source")
+        race_cases = ("replace-between-body-and-seal", "replace-between-records-and-pins",
+                      "replace-pin-after-read", "replace-body-with-identical-bytes")
         restart_cases = ("restart-conflict", "restart-partial", "restart-same-digest",
                          "restart-unmatched", "restart-malformed", "restart-replaced",
                          *record_cases)
         pinned_cases = ("stale-and-current", "stale-only", "missing-pin",
-                        *pin_update_cases, *restart_cases)
-        self.assertIn(case, (*exit_points, *pin_update_cases, *restart_cases,
+                        *pin_update_cases, *restart_cases, *race_cases)
+        self.assertIn(case, (*exit_points, *pin_update_cases, *restart_cases, *race_cases,
                              "clean", "holding-swap", "parked-name-swap",
                              "manifest-tamper", "evidence-tamper"))
         libc = ctypes.CDLL(None, use_errno=True)
@@ -3543,7 +3545,7 @@ class PromotionCheckpointTests(unittest.TestCase):
         if case in pinned_cases:
             self.assertEqual(read_signed_record(prior_manifest, prior_signature), earlier_record)
             self.assertNotEqual(sha(earlier_raw), sha(raw))
-            if case not in ("missing-pin", *pin_update_cases, *restart_cases):
+            if case not in ("missing-pin", *pin_update_cases, *restart_cases, *race_cases):
                 review_evidence_paths.append(pin)
             if case == "stale-only":
                 review_evidence_paths.extend((root / manifest.name, root / signature.name))
@@ -3557,7 +3559,45 @@ class PromotionCheckpointTests(unittest.TestCase):
         elif case in ("stale-only", "missing-pin"):
             with self.assertRaises(recovery.DecimalRecoveryDenied):
                 read_pinned_record(observe_pin())
-        if case in restart_cases:
+        if case in race_cases:
+            self.assertEqual(independently_review(), "stage-at-parked-location")
+            stable_record = {path: path.read_bytes() for path in (prior_manifest, prior_signature)}
+            phase = {
+                "replace-between-body-and-seal": "after-record-body",
+                "replace-between-records-and-pins": "after-records",
+                "replace-pin-after-read": "after-pins",
+                "replace-body-with-identical-bytes": "after-record-body",
+            }[case]
+            changes = {
+                "replace-between-body-and-seal": {
+                    manifest: earlier_raw, signature: seal(earlier_raw).encode("ascii"),
+                },
+                "replace-between-records-and-pins": {
+                    manifest: earlier_raw, signature: seal(earlier_raw).encode("ascii"),
+                    pin: sha(earlier_raw).encode("ascii"),
+                },
+                "replace-pin-after-read": {pin: sha(earlier_raw).encode("ascii")},
+                "replace-body-with-identical-bytes": {manifest: raw},
+            }[case]
+            changed_reads = {
+                "replace-between-body-and-seal": [manifest],
+                "replace-between-records-and-pins": [manifest, signature],
+                "replace-pin-after-read": [pin],
+                "replace-body-with-identical-bytes": [manifest],
+            }[case]
+            # The paused observer has already read exactly the paths above.
+            # Keep the replaced files outside the active evidence names.
+            original_entries = self.assert_fresh_inventory_during_replacement(
+                root, key, kind, phase, changes, changed_reads)
+            for path, contents in changes.items():
+                archived, identity, old_bytes = original_entries[path]
+                self.assertTrue(os.path.samestat(archived.lstat(), identity))
+                self.assertEqual(archived.read_bytes(), old_bytes)
+                self.assertFalse(path.samefile(archived))
+                self.assertEqual(path.read_bytes(), contents)
+            self.assertEqual({path: path.read_bytes() for path in stable_record}, stable_record)
+            retained_before_review = {path.name: path.read_bytes() for path in records.iterdir()}
+        elif case in restart_cases:
             current_digest = sha(raw)
             prior_digest = sha(earlier_raw)
             expected_staged_state, staged_contents = {
@@ -4067,6 +4107,75 @@ class PromotionCheckpointTests(unittest.TestCase):
 
     def test_checkpoint_restart_record_wrong_source(self):
         self.assert_checkpoint_operator_parking_exit("record-wrong-source")
+
+    def assert_fresh_inventory_during_replacement(
+            self, root, key, kind, phase, changes, changed_reads):
+        import json
+
+        archive = root / "retained-before-replacement"
+        archive.mkdir(mode=0o700)
+        incoming = root / "replacement-entries"
+        incoming.mkdir(mode=0o700)
+        originals = {}
+        for path, new_bytes in changes.items():
+            archived = archive / path.name
+            os.link(path, archived)
+            originals[path] = (archived, path.lstat(), path.read_bytes())
+            (incoming / path.name).write_bytes(new_bytes)
+
+        command = [sys.executable, str(Path(__file__).with_name("stage_pin_restart_rehearsal.py"))]
+        reader, writer = socket.socketpair()
+        with reader, writer, subprocess.Popen(
+            command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, pass_fds=(reader.fileno(),),
+        ) as process:
+            fixture = {"root": str(root), "key": key.hex(), "kind": kind,
+                       "phase": phase, "sync_fd": reader.fileno()}
+            reader.close()
+            writer.settimeout(10)
+            try:
+                process.stdin.write(json.dumps(fixture))
+                process.stdin.close()
+                process.stdin = None
+                self.assertEqual(writer.recv(1), b"R")
+                for path in changes:
+                    os.replace(incoming / path.name, path)
+                writer.sendall(b"W")
+                stdout, stderr = process.communicate(timeout=10)
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.communicate()
+        self.assertEqual(process.returncode, 0, stderr)
+        self.assertEqual(json.loads(stdout), {
+            "status": "ambiguous",
+            "changed": [path.relative_to(root).as_posix() for path in changed_reads],
+        })
+        return originals
+
+    def test_terminal_replace_between_body_and_seal(self):
+        self.assert_terminal_operator_parking_exit("replace-between-body-and-seal")
+
+    def test_terminal_replace_between_records_and_pins(self):
+        self.assert_terminal_operator_parking_exit("replace-between-records-and-pins")
+
+    def test_terminal_replace_pin_after_read(self):
+        self.assert_terminal_operator_parking_exit("replace-pin-after-read")
+
+    def test_terminal_replace_body_with_identical_bytes(self):
+        self.assert_terminal_operator_parking_exit("replace-body-with-identical-bytes")
+
+    def test_checkpoint_replace_between_body_and_seal(self):
+        self.assert_checkpoint_operator_parking_exit("replace-between-body-and-seal")
+
+    def test_checkpoint_replace_between_records_and_pins(self):
+        self.assert_checkpoint_operator_parking_exit("replace-between-records-and-pins")
+
+    def test_checkpoint_replace_pin_after_read(self):
+        self.assert_checkpoint_operator_parking_exit("replace-pin-after-read")
+
+    def test_checkpoint_replace_body_with_identical_bytes(self):
+        self.assert_checkpoint_operator_parking_exit("replace-body-with-identical-bytes")
 
     def assert_concurrent_review_after_interrupted_cleanup(self, target, stage, independent,
                                                            inspect, cleanup, tip):

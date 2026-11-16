@@ -1,3 +1,11 @@
+## v0.2.157 — 2026-11-16 America/New_York — Detect changes during fresh pin inventory
+
+**Research** — Fresh-process pin inventory rechecks retained record and digest observations before reporting a match. It reports ambiguous evidence when observed files change.
+
+**Tests** — Eight Linux cases cover synchronized signed pair and pin replacement, including the interval between body and seal reads and replacement with identical bytes. Terminal receipt and active checkpoint fixtures retain both generations.
+
+**Limits** — Sequential rechecks cannot provide an atomic snapshot. Independent custody, coordinated rollback, uncontrolled same-UID changes and cross-resource power-loss consistency remain unresolved. See [evidence changes during inventory](PAPER_RESTART_EVIDENCE_CHANGES_V02157.md).
+
 ## v0.2.156 — 2026-11-16 America/New_York — Report signed record evidence after restart
 
 **Research** — Fresh-process pin inventory reports each signed record pair's condition and excludes unavailable, damaged or wrong-source candidates from authenticated digest matches.
