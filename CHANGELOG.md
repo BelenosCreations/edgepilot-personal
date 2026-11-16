@@ -1,3 +1,11 @@
+## v0.2.154 — 2026-11-16 America/New_York — Review location pin changes
+
+**Research** — The offline parking fixture rechecks the pin's exact digest and file identity after record selection and again before returning a read-only observation. A pending pin update causes review to refuse.
+
+**Tests** — Ten Linux cases cover changes while the record is open and before review returns, exit on both sides of pin replacement, and same-digest file replacement for terminal receipts and active checkpoints. Both signed records, the pins and the parked stage survive review.
+
+**Limits** — The tests use local evidence and leave durable independent custody, coordinated rollback, uncontrolled same-UID races and cross-resource power-loss consistency unresolved. See [location pin changes](PAPER_LOCATION_PIN_CHANGE_V02154.md).
+
 ## v0.2.153 — 2026-11-16 America/New_York — Inventory ambiguous stage locations
 
 **Research** — Added read-only inventory for interrupted parking when both or neither stage name is present. The rehearsal compares exact signed record bytes with a separately retained digest before reviewing the observed location.
