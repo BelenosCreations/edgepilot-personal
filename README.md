@@ -1,3 +1,5 @@
+**v0.2.153** — Offline Linux tests inventory both stage names after interruption and refuse a location decision when both or neither name is present. An independently retained digest selects the exact signed record when an earlier valid record survives. See [stage inventory and record pinning](PAPER_STAGE_INVENTORY_PIN_V02153.md).
+
 **v0.2.152** — Offline Linux recovery tests distinguish a prepared stage at its source from the same stage after parking. Read-only review refuses missing seals, conflicting signed records and changed independent evidence. See [interrupted stage parking](PAPER_INTERRUPTED_STAGE_PARKING_V02152.md).
 
 **v0.2.151** — Offline Linux tests verify a signed, source-attributed parked-stage location manifest against replaced holding directories, parked-name substitution and altered independent evidence. No production cleanup or trading activation. See [parked-stage manifest review](PAPER_PARKED_STAGE_MANIFEST_V02151.md).

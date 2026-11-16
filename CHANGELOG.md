@@ -1,3 +1,11 @@
+## v0.2.153 — 2026-11-16 America/New_York — Inventory ambiguous stage locations
+
+**Research** — Added read-only inventory for interrupted parking when both or neither stage name is present. The rehearsal compares exact signed record bytes with a separately retained digest before reviewing the observed location.
+
+**Tests** — Twelve Linux cases cover terminal receipts and active checkpoints. They preserve conflicting directory entries, a displaced stage, and genuinely earlier signed records. Review refuses to select a location when the current record or its independent pin is unavailable.
+
+**Limits** — The rehearsal uses local test evidence. Durable independent custody, combined full-evidence rollback, uncontrolled same-UID races and cross-resource power-loss consistency remain unresolved. See [stage inventory and record pinning](PAPER_STAGE_INVENTORY_PIN_V02153.md).
+
 ## v0.2.152 — 2026-11-16 America/New_York — Review interrupted stage parking
 
 **Research** — Rehearsed preparing a signed source-attributed record before parking a synthetic recovery stage. The reviewer checks the exact hard link, directory identities, signed receipt and independent evidence before describing where the stage was observed.
