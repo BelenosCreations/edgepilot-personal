@@ -90,8 +90,17 @@ def observe_record(records, basename, key, source_kind, read):
     return {"state": state, "body": body_state, "seal": seal_state, "digest": digest}
 
 
-def inventory(root, key, source_kind, checkpoint=None):
+def inventory(root, key, source_kind, checkpoint=None, generation_guard=False):
     folder = root / "independent-records"
+    generation_path = root / "inventory-generation"
+    initial_generation = None
+    if generation_guard:
+        initial_generation = read_entry(generation_path, 32)
+        state, value, _ = initial_generation
+        if state != "present" or not re.fullmatch(rb"[0-9]{1,20}", value):
+            return {"status": "ambiguous", "changed": ["inventory-generation"]}
+        if int(value) % 2:
+            return {"status": "ambiguous", "changed": ["inventory-generation"]}
     first_reads = {}
 
     def read(path, limit):
@@ -118,11 +127,14 @@ def inventory(root, key, source_kind, checkpoint=None):
     staged = observe(root / "pending-location.sha256")
     if checkpoint is not None:
         checkpoint("after-pins")
-    changed = [
-        path.relative_to(root).as_posix()
-        for path, (limit, first) in first_reads.items()
-        if first[0] == "changed" or read_entry(path, limit) != first
-    ]
+    changed = []
+    for path, (limit, first) in first_reads.items():
+        if first[0] == "changed" or read_entry(path, limit) != first:
+            changed.append(path.relative_to(root).as_posix())
+        if checkpoint is not None and path == folder / "previous-location.mac":
+            checkpoint("after-record-rechecks")
+    if generation_guard and read_entry(generation_path, 32) != initial_generation:
+        changed.append("inventory-generation")
     if changed:
         # A mixed observation cannot establish even a pin-to-record match.
         return {"status": "ambiguous", "changed": changed}
@@ -140,7 +152,7 @@ def main():
     fixture = json.load(sys.stdin)
     args = (Path(fixture["root"]), bytes.fromhex(fixture["key"]), fixture["kind"])
     if "sync_fd" not in fixture:
-        result = inventory(*args)
+        result = inventory(*args, generation_guard=fixture.get('generation_guard', False))
     else:
         with socket.socket(fileno=fixture["sync_fd"]) as sync:
             sync.settimeout(10)
@@ -151,7 +163,8 @@ def main():
                     if sync.recv(1) != b"W":
                         raise RuntimeError("Synthetic writer did not finish")
 
-            result = inventory(*args, checkpoint=checkpoint)
+            result = inventory(*args, checkpoint=checkpoint,
+                               generation_guard=fixture.get('generation_guard', False))
     print(json.dumps(result))
 
 

@@ -1,3 +1,11 @@
+## v0.2.158 — 2026-11-19 America/New_York — Rehearse a generation marker for inventory
+
+**Research** — Reproduced a late replacement after record paths pass their final recheck. Added an optional test-only generation observation around inventory for serialized cooperating writers.
+
+**Tests** — Six Linux cases demonstrate the sequential-read boundary and ambiguity after completed or pending generation updates for terminal receipts and active checkpoints. Stable guarded inventory also succeeds.
+
+**Limits** — Writer cooperation, serialization and unique generations are assumptions. Marker reuse, coordinated rollback, uncontrolled same-UID changes and power-loss consistency remain unresolved. See [generation marker rehearsal](PAPER_INVENTORY_GENERATION_V02158.md).
+
 ## v0.2.157 — 2026-11-16 America/New_York — Detect changes during fresh pin inventory
 
 **Research** — Fresh-process pin inventory rechecks retained record and digest observations before reporting a match. It reports ambiguous evidence when observed files change.

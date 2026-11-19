@@ -5,20 +5,20 @@ Use this section for the next development session. The entries below record prio
 ## Copyable resume instruction
 
 ```text
-EdgePilot Continuity 020
+EdgePilot Continuity 021
 
 Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on main in BelenosCreations/edgepilot-personal, independently verify the GitHub and Render checkpoint, and follow the next steps and restrictions in that file.
 ```
 
 ## Verification and checkpoint
 
-- Independently verify current GitHub main, merged exact-head PR CI, post-merge main CI, open PRs, exact live Render SHA and separate HTTP health. Resolve v0.2.157 from `development/v0.2.157-restart-evidence-changes`. Any later verified main supersedes this handoff.
-- Independently verified v0.2.156 baseline: PR #184 head `ad0e8feabcabae3c1aaca2a447b687f12c5d75a2` passed [Actions #43874656582](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43874656582). Main `77402808300e882b1eef307dfa85f71294ccd332` passed [Actions #43875258394](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43875258394), matched live Render `dep-dbtg7gmq1p3s73ftq2qg`, and returned HTTP 200 from `/healthz`. No open PRs.
-- v0.2.157 adds eight offline Linux cases for signed record and pin replacements between fresh-process observations. See [milestone notes](PAPER_RESTART_EVIDENCE_CHANGES_V02157.md).
+- Independently verify current GitHub main, merged exact-head PR CI, post-merge main CI, open PRs, exact live Render SHA and separate HTTP health. Resolve v0.2.158 from `development/v0.2.158-inventory-generation`. Any later verified main supersedes this handoff.
+- Independently verified v0.2.157 baseline: PR #185 head `5af0352b99b5339113d975acf813e9cbd58d0c75` passed [Actions #43886731641](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43886731641). Main `7be7ac4538422890c942828fb3d5d48a4a81bdd5` passed [Actions #43887274684](https://github.com/BelenosCreations/edgepilot-personal/actions/runs/43887274684), matched live Render `dep-dbth98m7bikc7387uo50`, and returned HTTP 200 from `/healthz`. No open PRs.
+- v0.2.158 adds six offline Linux cases demonstrating the late sequential recheck boundary and an optional generation marker for serialized cooperating writers. See [milestone notes](PAPER_INVENTORY_GENERATION_V02158.md).
 
 ## Next safe development batch
 
-1. Rehearse a cooperating change after an early path has already passed its final recheck. Verify which mixed observations can slip through sequential reads, then evaluate a shared generation marker or a cooperating lock in test fixtures only. Preserve both evidence generations and keep stage-use decisions outside inventory.
+1. Rehearse fresh guarded inventory when generation evidence is missing, malformed, odd or replaced with the same bytes. Include writer exit while the generation remains odd and a serialized second writer advancing it after restart. Preserve evidence and require an explicit read-only outcome.
 2. Maintain the independent tenant archive pin, exact signed receipt/checkpoint custody, read-only recovery, detached paper preflight and session-only source-attributed Public history. Combined full-evidence rollback, uncontrolled same-UID races and cross-resource power-loss consistency remain unresolved.
 3. Use real Public history only for targeted [owner-device acceptance](PAPER_RESTORE_AND_CUSTODY_V02110.md#owner-history-acceptance) under the owner provider-permission assumption. Existing owner snapshot and MSFT quote acceptance remain valid.
 
@@ -30,6 +30,10 @@ Continue EdgePilot development autonomously. Read DEVELOPMENT_CONTINUITY.md on m
 - At the next logical checkpoint, refresh this top section in place. Increment the EdgePilot Continuity sequence at the top of the copy block. Return the short copyable pointer and one or two plain-language sentences. For required user action, give the action instructions first and provide the handoff after it is resolved.
 
 ## Historical checkpoints
+
+## v0.2.157 — 2026-11-16 — Detect changes during fresh pin inventory
+
+Eight offline cases synchronize signed record and pin replacement during a fresh reader's observations and preserve both generations. See [evidence changes during inventory](PAPER_RESTART_EVIDENCE_CHANGES_V02157.md).
 
 ## v0.2.156 — 2026-11-16 — Report signed record evidence after restart
 
