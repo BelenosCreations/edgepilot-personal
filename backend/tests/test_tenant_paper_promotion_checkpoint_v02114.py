@@ -3193,7 +3193,9 @@ class PromotionCheckpointTests(unittest.TestCase):
         record_cases = ("record-absent", "record-missing-body", "record-missing-seal",
                         "record-bad-seal", "record-bad-body", "record-wrong-source")
         race_cases = ("replace-between-body-and-seal", "replace-between-records-and-pins",
-                      "replace-pin-after-read", "replace-body-with-identical-bytes")
+                      "replace-pin-after-read", "replace-body-with-identical-bytes",
+                      "late-record-replacement", "late-generation-committed",
+                      "late-generation-pending")
         restart_cases = ("restart-conflict", "restart-partial", "restart-same-digest",
                          "restart-unmatched", "restart-malformed", "restart-replaced",
                          *record_cases)
@@ -3562,7 +3564,13 @@ class PromotionCheckpointTests(unittest.TestCase):
         if case in race_cases:
             self.assertEqual(independently_review(), "stage-at-parked-location")
             stable_record = {path: path.read_bytes() for path in (prior_manifest, prior_signature)}
+            generation_guard = case in ("late-generation-committed", "late-generation-pending")
+            if generation_guard:
+                (root / "inventory-generation").write_bytes(b"0")
             phase = {
+                "late-record-replacement": "after-record-rechecks",
+                "late-generation-committed": "after-record-rechecks",
+                "late-generation-pending": "after-record-rechecks",
                 "replace-between-body-and-seal": "after-record-body",
                 "replace-between-records-and-pins": "after-records",
                 "replace-pin-after-read": "after-pins",
@@ -3578,17 +3586,33 @@ class PromotionCheckpointTests(unittest.TestCase):
                 },
                 "replace-pin-after-read": {pin: sha(earlier_raw).encode("ascii")},
                 "replace-body-with-identical-bytes": {manifest: raw},
+                "late-record-replacement": {
+                    manifest: earlier_raw, signature: seal(earlier_raw).encode("ascii"),
+                },
+                "late-generation-committed": {
+                    manifest: earlier_raw, signature: seal(earlier_raw).encode("ascii"),
+                    root / "inventory-generation": b"2",
+                },
+                "late-generation-pending": {
+                    manifest: earlier_raw, signature: seal(earlier_raw).encode("ascii"),
+                    root / "inventory-generation": b"1",
+                },
             }[case]
             changed_reads = {
                 "replace-between-body-and-seal": [manifest],
                 "replace-between-records-and-pins": [manifest, signature],
                 "replace-pin-after-read": [pin],
                 "replace-body-with-identical-bytes": [manifest],
+                "late-record-replacement": [],
+                "late-generation-committed": [root / "inventory-generation"],
+                "late-generation-pending": [root / "inventory-generation"],
             }[case]
             # The paused observer has already read exactly the paths above.
             # Keep the replaced files outside the active evidence names.
             original_entries = self.assert_fresh_inventory_during_replacement(
-                root, key, kind, phase, changes, changed_reads)
+                root, key, kind, phase, changes, changed_reads,
+                generation_guard=generation_guard,
+                expected_digest=sha(raw) if case == "late-record-replacement" else None)
             for path, contents in changes.items():
                 archived, identity, old_bytes = original_entries[path]
                 self.assertTrue(os.path.samestat(archived.lstat(), identity))
@@ -4109,7 +4133,9 @@ class PromotionCheckpointTests(unittest.TestCase):
         self.assert_checkpoint_operator_parking_exit("record-wrong-source")
 
     def assert_fresh_inventory_during_replacement(
-            self, root, key, kind, phase, changes, changed_reads):
+            self, root, key, kind, phase, changes, changed_reads, *,
+            generation_guard=False, expected_digest=None):
+        import hashlib
         import json
 
         archive = root / "retained-before-replacement"
@@ -4124,13 +4150,21 @@ class PromotionCheckpointTests(unittest.TestCase):
             (incoming / path.name).write_bytes(new_bytes)
 
         command = [sys.executable, str(Path(__file__).with_name("stage_pin_restart_rehearsal.py"))]
+        if generation_guard:
+            baseline = subprocess.run(
+                command, input=json.dumps({"root": str(root), "key": key.hex(), "kind": kind,
+                                           "generation_guard": True}),
+                text=True, capture_output=True, check=True, timeout=10,
+            )
+            self.assertEqual(json.loads(baseline.stdout)["status"], "active-pin-observed")
         reader, writer = socket.socketpair()
         with reader, writer, subprocess.Popen(
             command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, pass_fds=(reader.fileno(),),
         ) as process:
             fixture = {"root": str(root), "key": key.hex(), "kind": kind,
-                       "phase": phase, "sync_fd": reader.fileno()}
+                       "phase": phase, "sync_fd": reader.fileno(),
+                       "generation_guard": generation_guard}
             reader.close()
             writer.settimeout(10)
             try:
@@ -4138,6 +4172,12 @@ class PromotionCheckpointTests(unittest.TestCase):
                 process.stdin.close()
                 process.stdin = None
                 self.assertEqual(writer.recv(1), b"R")
+                if generation_guard:
+                    # Cooperating writers expose an odd generation before
+                    # replacing any evidence and an even one after completion.
+                    busy = incoming / "busy-generation"
+                    busy.write_bytes(b"1")
+                    os.replace(busy, root / "inventory-generation")
                 for path in changes:
                     os.replace(incoming / path.name, path)
                 writer.sendall(b"W")
@@ -4147,10 +4187,22 @@ class PromotionCheckpointTests(unittest.TestCase):
                     process.kill()
                     process.communicate()
         self.assertEqual(process.returncode, 0, stderr)
-        self.assertEqual(json.loads(stdout), {
-            "status": "ambiguous",
-            "changed": [path.relative_to(root).as_posix() for path in changed_reads],
-        })
+        observation = json.loads(stdout)
+        if expected_digest is None:
+            self.assertEqual(observation, {
+                "status": "ambiguous",
+                "changed": [path.relative_to(root).as_posix() for path in changed_reads],
+            })
+        else:
+            # This counterexample records the limitation of sequential checks.
+            self.assertEqual(observation["status"], "active-pin-observed")
+            self.assertEqual(observation["active"],
+                             {"state": "signed-record", "digest": expected_digest})
+            self.assertEqual(observation["records"]["location"]["digest"], expected_digest)
+            self.assertNotEqual(
+                hashlib.sha256((root / "independent-records" /
+                                             "location.json").read_bytes()).hexdigest(),
+                expected_digest)
         return originals
 
     def test_terminal_replace_between_body_and_seal(self):
@@ -4176,6 +4228,24 @@ class PromotionCheckpointTests(unittest.TestCase):
 
     def test_checkpoint_replace_body_with_identical_bytes(self):
         self.assert_checkpoint_operator_parking_exit("replace-body-with-identical-bytes")
+
+    def test_terminal_late_record_replacement(self):
+        self.assert_terminal_operator_parking_exit("late-record-replacement")
+
+    def test_terminal_late_generation_committed(self):
+        self.assert_terminal_operator_parking_exit("late-generation-committed")
+
+    def test_terminal_late_generation_pending(self):
+        self.assert_terminal_operator_parking_exit("late-generation-pending")
+
+    def test_checkpoint_late_record_replacement(self):
+        self.assert_checkpoint_operator_parking_exit("late-record-replacement")
+
+    def test_checkpoint_late_generation_committed(self):
+        self.assert_checkpoint_operator_parking_exit("late-generation-committed")
+
+    def test_checkpoint_late_generation_pending(self):
+        self.assert_checkpoint_operator_parking_exit("late-generation-pending")
 
     def assert_concurrent_review_after_interrupted_cleanup(self, target, stage, independent,
                                                            inspect, cleanup, tip):
